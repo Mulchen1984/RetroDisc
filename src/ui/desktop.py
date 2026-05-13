@@ -1,4 +1,4 @@
-"""RetroDisc Desktop Bridge — Vollständige PyWebView ↔ Python Verbindung."""
+"""RetroDisc Desktop Bridge - Vollständige PyWebView ↔ Python Verbindung."""
 
 from __future__ import annotations
 
@@ -139,7 +139,7 @@ class RetroDiscAPI:
             if after == "burn_dvd" and result:
                 j2 = Job(job_type=JobType.BURN_DVD, input_files=[result],
                          params={"title": result.stem, "only_iso": True,
-                                 "display_name": f"{result.stem} → DVD"})
+                                 "display_name": f"{result.stem} -> DVD"})
                 await self.pipeline.submit(j2)
 
         async def h_dvd(job):
@@ -273,7 +273,7 @@ class RetroDiscAPI:
             self.settings.directories.output_dir / f"{inp.stem}_{preset}.{p.container}")
         job = Job(job_type=JobType.CONVERT, input_files=[inp], output_path=out,
                   params={"preset": preset,
-                          "display_name": f"{inp.name} → {p.container.upper()}"})
+                          "display_name": f"{inp.name} -> {p.container.upper()}"})
         return self._submit(job)
 
     def convert_batch(self, paths_json: str, preset: str) -> str:
@@ -301,7 +301,7 @@ class RetroDiscAPI:
         job = Job(job_type=JobType.BURN_DVD, input_files=paths,
                   params={"title": title, "standard": standard, "aspect": aspect,
                           "burn_to_disc": burn, "only_iso": not burn,
-                          "display_name": f"{title} → {'Brennen' if burn else 'ISO'}"})
+                          "display_name": f"{title} -> {'Brennen' if burn else 'ISO'}"})
         return self._submit(job)
 
     def download_url(self, url: str, format: str = "best",
@@ -470,7 +470,7 @@ class RetroDiscAPI:
             return json.dumps({"error": str(e)})
 
     def splash_complete(self):
-        log.info("Splash abgeschlossen — App bereit")
+        log.info("Splash abgeschlossen - App bereit")
 
     # ── Video-Bearbeitung ─────────────────────────────────────────────
 
@@ -483,7 +483,7 @@ class RetroDiscAPI:
               inp.parent / f"{inp.stem}_trim{inp.suffix}"
         job = Job(job_type=JobType.CONVERT,
                   input_files=[inp], output_path=out,
-                  params={"display_name": f"Trim: {inp.name} [{start:.1f}s–{end:.1f}s]"})
+                  params={"display_name": f"Trim: {inp.name} [{start:.1f}s-{end:.1f}s]"})
         async def _h(j):
             r = await self.ffmpeg.trim(j.input_files[0], j.output_path, start, end, j)
             j.output_path = r
