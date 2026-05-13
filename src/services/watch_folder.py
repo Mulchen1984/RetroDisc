@@ -1,7 +1,7 @@
-"""RetroDisc Watch Folder — Automatische Verarbeitung neuer Dateien.
+"""RetroDisc Watch Folder - Automatische Verarbeitung neuer Dateien.
 
 Überwacht Ordner auf neue Dateien und verarbeitet sie automatisch
-mit vordefinierten Regeln (z.B. alle neuen Videos → DVD brennen).
+mit vordefinierten Regeln (z.B. alle neuen Videos -> DVD brennen).
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ class WatchFolder:
     Beispiel:
         watcher = WatchFolder(
             folder="/home/marco/Watch",
-            rules=[WatchRule("Videos → DVD", {".mp4",".mkv"}, "burn_dvd")]
+            rules=[WatchRule("Videos -> DVD", {".mp4",".mkv"}, "burn_dvd")]
         )
         await watcher.start()
     """
