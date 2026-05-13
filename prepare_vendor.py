@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 prepare_vendor.py
 =================
@@ -24,7 +25,7 @@ FFMPEG_URL = (
     "ffmpeg-master-latest-win64-gpl.zip"
 )
 
-# yt-dlp als EXE (optional — wir nutzen lieber die Python-Bibliothek)
+# yt-dlp als EXE (optional - wir nutzen lieber die Python-Bibliothek)
 # YTDLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
 
 
@@ -55,7 +56,7 @@ def download_with_progress(url: str, dest: Path, label: str) -> None:
                         pct = done / total * 100
                         bar_len = 40
                         filled = int(bar_len * done / total)
-                        bar = "█" * filled + "░" * (bar_len - filled)
+                        bar = "#" * filled + "." * (bar_len - filled)
                         mb = done / 1024 / 1024
                         total_mb = total / 1024 / 1024
                         print(
@@ -63,11 +64,11 @@ def download_with_progress(url: str, dest: Path, label: str) -> None:
                             end="", flush=True
                         )
 
-            print(f"\r  ✓ {label} heruntergeladen ({done/1024/1024:.1f} MB)")
+            print(f"\r  OK: {label} heruntergeladen ({done/1024/1024:.1f} MB)")
 
     except urllib.error.URLError as e:
         dest.unlink(missing_ok=True)
-        print(f"\n  ✗ Download fehlgeschlagen: {e}")
+        print(f"\n  FEHLER: Download fehlgeschlagen: {e}")
         raise
 
 
@@ -103,9 +104,9 @@ def extract_ffmpeg(zip_path: Path) -> None:
                     import shutil
                     shutil.copyfileobj(src, dst)
                 size_mb = dest.stat().st_size / 1024 / 1024
-                print(f"  ✓ {target_name} extrahiert ({size_mb:.1f} MB)")
+                print(f"  OK: {target_name} extrahiert ({size_mb:.1f} MB)")
             else:
-                print(f"  ✗ {target_name} nicht im ZIP gefunden!")
+                print(f"  FEHLER: {target_name} nicht im ZIP gefunden!")
                 print(f"  Verfügbare Dateien: {[m for m in members if m.endswith('.exe')][:10]}")
                 raise FileNotFoundError(f"{target_name} nicht im ZIP")
 
@@ -123,7 +124,7 @@ def check_vendor() -> bool:
     for f in required:
         size = (VENDOR_DIR / f).stat().st_size
         if size < 10 * 1024 * 1024:
-            print(f"  {f} zu klein ({size} Bytes) — wahrscheinlich beschädigt")
+            print(f"  {f} zu klein ({size} Bytes) - wahrscheinlich beschädigt")
             (VENDOR_DIR / f).unlink()
             return False
 
@@ -132,12 +133,12 @@ def check_vendor() -> bool:
 
 def main():
     print()
-    print("  RetroDisc — Vendor-Binaries vorbereiten")
-    print("  " + "═" * 40)
+    print("  RetroDisc - Vendor-Binaries vorbereiten")
+    print("  " + "=" * 40)
 
     # Bereits vorhanden?
     if check_vendor():
-        print("  ✓ Alle Binaries bereits vorhanden")
+        print("  OK: Alle Binaries bereits vorhanden")
         for f in ["ffmpeg.exe", "ffprobe.exe"]:
             size_mb = (VENDOR_DIR / f).stat().st_size / 1024 / 1024
             print(f"    {f}: {size_mb:.1f} MB")
@@ -165,7 +166,7 @@ def main():
     # Ergebnis prüfen
     if check_vendor():
         print()
-        print("  ✓ Alle Vendor-Binaries bereit!")
+        print("  OK: Alle Vendor-Binaries bereit!")
         print()
         for f in ["ffmpeg.exe", "ffprobe.exe"]:
             size_mb = (VENDOR_DIR / f).stat().st_size / 1024 / 1024
@@ -173,7 +174,7 @@ def main():
         return 0
     else:
         print()
-        print("  ✗ Vendor-Binaries unvollständig!")
+        print("  FEHLER: Vendor-Binaries unvollständig!")
         return 1
 
 
