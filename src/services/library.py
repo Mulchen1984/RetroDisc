@@ -1,4 +1,4 @@
-"""RetroDisc Media Library — Mediathek-Verwaltung mit Thumbnail-Generierung.
+"""RetroDisc Media Library - Mediathek-Verwaltung mit Thumbnail-Generierung.
 
 Scannt Ordner, analysiert alle Mediendateien, generiert Thumbnails
 und verwaltet die Mediathek als SQLite-Datenbank.
@@ -31,7 +31,7 @@ class MediaLibrary:
         lib = MediaLibrary(db_path="retrodisc.db")
         await lib.scan_folder("/home/marco/Videos")
         files = await lib.search("Tatort")
-        # → Liste von MediaFile-Objekten
+        # -> Liste von MediaFile-Objekten
     """
 
     VIDEO_EXTS = {
