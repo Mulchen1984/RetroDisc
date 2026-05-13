@@ -1,4 +1,4 @@
-"""RetroDisc Tool Bootstrap — Automatischer Download externer Tools.
+"""RetroDisc Tool Bootstrap - Automatischer Download externer Tools.
 
 Beim ersten Start prüft RetroDisc ob FFmpeg, yt-dlp etc. vorhanden sind.
 Falls nicht, werden sie automatisch heruntergeladen und ins tools/-Verzeichnis
@@ -135,7 +135,7 @@ class ToolBootstrap:
             on_progress: Callback(tool_name, percent, status_text)
         """
         # FFmpeg und FFprobe kommen aus dem selben ZIP
-        # → nur einmal herunterladen
+        # -> nur einmal herunterladen
         ffmpeg_zip_needed = (
             "ffmpeg" in tools or "ffprobe" in tools
         )
