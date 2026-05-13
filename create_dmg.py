@@ -1,5 +1,5 @@
 """
-create_dmg.py — Erstellt RetroDisc.dmg für macOS
+create_dmg.py - Erstellt RetroDisc.dmg für macOS
 Ausführen NACH PyInstaller: python3 create_dmg.py
 """
 
@@ -42,7 +42,7 @@ def main():
             "icon_size": 80,
         }
         dmgbuild.build_dmg(str(DMG), "RetroDisc", settings=settings)
-        print(f"✓ DMG erstellt: {DMG}")
+        print(f"OK: DMG erstellt: {DMG}")
         print(f"  Größe: {DMG.stat().st_size / 1024 / 1024:.1f} MB")
         return
     except ImportError:
@@ -73,7 +73,7 @@ def main():
         ], check=True)
 
         shutil.rmtree(tmp)
-        print(f"✓ DMG erstellt: {DMG}")
+        print(f"OK: DMG erstellt: {DMG}")
         print(f"  Größe: {DMG.stat().st_size / 1024 / 1024:.1f} MB")
 
     except Exception as e:
