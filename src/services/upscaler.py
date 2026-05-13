@@ -1,4 +1,4 @@
-"""RetroDisc Upscaler — AI Video-Upscaling (Real-ESRGAN) & Frame Interpolation (RIFE)."""
+"""RetroDisc Upscaler - AI Video-Upscaling (Real-ESRGAN) & Frame Interpolation (RIFE)."""
 
 from __future__ import annotations
 
@@ -250,7 +250,7 @@ class VideoUpscaler:
                 source_fps = 24.0
 
             # RIFE arbeitet mit 2x Multiplikator
-            # Für 24→60 brauchen wir ~2.5x, also 2x interpolieren und dann timestep
+            # Für 24->60 brauchen wir ~2.5x, also 2x interpolieren und dann timestep
             multiplier = max(2, round(target_fps / source_fps))
 
             if job:
@@ -267,7 +267,7 @@ class VideoUpscaler:
             await proc.communicate()
 
             if job:
-                job.update_progress(20, f"Frame Interpolation ({source_fps}→{target_fps}fps)...")
+                job.update_progress(20, f"Frame Interpolation ({source_fps}->{target_fps}fps)...")
 
             # RIFE Interpolation
             cmd = [
