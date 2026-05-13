@@ -1,4 +1,4 @@
-"""RetroDisc KI-Assistent — Natürliche Spracheingabe via Ollama."""
+"""RetroDisc KI-Assistent - Natürliche Spracheingabe via Ollama."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ class Assistant:
         action = await assistant.parse_command(
             "Lad mir den Tatort von gestern und brenn ihn auf DVD"
         )
-        # → {"action": "workflow", "steps": [
+        # -> {"action": "workflow", "steps": [
         #       {"type": "search", "query": "Tatort", "source": "mediathek"},
         #       {"type": "download", ...},
         #       {"type": "convert", "preset": "dvd_pal"},
