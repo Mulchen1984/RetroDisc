@@ -1,4 +1,4 @@
-"""RetroDisc Datenmodelle — MediaFile, Job, Preset, Pipeline-States."""
+"""RetroDisc Datenmodelle - MediaFile, Job, Preset, Pipeline-States."""
 
 from __future__ import annotations
 
