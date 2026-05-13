@@ -1,4 +1,4 @@
-"""RetroDisc Search — Integrierte Mediensuche über YouTube & Mediatheken."""
+"""RetroDisc Search - Integrierte Mediensuche über YouTube & Mediatheken."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ log = structlog.get_logger()
 
 class MediaSearch:
     """
-    Eine Suchleiste — alle Quellen.
+    Eine Suchleiste - alle Quellen.
 
     Durchsucht gleichzeitig YouTube und alle ÖR-Mediatheken,
     kombiniert die Ergebnisse und präsentiert sie einheitlich.
@@ -22,7 +22,7 @@ class MediaSearch:
     Beispiel:
         search = MediaSearch()
         results = await search.search("Tatort München")
-        # → Ergebnisse aus ARD, ZDF, YouTube gemischt
+        # -> Ergebnisse aus ARD, ZDF, YouTube gemischt
     """
 
     # Alle unterstützten Mediathek-Sender
