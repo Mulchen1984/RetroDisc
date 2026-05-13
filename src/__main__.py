@@ -1,4 +1,4 @@
-"""RetroDisc — Haupteinstiegspunkt.
+"""RetroDisc - Haupteinstiegspunkt.
 
 Usage:
     python -m retrodisc
@@ -41,12 +41,12 @@ structlog.configure(
 def print_banner():
     console.print(f"""
 [bold cyan]
-    ██████╗ ███████╗████████╗██████╗  ██████╗ ██████╗ ██╗███████╗ ██████╗
-    ██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██╔══██╗██║██╔════╝██╔════╝
-    ██████╔╝█████╗     ██║   ██████╔╝██║   ██║██║  ██║██║███████╗██║
-    ██╔══██╗██╔══╝     ██║   ██╔══██╗██║   ██║██║  ██║██║╚════██║██║
-    ██║  ██║███████╗   ██║   ██║  ██║╚██████╔╝██████╔╝██║███████║╚██████╗
-    ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝╚══════╝ ╚═════╝
+    ######+ #######+########+######+  ######+ ######+ ##+#######+ ######+
+    ##+==##+##+====++==##+==+##+==##+##+===##+##+==##+##|##+====+##+====+
+    ######++#####+     ##|   ######++##|   ##|##|  ##|##|#######+##|
+    ##+==##+##+==+     ##|   ##+==##+##|   ##|##|  ##|##|+====##|##|
+    ##|  ##|#######+   ##|   ##|  ##|+######++######++##|#######|+######+
+    +=+  +=++======+   +=+   +=+  +=+ +=====+ +=====+ +=++======+ +=====+
 [/bold cyan]
     [dim]All-in-One Media Suite · v{__version__}[/dim]
     [dim]Konvertieren · Brennen · Downloaden · AI-Enhanced[/dim]
@@ -57,7 +57,7 @@ def print_banner():
 @click.version_option(__version__, prog_name=__app_name__)
 @click.pass_context
 def cli(ctx):
-    """RetroDisc — All-in-One Media Suite im CloneCD-Stil."""
+    """RetroDisc - All-in-One Media Suite im CloneCD-Stil."""
     if ctx.invoked_subcommand is None:
         print_banner()
         click.echo("Nutze --help für verfügbare Befehle.")
@@ -102,7 +102,7 @@ def convert(input_file, preset, output, hwaccel):
             hwaccel=hw,
         )
 
-        console.print(f"\n[green]✓ Fertig![/green] {output_path}")
+        console.print(f"\n[green]OK: Fertig![/green] {output_path}")
         play_completion_sound()
 
     asyncio.run(_run())
@@ -139,7 +139,7 @@ def download(url, fmt, audio_only, subtitles):
             job=job,
         )
 
-        console.print(f"\n[green]✓ Fertig![/green] {result}")
+        console.print(f"\n[green]OK: Fertig![/green] {result}")
         play_completion_sound()
 
     asyncio.run(_run())
@@ -221,7 +221,7 @@ def highlight(input_file, duration, output):
             job=job,
         )
 
-        console.print(f"\n[green]✓ Highlights erstellt![/green] {result}")
+        console.print(f"\n[green]OK: Highlights erstellt![/green] {result}")
         play_completion_sound()
 
     asyncio.run(_run())
@@ -261,25 +261,25 @@ def check():
         try:
             ffmpeg = FFmpeg(settings.tools.ffmpeg, settings.tools.ffprobe)
             versions = await ffmpeg.validate()
-            console.print(f"  [green]✓[/green] FFmpeg {versions.get('ffmpeg', '?')}")
-            console.print(f"  [green]✓[/green] FFprobe {versions.get('ffprobe', '?')}")
+            console.print(f"  [green]OK:[/green] FFmpeg {versions.get('ffmpeg', '?')}")
+            console.print(f"  [green]OK:[/green] FFprobe {versions.get('ffprobe', '?')}")
         except Exception as e:
-            console.print(f"  [red]✗[/red] FFmpeg: {e}")
+            console.print(f"  [red]FEHLER:[/red] FFmpeg: {e}")
 
         # yt-dlp
         try:
             dl = Downloader(ytdlp_path=settings.tools.ytdlp)
             version = await dl.validate()
-            console.print(f"  [green]✓[/green] yt-dlp {version}")
+            console.print(f"  [green]OK:[/green] yt-dlp {version}")
         except Exception as e:
-            console.print(f"  [red]✗[/red] yt-dlp: {e}")
+            console.print(f"  [red]FEHLER:[/red] yt-dlp: {e}")
 
         # Disc-Tools
         from src.core.disc import DiscTools
         disc = DiscTools()
         tools = await disc.validate()
         for name, available in tools.items():
-            status = "[green]✓[/green]" if available else "[yellow]○[/yellow] (optional)"
+            status = "[green]OK:[/green]" if available else "[yellow]○[/yellow] (optional)"
             console.print(f"  {status} {name}")
 
         console.print()
