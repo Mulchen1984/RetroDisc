@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>RetroDisc — Start</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #d4d0c8;
+  font-family: "MS Sans Serif", "Microsoft Sans Serif", Tahoma, sans-serif;
+  font-size: 11px;
+  display: flex; align-items: center; justify-content: center;
+  height: 100vh; overflow: hidden;
+}
+
+.splash {
+  width: 420px;
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  box-shadow: 2px 2px 0 #000;
+}
+
+.titlebar {
+  height: 22px;
+  background: linear-gradient(90deg, #0a246a 0%, #a6caf0 100%);
+  display: flex; align-items: center; padding: 0 6px;
+  color: white; font-weight: bold; font-size: 11px; gap: 5px;
+}
+
+.body {
+  padding: 20px;
+  text-align: center;
+}
+
+.logo-area {
+  margin: 10px 0 16px;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+}
+
+.sheep {
+  font-size: 52px;
+  animation: bounce 0.8s ease-in-out infinite alternate;
+  filter: drop-shadow(1px 1px 0 #888);
+}
+@keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-6px); } }
+
+.app-name {
+  font-size: 22px; font-weight: bold; color: #000080; letter-spacing: 1px;
+  text-shadow: 1px 1px 0 #aaa;
+}
+.app-version { font-size: 10px; color: #666; margin-top: 2px; }
+.app-tagline { font-size: 10px; color: #444; margin-top: 2px; font-style: italic; }
+
+.separator {
+  height: 2px; border: none;
+  border-top: 1px solid #808080; border-bottom: 1px solid #fff;
+  margin: 12px 0;
+}
+
+.status-text {
+  font-size: 11px; color: #000; margin-bottom: 6px; text-align: left;
+}
+
+.progbar-outer {
+  background: white;
+  border: 2px solid; border-color: #808080 #fff #fff #808080;
+  height: 20px; overflow: hidden; margin-bottom: 8px;
+}
+.progbar-inner {
+  height: 100%; width: 0%;
+  background: repeating-linear-gradient(
+    90deg,
+    #0a246a 0px, #0a246a 12px,
+    #1e40b0 12px, #1e40b0 14px
+  );
+  transition: width 0.3s ease;
+}
+
+.status-detail {
+  font-size: 9px; color: #666; text-align: left; min-height: 12px;
+}
+
+.copyright {
+  font-size: 9px; color: #888; margin-top: 14px;
+}
+
+.tool-list {
+  display: flex; flex-direction: column; gap: 3px; margin: 8px 0; text-align: left;
+}
+.tool-row {
+  display: flex; align-items: center; gap: 6px; font-size: 10px;
+  padding: 2px 4px;
+}
+.tool-row.ok { color: #006600; }
+.tool-row.warn { color: #886600; }
+.tool-row.loading { color: #000080; }
+.tool-dot { font-size: 10px; width: 14px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="splash">
+  <div class="titlebar">
+    💿 RetroDisc wird gestartet...
+  </div>
+  <div class="body">
+
+    <div class="logo-area">
+      <div class="sheep" id="sheep">🐑</div>
+      <div>
+        <div class="app-name">RETRODiSC</div>
+        <div class="app-version">Version 1.0.0</div>
+        <div class="app-tagline">All-in-One Media Suite</div>
+      </div>
+    </div>
+
+    <hr class="separator">
+
+    <div class="tool-list" id="toolList">
+      <div class="tool-row loading" id="tool-ffmpeg">
+        <span class="tool-dot">⏳</span> FFmpeg (Konvertierung)...
+      </div>
+      <div class="tool-row loading" id="tool-ytdlp">
+        <span class="tool-dot">⏳</span> yt-dlp (Downloads)...
+      </div>
+      <div class="tool-row loading" id="tool-whisper">
+        <span class="tool-dot">⏳</span> Whisper (KI Untertitel)...
+      </div>
+    </div>
+
+    <hr class="separator">
+
+    <div class="status-text" id="statusText">Initialisierung...</div>
+
+    <div class="progbar-outer">
+      <div class="progbar-inner" id="progbar"></div>
+    </div>
+
+    <div class="status-detail" id="statusDetail">&nbsp;</div>
+
+    <div class="copyright">
+      © 2025 RetroDisc · Powered by FFmpeg · yt-dlp · Whisper
+    </div>
+  </div>
+</div>
+
+<script>
+// Diese Datei kommuniziert mit dem Python-Backend via pywebview
+// Im Entwicklungsmodus simulieren wir den Startup
+
+function setProgress(pct, text, detail) {
+  document.getElementById('progbar').style.width = pct + '%';
+  document.getElementById('statusText').textContent = text;
+  document.getElementById('statusDetail').textContent = detail || '';
+}
+
+function setTool(name, status, text) {
+  const el = document.getElementById('tool-' + name);
+  if (!el) return;
+  const icons = { ok: '✓', warn: '?', error: '✗', loading: '⏳' };
+  el.className = 'tool-row ' + status;
+  el.innerHTML = '<span class="tool-dot">' + (icons[status]||'?') + '</span> ' + text;
+}
+
+// Startup-Sequenz simulieren (wird im echten App durch pywebview.api Calls ersetzt)
+async function runStartup() {
+  await delay(300);
+  setProgress(10, 'Einstellungen werden geladen...', '');
+
+  await delay(400);
+  setProgress(25, 'FFmpeg wird geprüft...', '');
+  setTool('ffmpeg', 'loading', 'FFmpeg wird geprüft...');
+
+  await delay(600);
+  setTool('ffmpeg', 'ok', 'FFmpeg 6.1 ✓ — bereit');
+  setProgress(45, 'yt-dlp wird geprüft...', '');
+  setTool('ytdlp', 'loading', 'yt-dlp wird geprüft...');
+
+  await delay(500);
+  setTool('ytdlp', 'ok', 'yt-dlp 2024 ✓ — bereit');
+  setProgress(65, 'Whisper wird initialisiert...', '');
+  setTool('whisper', 'loading', 'Whisper wird initialisiert...');
+
+  await delay(500);
+  setTool('whisper', 'ok', 'Whisper (base) ✓ — bereit');
+  setProgress(85, 'Media Library wird geladen...', '');
+
+  await delay(400);
+  setProgress(100, 'Bereit!', 'RetroDisc startet...');
+
+  // Sheep springt schneller wenn fertig
+  document.getElementById('sheep').style.animationDuration = '0.3s';
+
+  await delay(800);
+  // Im echten App: window.pywebview.api.on_splash_complete()
+  if (window.pywebview) {
+    window.pywebview.api.splash_complete();
+  }
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Starten
+runStartup();
+</script>
+</body>
+</html>
