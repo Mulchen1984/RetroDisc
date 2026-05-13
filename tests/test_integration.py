@@ -117,7 +117,7 @@ class TestFFmpegIntegration:
             out.unlink(missing_ok=True)
 
         # Progress-Callbacks müssen aufgerufen worden sein
-        assert len(progress_values) >= 0  # Kurzes Video → möglicherweise keine Updates
+        assert len(progress_values) >= 0  # Kurzes Video -> möglicherweise keine Updates
         if progress_values:
             assert all(0 <= p <= 100 for p in progress_values)
 
