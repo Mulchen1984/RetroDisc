@@ -1,5 +1,5 @@
 """
-RetroDisc — Cross-Platform Portable Launcher
+RetroDisc - Cross-Platform Portable Launcher
 =============================================
 Läuft auf:
   Windows 10/11  (x64)
@@ -151,21 +151,21 @@ def find_tools() -> dict[str, str]:
         p = BUNDLE_DIR / "vendor" / exe
         if p.exists():
             tools[key] = str(p)
-            log.info(f"Tool (Bundle): {key} → {p.name}")
+            log.info(f"Tool (Bundle): {key} -> {p.name}")
             continue
 
         # 2. Portable tools/ Ordner
         p = TOOLS_DIR / exe
         if p.exists():
             tools[key] = str(p)
-            log.info(f"Tool (Portable): {key} → {p.name}")
+            log.info(f"Tool (Portable): {key} -> {p.name}")
             continue
 
         # 3. System PATH
         found = shutil.which(exe) or shutil.which(exe.replace(".exe", ""))
         if found:
             tools[key] = found
-            log.info(f"Tool (PATH): {key} → {found}")
+            log.info(f"Tool (PATH): {key} -> {found}")
 
     return tools
 
@@ -259,7 +259,7 @@ def _download_file(url: str, target: Path, label: str, on_progress=None) -> None
 
 # ── Fertig-Sound ──────────────────────────────────────────────────
 def play_completion_sound():
-    """Spielt den RetroDisc-Jingle — plattformübergreifend."""
+    """Spielt den RetroDisc-Jingle - plattformübergreifend."""
     try:
         sr, dur = 44100, 1.2
         notes = [(880,.0,.18),(1108,.14,.18),(1318,.28,.18),(1760,.42,.5)]
@@ -463,7 +463,7 @@ class RetroDiscBridge:
         out = Path(output_path) if output_path else None
         job = Job(
             job_type=JobType.CONVERT, input_files=[inp], output_path=out,
-            params={"display_name": f"{inp.name} → {preset.display_name}"},
+            params={"display_name": f"{inp.name} -> {preset.display_name}"},
         )
         async def _h(j):
             r = await self.converter.convert_file(
@@ -479,7 +479,7 @@ class RetroDiscBridge:
         job = Job(
             job_type=JobType.CONVERT,
             input_files=[Path(folder)],
-            params={"display_name": f"Batch: {Path(folder).name} → {preset_name}"},
+            params={"display_name": f"Batch: {Path(folder).name} -> {preset_name}"},
         )
         async def _h(j):
             await self.converter.batch_convert(
@@ -879,7 +879,7 @@ def run_download_splash(missing: list) -> None:
                 except Exception: pass
 
         win = webview.create_window(
-            "RetroDisc — Ersteinrichtung",
+            "RetroDisc - Ersteinrichtung",
             url=url, width=420, height=280,
             resizable=False, on_top=True,
         )
@@ -888,7 +888,7 @@ def run_download_splash(missing: list) -> None:
         webview.start()
 
     except Exception as e:
-        log.warning(f"Splash-Fehler: {e} — lade Tools direkt")
+        log.warning(f"Splash-Fehler: {e} - lade Tools direkt")
         download_missing_tools(missing)
 
 
@@ -902,7 +902,7 @@ def main():
     try:
         import webview
     except ImportError:
-        log.error("PyWebView fehlt — öffne im Browser")
+        log.error("PyWebView fehlt - öffne im Browser")
         import webbrowser
         html = BUNDLE_DIR / "src" / "ui" / "app.html"
         webbrowser.open(f"file:///{html}")
