@@ -1,4 +1,4 @@
-"""RetroDisc Converter — Konvertierungs-Service mit Presets & Batch-Support."""
+"""RetroDisc Converter - Konvertierungs-Service mit Presets & Batch-Support."""
 
 from __future__ import annotations
 
@@ -177,7 +177,7 @@ class Converter:
         job: Optional[Job] = None,
     ) -> list[Path]:
         """
-        Kompletter Workflow: YouTube-URLs → Audio-CD-taugliche WAV-Dateien.
+        Kompletter Workflow: YouTube-URLs -> Audio-CD-taugliche WAV-Dateien.
 
         Args:
             urls: Liste von YouTube-URLs
