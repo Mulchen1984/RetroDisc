@@ -1,11 +1,11 @@
 """
-RetroDisc.exe — Single File Launcher
+RetroDisc.exe - Single File Launcher
 =====================================
 Alles in einer EXE:
 - Komplettes Python-Backend
 - HTML/CSS/JS UI (eingebettet als String)
 - Automatischer FFmpeg/yt-dlp Download beim ersten Start
-- Kein Installer nötig — einfach doppelklicken
+- Kein Installer nötig - einfach doppelklicken
 
 Gebaut mit:  pyinstaller retrodisc_onefile.spec
 Ergebnis:    RetroDisc.exe  (~25 MB, standalone)
@@ -67,7 +67,7 @@ def get_ui_html() -> str:
 
     # Fallback: Minimale Fehler-UI
     return """<!DOCTYPE html><html><body style="font-family:Arial;padding:20px;">
-    <h2>RetroDisc — UI nicht gefunden</h2>
+    <h2>RetroDisc - UI nicht gefunden</h2>
     <p>src/ui/app.html konnte nicht geladen werden.</p>
     </body></html>"""
 
@@ -338,7 +338,7 @@ class RetroDiscBridge:
             job_type=JobType.CONVERT,
             input_files=[Path(input_path)],
             output_path=Path(output_path) if output_path else None,
-            params={"display_name": f"{Path(input_path).name} → {preset.display_name}"},
+            params={"display_name": f"{Path(input_path).name} -> {preset.display_name}"},
         )
 
         async def _handler(j):
@@ -451,7 +451,7 @@ class RetroDiscBridge:
     # ── Splash fertig ─────────────────────────────────────────────────
     def splash_complete(self):
         """Wird vom Splash-Screen aufgerufen wenn er fertig ist."""
-        log.info("Splash fertig — lade Haupt-UI")
+        log.info("Splash fertig - lade Haupt-UI")
         if self.window:
             ui_html = BUNDLE_DIR / "src" / "ui" / "app.html"
             self.window.load_url(f"file:///{ui_html}")
@@ -495,7 +495,7 @@ def show_download_splash(missing_tools: list) -> None:
                 try:
                     download_tool(tool, url, target, on_progress)
                 except Exception as e:
-                    log.error(f"Download fehlgeschlagen: {tool} — {e}")
+                    log.error(f"Download fehlgeschlagen: {tool} - {e}")
 
             progress_data["done"] = True
             if w:
@@ -513,7 +513,7 @@ def show_download_splash(missing_tools: list) -> None:
             url = "data:text/html,<h2 style='font-family:Arial;padding:20px'>Lade Tools...</h2>"
 
         w = webview.create_window(
-            "RetroDisc — Ersteinrichtung",
+            "RetroDisc - Ersteinrichtung",
             url=url,
             width=440, height=300,
             resizable=False,
@@ -524,17 +524,17 @@ def show_download_splash(missing_tools: list) -> None:
         webview.start()
 
     except Exception as e:
-        log.warning(f"Splash fehlgeschlagen: {e} — fahre ohne fort")
+        log.warning(f"Splash fehlgeschlagen: {e} - fahre ohne fort")
 
 
 # ── Haupt-App ─────────────────────────────────────────────────────────
 def main():
-    log.info("═" * 50)
+    log.info("=" * 50)
     log.info("RetroDisc startet")
     log.info(f"  APPDATA: {APPDATA}")
     log.info(f"  TOOLS:   {TOOLS_DIR}")
     log.info(f"  BUNDLE:  {BUNDLE_DIR}")
-    log.info("═" * 50)
+    log.info("=" * 50)
 
     # PyWebView importieren
     try:
@@ -552,7 +552,7 @@ def main():
     missing = [t for t in ("ffmpeg", "ytdlp") if t not in tools]
 
     if missing:
-        log.info(f"Fehlende Tools: {missing} — starte Download-Splash")
+        log.info(f"Fehlende Tools: {missing} - starte Download-Splash")
         show_download_splash(missing)
 
     # Settings
