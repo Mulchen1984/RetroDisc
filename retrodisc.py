@@ -1,5 +1,5 @@
 """
-RetroDisc — Windows Desktop App Entry Point
+RetroDisc - Windows Desktop App Entry Point
 ============================================
 Diese Datei wird von PyInstaller zur retrodisc.exe kompiliert.
 Sie startet die PyWebView-Fenster-App mit dem Python-Backend.
@@ -45,7 +45,7 @@ log = logging.getLogger("retrodisc")
 def check_and_download_tools():
     """
     Prüft ob externe Tools vorhanden sind.
-    Falls nicht → Zeigt Download-Dialog und lädt nach.
+    Falls nicht -> Zeigt Download-Dialog und lädt nach.
     """
     from src.bootstrap import ToolBootstrap
     bootstrap = ToolBootstrap(tools_dir=TOOLS_DIR)
@@ -69,7 +69,7 @@ def main():
         import webview
     except ImportError:
         # Fallback: Einfach die HTML-Datei im Standard-Browser öffnen
-        log.warning("PyWebView nicht verfügbar — öffne im Browser")
+        log.warning("PyWebView nicht verfügbar - öffne im Browser")
         import webbrowser
         html_path = BUNDLE_DIR / "src" / "ui" / "app.html"
         webbrowser.open(f"file:///{html_path}")
@@ -81,7 +81,7 @@ def main():
         tool_paths = check_and_download_tools()
         log.info(f"Tools bereit: {list(tool_paths.keys())}")
     except Exception as e:
-        log.warning(f"Tool-Check fehlgeschlagen: {e} — fahre trotzdem fort")
+        log.warning(f"Tool-Check fehlgeschlagen: {e} - fahre trotzdem fort")
         tool_paths = {}
 
     # Settings laden / erstellen
@@ -113,7 +113,7 @@ def main():
     api = RetroDiscAPI()
 
     window = webview.create_window(
-        title="RetroDisc 1.0 — All-in-One Media Suite",
+        title="RetroDisc 1.0 - All-in-One Media Suite",
         url=str(ui_html),
         js_api=api,
         width=1280,
