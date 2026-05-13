@@ -1,4 +1,4 @@
-"""RetroDisc DVD Workflow — Kompletter High-Level DVD-Erstellungs-Prozess.
+"""RetroDisc DVD Workflow - Kompletter High-Level DVD-Erstellungs-Prozess.
 
 Orchestriert den gesamten Ablauf von der Quelldatei bis zur fertigen DVD:
 1. Quelle analysieren (FFprobe)
@@ -260,7 +260,7 @@ class AudioCDWorkflow:
                     f"Track {track_num}/{len(sources)} wird vorbereitet..."
                 )
 
-            # URL → Download
+            # URL -> Download
             if isinstance(src, str) and src.startswith(("http://", "https://")):
                 from src.core.downloader import Downloader
                 dl = Downloader(output_dir=work_dir)
