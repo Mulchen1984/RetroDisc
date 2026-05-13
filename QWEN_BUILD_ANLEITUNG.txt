@@ -1,0 +1,109 @@
+RETRODISC — PORTABLE WINDOWS APP BAUEN
+========================================
+Dieses Paket enthält den kompletten Quellcode für RetroDisc.
+Deine Aufgabe: Daraus eine portable RetroDisc.exe für Windows bauen.
+
+ZIEL
+----
+Eine einzige Datei: RetroDisc.exe (~120-150 MB)
+- Keine Installation nötig
+- Kein Internet beim Start nötig  
+- Einfach doppelklicken und läuft
+
+SCHRITTE
+--------
+
+1. Python 3.11+ installieren (falls nicht vorhanden)
+   https://www.python.org/downloads/windows/
+   WICHTIG: "Add Python to PATH" ankreuzen!
+
+2. Dependencies installieren:
+   pip install pyinstaller pywebview pydantic structlog rich click httpx yt-dlp sounddevice soundfile certifi openai-whisper scenedetect librosa
+
+3. FFmpeg für Windows laden (einmalig ~85 MB):
+   python prepare_vendor.py
+
+4. EXE bauen:
+   pyinstaller retrodisc_onefile.spec --clean --noconfirm
+
+5. Fertig:
+   dist\RetroDisc.exe
+
+PROJEKTSTRUKTUR
+---------------
+retrodisc_launcher.py   → Einstiegspunkt (wird zu EXE kompiliert)
+retrodisc_onefile.spec  → PyInstaller Konfiguration (--onefile)
+prepare_vendor.py       → Lädt FFmpeg Windows-Binaries in vendor/
+requirements.txt        → Alle Python-Dependencies
+src/
+  ui/
+    app.html            → Komplette UI (Windows XP Style, 2634 Zeilen)
+    splash.html         → Splash-Screen beim Start
+    desktop.py          → Python↔JavaScript Bridge (35 API-Methoden)
+  core/
+    ffmpeg.py           → FFmpeg-Wrapper (Konvertierung, Probe, Trim, Merge)
+    pipeline.py         → Job-Queue Engine
+    downloader.py       → yt-dlp (YouTube, Mediatheken, Suche)
+    disc.py             → DVD-Authoring, ISO, Brennen
+  services/
+    converter.py        → Konvertierungs-Service mit 19 Presets
+    search.py           → Mediensuche (YouTube + alle ÖR-Mediatheken)
+    library.py          → Media Library (SQLite, Thumbnails)
+    dvd_workflow.py     → Kompletter DVD/Audio-CD Workflow
+    smart_edit.py       → KI Auto-Edit (PySceneDetect + Librosa)
+    subtitle.py         → Whisper Untertitel-Generator
+    upscaler.py         → Real-ESRGAN + RIFE
+    assistant.py        → Ollama KI-Assistent
+    watch_folder.py     → Watch Folder Service
+  config/
+    settings.py         → App-Einstellungen (Pydantic)
+    presets.py          → 19 Konvertierungs-Presets
+  models/
+    media.py            → Datenmodelle (Job, MediaFile, Preset)
+  bootstrap.py          → Tool-Downloader (FFmpeg, yt-dlp)
+assets/
+  retrodisc.ico         → App-Icon
+vendor/                 → FFmpeg.exe + FFprobe.exe (nach prepare_vendor.py)
+
+FEATURES (25 implementiert)
+---------------------------
+✓ Konvertierung (MP4, MKV, AVI, MP3, FLAC, DVD-MPEG, ...)
+✓ Batch-Konvertierung (ganzer Ordner)
+✓ DVD brennen (PAL/NTSC, Menü-Templates)
+✓ Blu-ray brennen
+✓ Audio-CD brennen
+✓ Disc rippen
+✓ YouTube Download
+✓ Mediathek-Download (ARD, ZDF, Arte, 3sat, BR, NDR, WDR, ...)
+✓ Mediensuche (YouTube + alle ÖR-Mediatheken gleichzeitig)
+✓ KI Auto-Edit / Smart Highlights
+✓ Video Upscaling (Real-ESRGAN)
+✓ Frame Interpolation (RIFE, 60fps)
+✓ Untertitel-Generator (Whisper, 57+ Sprachen)
+✓ KI-Assistent (Ollama, natürliche Sprache)
+✓ Video Trim (mit Timeline)
+✓ Video Merge
+✓ DVD-Menü Designer (8 Templates)
+✓ Watch Folder (automatische Verarbeitung)
+✓ Media Library (SQLite, Volltext-Suche)
+✓ MediaInfo (Codec, Auflösung, Streams)
+✓ Drag-Drop Datei-Import
+✓ Settings speichern/laden
+✓ Sound-Test (Fertig-Jingle)
+✓ Job abbrechen
+✓ Queue live-Update
+
+WINDOWS VORAUSSETZUNGEN
+------------------------
+- Windows 10 / 11 (64-bit)
+- Microsoft WebView2 Runtime
+  (Windows 11: bereits installiert)
+  (Windows 10: https://developer.microsoft.com/microsoft-edge/webview2/)
+
+FALLS PROBLEME
+--------------
+- Antivirus blockiert EXE → False Positive bei PyInstaller, Ausnahme eintragen
+- SmartScreen Warnung → "Weitere Informationen" → "Trotzdem ausführen"  
+- Erster Start langsam → Normal, PyInstaller entpackt einmalig nach %TEMP%
+- FFmpeg-Download schlägt fehl → Manuell von github.com/BtbN/FFmpeg-Builds
+  ffmpeg.exe + ffprobe.exe → vendor\ Ordner legen
