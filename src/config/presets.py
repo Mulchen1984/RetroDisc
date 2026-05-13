@@ -1,4 +1,4 @@
-"""RetroDisc Presets — Vordefinierte Konvertierungs-Profile."""
+"""RetroDisc Presets - Vordefinierte Konvertierungs-Profile."""
 
 from src.models.media import ConversionPreset
 
@@ -56,7 +56,7 @@ VIDEO_PRESETS = [
     ),
     ConversionPreset(
         name="avi_xvid",
-        display_name="AVI (XviD) — Retro",
+        display_name="AVI (XviD) - Retro",
         category="video",
         container="avi",
         video_codec="libxvid",
