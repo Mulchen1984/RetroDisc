@@ -1463,8 +1463,23 @@ function addDemoJob(){
 }
 
 // ── BACKEND API BRIDGE ──────────────────────────────────────────────
-// Gibt die pywebview API zurück, oder null im Browser-Modus
-function api(){ return window.pywebview ? window.pywebview.api : null; }
+// Gibt die pywebview API zurück, oder null im Browser-Modus.
+// Prüft LIVE bei jedem Aufruf (nicht gecacht), damit Buttons auch
+// funktionieren sobald die Bridge nach dem Start verfügbar wird.
+function api(){
+  return (window.pywebview && window.pywebview.api) ? window.pywebview.api : null;
+}
+// Zeigt einen kurzen Hinweis wenn das Backend noch nicht bereit ist
+function apiReady(){
+  if (api()) return true;
+  if (!window.__bridge_warned) {
+    window.__bridge_warned = true;
+    setTimeout(()=>{ window.__bridge_warned = false; }, 3000);
+    const s = document.getElementById('statusbar') || document.querySelector('.statusbar');
+    if (s) s.textContent = 'Backend startet noch... bitte 1-2 Sekunden warten';
+  }
+  return false;
+}
 
 // Backend-Events empfangen (werden von Python via evaluate_js gesendet)
 window.onBackendEvent = function(payload) {
@@ -2628,8 +2643,39 @@ async function startup() {
 }
 
 
+// ── Korrekter Start: erst UI aufbauen, dann auf die Python-Bridge warten ──
+// init() ist reines JavaScript (Tabs, Buttons) -> sofort OK
 init();
-startup();
+
+// startup() braucht die pywebview-Bridge (window.pywebview.api).
+// Die wird von PyWebView NACH dem Laden injiziert und meldet sich
+// mit dem Event 'pywebviewready'. Vorher waren alle api()-Aufrufe null
+// -> deshalb taten die Buttons nichts.
+function startBackend(){
+  if (window.__retrodisc_started) return;   // nur einmal
+  window.__retrodisc_started = true;
+  startup();
+}
+
+if (window.pywebview && window.pywebview.api) {
+  // Bridge schon da (schneller Rechner)
+  startBackend();
+} else {
+  // Auf die Bridge warten
+  window.addEventListener('pywebviewready', startBackend);
+  // Sicherheitsnetz: falls das Event verpasst wurde, pollen
+  let _tries = 0;
+  const _poll = setInterval(() => {
+    if (window.pywebview && window.pywebview.api) {
+      clearInterval(_poll);
+      startBackend();
+    } else if (++_tries > 100) {   // nach ~10s aufgeben
+      clearInterval(_poll);
+      console.warn('pywebview-Bridge nicht gefunden - Browser-Modus');
+      startBackend();  // trotzdem starten (Demo-Modus)
+    }
+  }, 100);
+}
 </script>
 </body>
 </html>
