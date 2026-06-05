@@ -502,6 +502,36 @@ select, input[type="text"], input[type="url"], input[type="number"] {
   border:1px solid #e2e7ee; background:#fff; color:#6c7884; cursor:pointer; }
 .refresh-btn:hover { border-color:#ff8a3c; color:#c75a12; }
 
+
+/* ════════ CloneCD-AUTHENTISCH: vier Knoepfe in einer Reihe ════════ */
+#homeview { padding:0 !important; }
+.cc-stage { flex:1; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:24px; width:100%; }
+.cc-row { display:flex; gap:24px; }
+.cbtn { width:152px; height:152px; cursor:pointer; border-radius:16px;
+  background:linear-gradient(180deg,#ffffff,#eef2f7); border:1px solid #d8dee6;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+  box-shadow:0 3px 10px rgba(40,60,90,.10), inset 0 1px 0 #fff;
+  transition:transform .13s, box-shadow .13s, border-color .13s; }
+.cbtn:hover { transform:translateY(-3px); border-color:#ff8a3c; box-shadow:0 12px 26px rgba(40,60,90,.18); }
+.cbtn:active { transform:translateY(-1px); }
+.cc-ico { width:80px; height:80px; position:relative; }
+.cc-disc { position:absolute; inset:0; border-radius:50%;
+  box-shadow:inset 0 2px 4px rgba(255,255,255,.9), inset 0 -5px 10px rgba(0,0,0,.28), 0 4px 8px rgba(0,0,0,.22); }
+.cc-shine { position:absolute; top:9px; left:50%; transform:translateX(-50%);
+  width:52px; height:25px; border-radius:50%;
+  background:linear-gradient(180deg,rgba(255,255,255,.85),rgba(255,255,255,0)); z-index:2; }
+.cc-sym { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:4; }
+.cc-hole { position:absolute; top:50%; left:50%; width:20px; height:20px;
+  transform:translate(-50%,-50%); border-radius:50%; background:#f4f7fb;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.15); z-index:5; }
+.cc-label { font-size:13px; font-weight:bold; color:#2a323c; letter-spacing:.3px; }
+.cc-sub { color:#6c7884; font-size:12.5px; }
+.cbtn .d-blue { background:radial-gradient(circle at 38% 30%,#cfe6ff,#2f86e0 60%,#1d5fb0); }
+.cbtn .d-orange { background:radial-gradient(circle at 38% 30%,#ffe0c2,#ff7a2e 60%,#d85a14); }
+.cbtn .d-purple { background:radial-gradient(circle at 38% 30%,#e8d2ff,#9b59d0 60%,#6f3aa0); }
+.cbtn .d-green { background:radial-gradient(circle at 38% 30%,#cdf3da,#27ae60 60%,#1a8048); }
+
 </style>
 </head>
 
@@ -548,39 +578,50 @@ select, input[type="text"], input[type="url"], input[type="number"] {
   <!-- TOOLBAR -->
 
   <div id="homeview">
-    <div class="home-head">
-      <h1>Was moechtest du tun?</h1>
-      <p>Waehle eine Aktion - der Rest erklaert sich von selbst.</p>
-    </div>
-    <div class="launch-list">
-      <div class="launch" onclick="openFlow('convert')">
-        <div class="disc d-blue"><svg viewBox="0 0 36 36"><path d="M18 7 L18 23 M11 17 L18 24 L25 17" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="9" y="27" width="18" height="3" rx="1.5" fill="#fff"/></svg></div>
-        <div class="txt"><h2>Konvertieren</h2><p>Video oder Audio in ein anderes Format umwandeln</p></div>
-        <div class="go">&rsaquo;</div>
+    <div class="cc-stage">
+      <div class="cc-row">
+        <div class="cbtn" onclick="openFlow('convert')">
+          <div class="cc-ico">
+            <div class="cc-disc d-blue"></div>
+            <div class="cc-shine"></div>
+            <svg class="cc-sym" width="42" height="42" viewBox="0 0 42 42"><path d="M21 9 A12 12 0 1 1 9 21" stroke="#fff" stroke-width="3.4" fill="none" stroke-linecap="round"/><path d="M21 3 L21 15 L28.5 9 Z" fill="#fff"/></svg>
+          </div>
+          <div class="cc-label">Konvertieren</div>
+        </div>
+        <div class="cbtn" onclick="openFlow('burn')">
+          <div class="cc-ico">
+            <div class="cc-disc d-orange"></div>
+            <div class="cc-shine"></div>
+            <svg class="cc-sym" width="34" height="40" viewBox="0 0 34 40"><path d="M17 4 C20 12 27 14 25 24 C24 31 19 33 17 33 C15 33 10 31 9 24 C8 18 13 17 13 11 C15 14 17 13 17 4 Z" fill="#fff"/></svg>
+          </div>
+          <div class="cc-label">Brennen</div>
+        </div>
+        <div class="cbtn" onclick="openFlow('rip')">
+          <div class="cc-ico">
+            <div class="cc-disc d-purple"></div>
+            <div class="cc-shine"></div>
+            <svg class="cc-sym" width="42" height="42" viewBox="0 0 42 42"><path d="M21 30 L21 14 M13 22 L21 14 L29 22" stroke="#fff" stroke-width="3.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="13" y="32" width="16" height="3" rx="1.5" fill="#fff"/></svg>
+          </div>
+          <div class="cc-label">Rippen</div>
+        </div>
+        <div class="cbtn" onclick="openFlow('download')">
+          <div class="cc-ico">
+            <div class="cc-disc d-green"></div>
+            <div class="cc-shine"></div>
+            <svg class="cc-sym" width="42" height="42" viewBox="0 0 42 42"><path d="M21 8 L21 26 M13 18 L21 27 L29 18" stroke="#fff" stroke-width="3.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="13" y="31" width="16" height="3" rx="1.5" fill="#fff"/></svg>
+          </div>
+          <div class="cc-label">Download</div>
+        </div>
       </div>
-      <div class="launch" onclick="openFlow('burn')">
-        <div class="disc d-orange"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="11" fill="none" stroke="#fff" stroke-width="2.4"/><circle cx="18" cy="18" r="3.5" fill="#fff"/><path d="M18 7 A11 11 0 0 1 29 18" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg></div>
-        <div class="txt"><h2>Disc brennen</h2><p>Dateien auf DVD, Blu-ray oder CD schreiben</p></div>
-        <div class="go">&rsaquo;</div>
+      <div class="cc-sub">Klicke auf eine der vier Aktionen.</div>
+      <div class="secondary">
+        <div class="sec-btn" onclick="openFlow('search')">Suche</div>
+        <div class="sec-btn" onclick="openFlow('edit')">Bearbeiten</div>
+        <div class="sec-btn" onclick="openFlow('ai')">AI Tools</div>
+        <div class="sec-btn" onclick="openFlow('library')">Bibliothek</div>
+        <div class="sec-btn" onclick="openFlow('queue')">Job Queue</div>
+        <div class="sec-btn" onclick="openFlow('settings')">Einstellungen</div>
       </div>
-      <div class="launch" onclick="openFlow('rip')">
-        <div class="disc d-purple"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="11" fill="none" stroke="#fff" stroke-width="2.4"/><circle cx="18" cy="18" r="3.5" fill="#fff"/><path d="M18 29 L13 22 L23 22 Z" fill="#fff"/></svg></div>
-        <div class="txt"><h2>Disc rippen</h2><p>Eine DVD oder CD als Datei einlesen</p></div>
-        <div class="go">&rsaquo;</div>
-      </div>
-      <div class="launch" onclick="openFlow('download')">
-        <div class="disc d-green"><svg viewBox="0 0 36 36"><path d="M18 7 L18 21 M12 16 L18 22 L24 16" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 27 Q18 31 27 27" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg></div>
-        <div class="txt"><h2>Download</h2><p>Video aus dem Netz oder der Mediathek holen</p></div>
-        <div class="go">&rsaquo;</div>
-      </div>
-    </div>
-    <div class="secondary">
-      <div class="sec-btn" onclick="openFlow('search')">Suche</div>
-      <div class="sec-btn" onclick="openFlow('edit')">Bearbeiten</div>
-      <div class="sec-btn" onclick="openFlow('ai')">AI Tools</div>
-      <div class="sec-btn" onclick="openFlow('library')">Bibliothek</div>
-      <div class="sec-btn" onclick="openFlow('queue')">Job Queue</div>
-      <div class="sec-btn" onclick="openFlow('settings')">Einstellungen</div>
     </div>
   </div>
   <div id="flowbar">
