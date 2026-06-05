@@ -420,6 +420,27 @@ class RetroDiscBridge:
     def open_folder_for_batch(self) -> str:
         return self.open_folder_dialog()
 
+    # ── Fenstergroesse (CloneCD-Prinzip: klein im Start, gross beim Arbeiten) ──
+    def resize_compact(self) -> bool:
+        """Startbildschirm: kleines Fenster, nur die vier Knoepfe."""
+        try:
+            if self.window:
+                self.window.resize(640, 460)
+            return True
+        except Exception as e:
+            log.warning(f"resize_compact fehlgeschlagen: {e}")
+            return False
+
+    def resize_work(self) -> bool:
+        """Arbeits-Flow: groesseres Fenster fuer Dateiliste & Optionen."""
+        try:
+            if self.window:
+                self.window.resize(1180, 760)
+            return True
+        except Exception as e:
+            log.warning(f"resize_work fehlgeschlagen: {e}")
+            return False
+
     # ── Brenner-/Rohling-Erkennung (CloneCD-Stil) ─────────────────
     def detect_burners(self) -> str:
         """Liest optische Laufwerke aus. Windows: WMI ueber PowerShell.
@@ -1002,9 +1023,10 @@ def main():
         sys.exit(1)
 
     # Fenstergröße je Plattform
-    width, height = 1280, 820
+    # CloneCD-Prinzip: klein starten (nur die vier Knoepfe), beim Arbeiten wachsen
+    width, height = 640, 460
     if IS_MAC:
-        width, height = 1200, 780  # macOS hat Menüleiste
+        width, height = 640, 470  # macOS hat Menüleiste
 
     # HTML-Inhalt direkt laden (nicht über file:// URL).
     # Grund: Mit file:// + http_server kann PyWebView auf Windows die
@@ -1019,7 +1041,7 @@ def main():
             html=html_content,
             js_api=bridge,
             width=width, height=height,
-            min_size=(960, 640),
+            min_size=(620, 440),
             background_color="#3A6EA5",
             text_select=False,
         )
@@ -1030,7 +1052,7 @@ def main():
             url=f"file:///{ui_html}",
             js_api=bridge,
             width=width, height=height,
-            min_size=(960, 640),
+            min_size=(620, 440),
             background_color="#3A6EA5",
             text_select=False,
         )
