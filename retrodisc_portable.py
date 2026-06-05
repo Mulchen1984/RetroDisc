@@ -420,6 +420,82 @@ class RetroDiscBridge:
     def open_folder_for_batch(self) -> str:
         return self.open_folder_dialog()
 
+    # ── Brenner-/Rohling-Erkennung (CloneCD-Stil) ─────────────────
+    def detect_burners(self) -> str:
+        """Liest optische Laufwerke aus. Windows: WMI ueber PowerShell.
+        Ehrlich: Laufwerksname, Laufwerksbuchstabe und ob ein Medium
+        eingelegt ist, sind zuverlaessig auslesbar. Kapazitaet eines
+        beschriebenen Mediums ueber das Dateisystem. Hersteller/ATIP
+        eines LEEREN Rohlings braucht tiefe SCSI-Befehle und wird hier
+        NICHT vorgetaeuscht."""
+        import subprocess, platform, shutil
+        try:
+            if platform.system() != "Windows":
+                return json.dumps({"drives": [], "platform": platform.system(),
+                    "note": "Laufwerks-Erkennung laeuft nur unter Windows."})
+
+            ps = (
+                "Get-CimInstance Win32_CDROMDrive | "
+                "ForEach-Object { [PSCustomObject]@{ "
+                "Name=$_.Name; Drive=$_.Drive; "
+                "MediaLoaded=$_.MediaLoaded; MediaType=$_.MediaType } } | "
+                "ConvertTo-Json -Compress"
+            )
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps],
+                capture_output=True, text=True, timeout=15
+            )
+            raw = (out.stdout or "").strip()
+            if not raw:
+                return json.dumps({"drives": [],
+                    "note": "Kein optisches Laufwerk gefunden."})
+
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                data = [data]
+
+            drives = []
+            for d in data:
+                name = (d.get("Name") or "Optisches Laufwerk").strip()
+                letter = (d.get("Drive") or "").strip()
+                loaded = bool(d.get("MediaLoaded"))
+                # Faehigkeiten heuristisch aus dem Namen ableiten (ehrlich:
+                # Heuristik, keine echte MMC-Abfrage)
+                caps = []
+                n = name.upper()
+                if "BD" in n or "BLU" in n or "BW-" in n:
+                    caps += ["BD-R", "DVD\u00b1R", "CD-R"]
+                elif "DVD" in n:
+                    caps += ["DVD\u00b1R", "CD-R"]
+                elif "CD" in n:
+                    caps += ["CD-R"]
+
+                media = None
+                if loaded and letter:
+                    # Falls beschriebene/formatierte Disc: Kapazitaet via Volume
+                    try:
+                        total = shutil.disk_usage(letter + "\\").total
+                        media = {"present": True,
+                                 "capacity_gb": round(total / 1e9, 2),
+                                 "readable": True}
+                    except Exception:
+                        # Rohling ohne Dateisystem -> eingelegt, aber Details
+                        # (Hersteller/Kapazitaet) hier nicht auslesbar
+                        media = {"present": True, "readable": False}
+                elif loaded:
+                    media = {"present": True, "readable": False}
+                else:
+                    media = {"present": False}
+
+                drives.append({"name": name, "letter": letter,
+                               "caps": caps, "media": media})
+
+            return json.dumps({"drives": drives})
+        except subprocess.TimeoutExpired:
+            return json.dumps({"drives": [], "error": "Zeitueberschreitung beim Auslesen."})
+        except Exception as e:
+            return json.dumps({"drives": [], "error": str(e)})
+
     # ── MediaInfo ─────────────────────────────────────────────────
     def get_mediainfo(self, path: str) -> str:
         future = self._run_async(self.ffmpeg.probe(path))
