@@ -386,6 +386,96 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent-deep); 
 
 /* Queue badge */
 #qcount { font-size: 8px; fill: white; }
+
+/* ════════ LAUNCHER-ARCHITEKTUR (CloneCD-Stil) ════════ */
+#win { background: linear-gradient(180deg,#ffffff 0%,#f4f7fb 60%,#eef2f7 100%) !important; }
+#rightpanel { background: transparent !important; padding: 22px 30px !important; }
+#maincontent { background: linear-gradient(180deg,#fbfcfe,#f1f5f9); }
+#leftpanel { background: linear-gradient(180deg,#f4f7fb,#e9eef4) !important; }
+body.home-mode #toolbar, body.home-mode #strip,
+body.home-mode #maincontent, body.home-mode #flowbar { display:none !important; }
+body.flow-mode #toolbar, body.flow-mode #strip { display:none !important; }
+#homeview { flex:1; display:none; flex-direction:column; padding:40px 60px; overflow:auto; }
+body.home-mode #homeview { display:flex; }
+.home-head { text-align:center; margin-bottom:32px; }
+.home-head h1 { font-size:26px; color:#243240; font-weight:bold; letter-spacing:.3px; }
+.home-head p { font-size:13px; color:#6c7884; margin-top:6px; }
+.launch-list { display:flex; flex-direction:column; gap:13px; max-width:580px; margin:0 auto; width:100%; }
+.launch { display:flex; align-items:center; gap:22px; padding:17px 24px; cursor:pointer;
+  background:#fff; border:1px solid #e2e7ee; border-radius:14px; box-shadow:0 2px 8px rgba(40,60,90,.06);
+  transition:transform .14s,box-shadow .14s,border-color .14s; }
+.launch:hover { transform:translateY(-2px); box-shadow:0 10px 24px rgba(40,60,90,.14); border-color:#cfd8e3; }
+.launch .disc { width:74px; height:74px; border-radius:50%; flex-shrink:0; position:relative;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:inset 0 2px 3px rgba(255,255,255,.9),inset 0 -4px 8px rgba(0,0,0,.25),0 4px 8px rgba(0,0,0,.22); }
+.launch .disc::after { content:''; position:absolute; top:8px; left:50%; transform:translateX(-50%);
+  width:44px; height:21px; border-radius:50%; background:linear-gradient(180deg,rgba(255,255,255,.8),rgba(255,255,255,0)); }
+.launch .disc svg { width:36px; height:36px; position:relative; z-index:1; }
+.launch .txt h2 { font-size:18px; color:#243240; font-weight:bold; }
+.launch .txt p { font-size:12.5px; color:#6c7884; margin-top:3px; }
+.launch .go { margin-left:auto; color:#c2ccd8; font-size:26px; transition:.14s; }
+.launch:hover .go { color:#ff8a3c; transform:translateX(4px); }
+.d-blue { background:radial-gradient(circle at 38% 30%,#cfe6ff,#2f86e0 62%,#1d5fb0); }
+.d-orange { background:radial-gradient(circle at 38% 30%,#ffe0c2,#ff7a2e 62%,#d85a14); }
+.d-purple { background:radial-gradient(circle at 38% 30%,#e8d2ff,#9b59d0 62%,#6f3aa0); }
+.d-green { background:radial-gradient(circle at 38% 30%,#cdf3da,#27ae60 62%,#1a8048); }
+.secondary { display:flex; gap:8px; justify-content:center; margin-top:28px; flex-wrap:wrap; }
+.sec-btn { display:flex; align-items:center; gap:7px; padding:8px 16px; background:rgba(255,255,255,.7);
+  border:1px solid #e2e7ee; border-radius:20px; font-size:12px; color:#243240; cursor:pointer; font-weight:bold; }
+.sec-btn:hover { background:#fff; border-color:#ff8a3c; color:#c75a12; }
+#flowbar { display:none; align-items:center; gap:14px; padding:14px 30px 0; flex-shrink:0; }
+body.flow-mode #flowbar { display:flex; }
+.back { width:38px; height:38px; border-radius:10px; border:1px solid #e2e7ee; background:#fff;
+  display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:20px; color:#243240; flex-shrink:0; }
+.back:hover { border-color:#ff8a3c; color:#c75a12; }
+#flowbar h1 { font-size:21px; color:#243240; font-weight:bold; }
+#flowbar .sub { font-size:12px; color:#6c7884; }
+
+
+/* ════════ FLOW-INNENSEITEN: luftig & hell (CloneCD) ════════ */
+/* Weisse Karten statt dunkler Balken-Header */
+.sect { background:#fff; border:1px solid #e2e7ee; border-radius:14px;
+  margin-bottom:16px; box-shadow:0 2px 8px rgba(40,60,90,.05); overflow:hidden; }
+.sect-title { background:#fff !important; color:#c75a12 !important;
+  font-size:11px !important; font-weight:bold; letter-spacing:1.2px; text-transform:uppercase;
+  padding:14px 20px 4px !important; text-shadow:none !important; }
+.sect-body { padding:8px 20px 18px !important; background:#fff !important; }
+
+/* Gruppenboxen weicher */
+.groupbox { border:1px solid #e8edf3; border-radius:10px; padding:16px 14px 12px;
+  margin:12px 0; background:#fafbfd; }
+.groupbox-title { background:#fafbfd; color:#6c7884; font-weight:bold; }
+
+/* Linkes Panel heller, ohne dunklen Balken */
+.panel-title { background:#fff !important; color:#243240 !important;
+  border-bottom:1px solid #e8edf3 !important; text-shadow:none !important;
+  font-size:12px; padding:12px 14px !important; }
+#leftpanel { border-right:1px solid #e8edf3 !important; }
+.frow { padding:8px 12px; }
+.frow:hover { background:#fff4ea; }
+
+/* Disc-Karten groesser & cleaner */
+.disc-card { min-width:96px; min-height:96px; border-radius:12px; padding:16px;
+  background:#fff; border:2px solid #e2e7ee; }
+.disc-card:hover { border-color:#ff8a3c; transform:translateY(-2px); box-shadow:0 6px 14px rgba(0,0,0,.10); }
+.disc-card.sel { border-color:#ff8a3c; box-shadow:0 0 0 2px rgba(255,138,60,.25); }
+
+/* Brennschritte ruhiger */
+.bstep { background:#fafbfd; border:1px solid #eef1f5; border-radius:8px; padding:9px 14px; }
+.bstep.on { background:#fff7f0; border-color:#ffcfa0; color:#c75a12; }
+
+/* Eingaben & Buttons etwas grosszuegiger */
+select, input[type="text"], input[type="url"], input[type="number"] {
+  height:30px; border-radius:7px; font-size:12px; }
+.btn98 { padding:8px 18px; border-radius:8px; font-size:12px; }
+.btn98.default { padding:11px 26px; font-size:13px; border-radius:9px; }
+
+/* AI-Karten heller */
+.ai-sect { background:#fff; border:1px solid #f0d6bc; border-radius:12px; padding:16px 18px; }
+
+/* Mehr Luft zwischen den Karten im Flow */
+#rightpanel .tabpanel { max-width:840px; }
+
 </style>
 </head>
 
@@ -430,6 +520,48 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent-deep); 
   </div>
 
   <!-- TOOLBAR -->
+
+  <div id="homeview">
+    <div class="home-head">
+      <h1>Was moechtest du tun?</h1>
+      <p>Waehle eine Aktion - der Rest erklaert sich von selbst.</p>
+    </div>
+    <div class="launch-list">
+      <div class="launch" onclick="openFlow('convert')">
+        <div class="disc d-blue"><svg viewBox="0 0 36 36"><path d="M18 7 L18 23 M11 17 L18 24 L25 17" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><rect x="9" y="27" width="18" height="3" rx="1.5" fill="#fff"/></svg></div>
+        <div class="txt"><h2>Konvertieren</h2><p>Video oder Audio in ein anderes Format umwandeln</p></div>
+        <div class="go">&rsaquo;</div>
+      </div>
+      <div class="launch" onclick="openFlow('burn')">
+        <div class="disc d-orange"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="11" fill="none" stroke="#fff" stroke-width="2.4"/><circle cx="18" cy="18" r="3.5" fill="#fff"/><path d="M18 7 A11 11 0 0 1 29 18" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg></div>
+        <div class="txt"><h2>Disc brennen</h2><p>Dateien auf DVD, Blu-ray oder CD schreiben</p></div>
+        <div class="go">&rsaquo;</div>
+      </div>
+      <div class="launch" onclick="openFlow('rip')">
+        <div class="disc d-purple"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="11" fill="none" stroke="#fff" stroke-width="2.4"/><circle cx="18" cy="18" r="3.5" fill="#fff"/><path d="M18 29 L13 22 L23 22 Z" fill="#fff"/></svg></div>
+        <div class="txt"><h2>Disc rippen</h2><p>Eine DVD oder CD als Datei einlesen</p></div>
+        <div class="go">&rsaquo;</div>
+      </div>
+      <div class="launch" onclick="openFlow('download')">
+        <div class="disc d-green"><svg viewBox="0 0 36 36"><path d="M18 7 L18 21 M12 16 L18 22 L24 16" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 27 Q18 31 27 27" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg></div>
+        <div class="txt"><h2>Download</h2><p>Video aus dem Netz oder der Mediathek holen</p></div>
+        <div class="go">&rsaquo;</div>
+      </div>
+    </div>
+    <div class="secondary">
+      <div class="sec-btn" onclick="openFlow('search')">Suche</div>
+      <div class="sec-btn" onclick="openFlow('edit')">Bearbeiten</div>
+      <div class="sec-btn" onclick="openFlow('ai')">AI Tools</div>
+      <div class="sec-btn" onclick="openFlow('library')">Bibliothek</div>
+      <div class="sec-btn" onclick="openFlow('queue')">Job Queue</div>
+      <div class="sec-btn" onclick="openFlow('settings')">Einstellungen</div>
+    </div>
+  </div>
+  <div id="flowbar">
+    <div class="back" onclick="goHome()">&lsaquo;</div>
+    <div><h1 id="flowTitle">Flow</h1><div class="sub" id="flowSub"></div></div>
+  </div>
+
   <div id="toolbar">
     <!-- Konvertieren: blaue Pfeile -->
     <button class="tbtn active" onclick="showTab('convert',this)" id="tbtn-convert">
@@ -2563,6 +2695,36 @@ async function startup() {
 
 // ── Korrekter Start: erst UI aufbauen, dann auf die Python-Bridge warten ──
 // init() ist reines JavaScript (Tabs, Buttons) -> sofort OK
+
+// ── LAUNCHER-NAVIGATION (CloneCD-Stil) ──
+const FLOW_TITLES = {
+  convert:['Konvertieren','Format waehlen und umwandeln'],
+  burn:['Disc brennen','Rohling einlegen und brennen'],
+  rip:['Disc rippen','DVD oder CD als Datei einlesen'],
+  download:['Download','Video aus dem Netz holen'],
+  search:['Suche','Medien finden'],
+  edit:['Bearbeiten','Schneiden und Menue gestalten'],
+  ai:['AI Tools','KI-gestuetzte Funktionen'],
+  library:['Bibliothek','Deine konvertierten Dateien'],
+  queue:['Job Queue','Laufende und fertige Aufgaben'],
+  settings:['Einstellungen','Tools und Optionen']
+};
+function openFlow(name){
+  document.body.classList.remove('home-mode');
+  document.body.classList.add('flow-mode');
+  const btn = document.getElementById('tbtn-'+name);
+  showTab(name, btn);
+  const t = FLOW_TITLES[name] || [name,''];
+  document.getElementById('flowTitle').textContent = t[0];
+  document.getElementById('flowSub').textContent = t[1];
+}
+function goHome(){
+  document.body.classList.remove('flow-mode');
+  document.body.classList.add('home-mode');
+}
+// Beim Start im Home-Modus
+document.body.classList.add('home-mode');
+
 init();
 
 // startup() braucht die pywebview-Bridge (window.pywebview.api).
