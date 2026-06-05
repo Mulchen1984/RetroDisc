@@ -532,6 +532,17 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 .cbtn .d-purple { background:radial-gradient(circle at 38% 30%,#e8d2ff,#9b59d0 60%,#6f3aa0); }
 .cbtn .d-green { background:radial-gradient(circle at 38% 30%,#cdf3da,#27ae60 60%,#1a8048); }
 
+
+/* ── Kompakter Startbildschirm (kleines CloneCD-Fenster) ── */
+.cc-stage { gap:16px; padding:14px 10px; }
+.cc-row { gap:14px; }
+.cbtn { width:122px; height:122px; border-radius:13px; gap:8px; }
+.cc-ico { width:74px; height:64px; }
+.cbtn .cc-label { font-size:12px; }
+.cc-sub { font-size:11.5px; }
+.cc-pills { gap:6px !important; flex-wrap:wrap; max-width:520px; }
+.cc-pill, .sec-btn { font-size:11px !important; padding:6px 12px !important; }
+
 </style>
 </head>
 
@@ -2881,6 +2892,7 @@ const FLOW_TITLES = {
 function openFlow(name){
   document.body.classList.remove('home-mode');
   document.body.classList.add('flow-mode');
+  try { const a=api(); if(a && a.resize_work) a.resize_work(); } catch(e){}
   const btn = document.getElementById('tbtn-'+name);
   showTab(name, btn);
   if(name==='burn'){ setTimeout(loadBurners, 50); }
@@ -2891,6 +2903,7 @@ function openFlow(name){
 function goHome(){
   document.body.classList.remove('flow-mode');
   document.body.classList.add('home-mode');
+  try { const a=api(); if(a && a.resize_compact) a.resize_compact(); } catch(e){}
 }
 // Beim Start im Home-Modus
 document.body.classList.add('home-mode');
