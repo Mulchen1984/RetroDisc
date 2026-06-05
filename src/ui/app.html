@@ -476,6 +476,32 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 /* Mehr Luft zwischen den Karten im Flow */
 #rightpanel .tabpanel { max-width:840px; }
 
+
+/* ── Brenner- & Rohling-Karten (CloneCD-Kernerlebnis) ── */
+.dev-card { display:flex; align-items:center; gap:16px; }
+.dev-ico { width:52px; height:52px; border-radius:12px; flex-shrink:0;
+  background:linear-gradient(180deg,#f0f4f9,#dde4ee); display:flex; align-items:center; justify-content:center; }
+.dev-info h3 { font-size:15px; color:#243240; }
+.dev-info p { font-size:12px; color:#6c7884; margin-top:2px; }
+.dev-caps { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.dev-cap { font-size:10px; background:#eef4ff; color:#2f6fc0; padding:2px 9px; border-radius:10px; font-weight:bold; }
+.media-row { display:flex; align-items:center; gap:18px; }
+.media-disc { width:60px; height:60px; border-radius:50%; flex-shrink:0; position:relative;
+  background:radial-gradient(circle at 38% 30%,#e8eef5,#b8c4d2 55%,#8c9aab);
+  box-shadow:inset 0 -3px 6px rgba(0,0,0,.2),0 2px 4px rgba(0,0,0,.15); }
+.media-disc::after { content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:inset 0 0 0 1px #b8c4d2; }
+.media-disc.empty { background:radial-gradient(circle at 38% 30%,#f2f4f7,#dde2e9 55%,#c8cfd8); opacity:.5; }
+.media-stats { flex:1; }
+.mstat { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #f0f3f7; font-size:12.5px; }
+.mstat:last-child { border:none; }
+.mstat .k { color:#6c7884; } .mstat .v { color:#243240; font-weight:bold; }
+.media-empty { color:#6c7884; font-size:13px; }
+.detect-note { font-size:11px; color:#9aa6b2; margin-top:8px; font-style:italic; }
+.refresh-btn { margin-left:auto; font-size:11px; padding:5px 12px; border-radius:8px;
+  border:1px solid #e2e7ee; background:#fff; color:#6c7884; cursor:pointer; }
+.refresh-btn:hover { border-color:#ff8a3c; color:#c75a12; }
+
 </style>
 </head>
 
@@ -849,6 +875,23 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 
       <!-- ══ BRENNEN ══ -->
       <div class="tabpanel" id="tab-burn">
+
+        <div class="sect">
+          <div class="sect-title" style="display:flex;align-items:center;">Brenner
+            <button class="refresh-btn" onclick="loadBurners()">Neu suchen</button>
+          </div>
+          <div class="sect-body">
+            <div id="burnerArea"><div class="media-empty">Suche nach Laufwerk...</div></div>
+          </div>
+        </div>
+
+        <div class="sect">
+          <div class="sect-title">Eingelegter Rohling</div>
+          <div class="sect-body">
+            <div id="mediaArea"><div class="media-empty">Lege einen Rohling ein.</div></div>
+          </div>
+        </div>
+
         <div class="sect">
           <div class="sect-title">🔥 Disc brennen</div>
           <div class="sect-body">
@@ -2696,6 +2739,56 @@ async function startup() {
 // ── Korrekter Start: erst UI aufbauen, dann auf die Python-Bridge warten ──
 // init() ist reines JavaScript (Tabs, Buttons) -> sofort OK
 
+// ── Brenner-/Rohling-Erkennung anzeigen ──
+async function loadBurners(){
+  const ba = document.getElementById('burnerArea');
+  const ma = document.getElementById('mediaArea');
+  if(!ba) return;
+  const a = api();
+  if(!a){ ba.innerHTML = '<div class="media-empty">Backend startet noch...</div>'; return; }
+  ba.innerHTML = '<div class="media-empty">Suche nach Laufwerk...</div>';
+  try{
+    const r = JSON.parse(await a.detect_burners());
+    if(r.error || !r.drives || r.drives.length===0){
+      ba.innerHTML = '<div class="media-empty">Kein optisches Laufwerk gefunden.</div>'
+        + (r.note ? '<div class="detect-note">'+r.note+'</div>' : '')
+        + (r.error ? '<div class="detect-note">'+r.error+'</div>' : '');
+      ma.innerHTML = '<div class="media-empty">-</div>';
+      return;
+    }
+    const d = r.drives[0];
+    let caps = (d.caps||[]).map(c=>'<span class="dev-cap">'+c+'</span>').join('');
+    ba.innerHTML =
+      '<div class="dev-card">'+
+        '<div class="dev-ico"><svg width="28" height="28" viewBox="0 0 28 28"><rect x="3" y="8" width="22" height="12" rx="2" fill="#7f8c9a"/><circle cx="14" cy="14" r="3" fill="#fff"/><rect x="6" y="10" width="2" height="2" fill="#4caf50"/></svg></div>'+
+        '<div class="dev-info"><h3>'+d.name+'</h3>'+
+          '<p>Laufwerk '+(d.letter||'?')+' \u00b7 erkannt \u00fcber System</p>'+
+          '<div class="dev-caps">'+caps+'</div></div>'+
+      '</div>'+
+      (caps ? '<div class="detect-note">Faehigkeiten aus Laufwerksname abgeleitet.</div>' : '');
+    // Rohling
+    const m = d.media || {present:false};
+    if(!m.present){
+      ma.innerHTML = '<div class="media-row"><div class="media-disc empty"></div>'+
+        '<div class="media-stats"><div class="media-empty">Kein Rohling eingelegt - bitte einlegen.</div></div></div>';
+    } else if(m.readable){
+      ma.innerHTML = '<div class="media-row"><div class="media-disc"></div>'+
+        '<div class="media-stats">'+
+        '<div class="mstat"><span class="k">Status</span><span class="v">Medium eingelegt</span></div>'+
+        '<div class="mstat"><span class="k">Kapazitaet</span><span class="v">'+m.capacity_gb+' GB</span></div>'+
+        '</div></div>';
+    } else {
+      ma.innerHTML = '<div class="media-row"><div class="media-disc"></div>'+
+        '<div class="media-stats">'+
+        '<div class="mstat"><span class="k">Status</span><span class="v">Rohling erkannt</span></div>'+
+        '</div></div>'+
+        '<div class="detect-note">Hersteller &amp; genaue Kapazitaet eines leeren Rohlings sind ohne Tieferkennung nicht auslesbar.</div>';
+    }
+  }catch(e){
+    ba.innerHTML = '<div class="media-empty">Fehler beim Auslesen.</div><div class="detect-note">'+e+'</div>';
+  }
+}
+
 // ── LAUNCHER-NAVIGATION (CloneCD-Stil) ──
 const FLOW_TITLES = {
   convert:['Konvertieren','Format waehlen und umwandeln'],
@@ -2714,6 +2807,7 @@ function openFlow(name){
   document.body.classList.add('flow-mode');
   const btn = document.getElementById('tbtn-'+name);
   showTab(name, btn);
+  if(name==='burn'){ setTimeout(loadBurners, 50); }
   const t = FLOW_TITLES[name] || [name,''];
   document.getElementById('flowTitle').textContent = t[0];
   document.getElementById('flowSub').textContent = t[1];
