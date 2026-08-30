@@ -1,0 +1,295 @@
+name: RetroDisc Build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  # Manuell starten über GitHub UI
+  workflow_dispatch:
+
+jobs:
+
+  # ════════════════════════════════════════
+  # WINDOWS: RetroDisc.exe
+  # ════════════════════════════════════════
+  build-windows:
+    name: Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Code holen
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 installieren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Dependencies installieren
+        run: |
+          pip install --upgrade pip
+          pip install pyinstaller pywebview pydantic structlog rich click `
+            httpx yt-dlp sounddevice soundfile certifi `
+            openai-whisper scenedetect librosa
+
+      - name: FFmpeg für Windows laden
+        run: python prepare_vendor.py
+
+      - name: RetroDisc.exe bauen
+        run: |
+          python -m PyInstaller `
+            --onefile `
+            --windowed `
+            --name "RetroDisc" `
+            --icon "assets\retrodisc.ico" `
+            --version-file "version_info.txt" `
+            --manifest "retrodisc.manifest" `
+            --add-data "src\ui\app.html;src/ui" `
+            --add-data "src\ui\splash.html;src/ui" `
+            --add-data "assets;assets" `
+            --add-data "vendor\ffmpeg.exe;vendor" `
+            --add-data "vendor\ffprobe.exe;vendor" `
+            --collect-data "pydantic" `
+            --collect-data "certifi" `
+            --collect-data "yt_dlp" `
+            --collect-submodules "yt_dlp" `
+            --hidden-import "src.core.ffmpeg" `
+            --hidden-import "src.core.pipeline" `
+            --hidden-import "src.core.downloader" `
+            --hidden-import "src.core.disc" `
+            --hidden-import "src.services.converter" `
+            --hidden-import "src.services.search" `
+            --hidden-import "src.services.library" `
+            --hidden-import "src.services.dvd_workflow" `
+            --hidden-import "src.services.smart_edit" `
+            --hidden-import "src.services.subtitle" `
+            --hidden-import "src.services.upscaler" `
+            --hidden-import "src.services.assistant" `
+            --hidden-import "src.services.watch_folder" `
+            --hidden-import "src.config.settings" `
+            --hidden-import "src.config.presets" `
+            --hidden-import "src.models.media" `
+            --hidden-import "src.utils.sound" `
+            --hidden-import "src.bootstrap" `
+            --hidden-import "webview.platforms.winforms" `
+            --hidden-import "webview.platforms.edgechromium" `
+            --hidden-import "pydantic_core" `
+            --hidden-import "sqlite3" `
+            --noconfirm `
+            retrodisc_portable.py
+
+      - name: EXE prüfen
+        run: |
+          $size = (Get-Item "dist\RetroDisc.exe").length / 1MB
+          Write-Host "RetroDisc.exe: $([math]::Round($size, 1)) MB"
+          if ($size -lt 10) { exit 1 }
+
+      - name: RetroDisc.exe hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: RetroDisc-Windows
+          path: dist/RetroDisc.exe
+          retention-days: 90
+
+  # ════════════════════════════════════════
+  # MACOS: RetroDisc.dmg (Apple Silicon + Intel)
+  # ════════════════════════════════════════
+  build-macos:
+    name: macOS DMG (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: AppleSilicon
+            runner: macos-14    # M1 (arm64)
+          - arch: Intel
+            runner: macos-13    # Intel (x86_64)
+
+    steps:
+      - name: Code holen
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 installieren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Dependencies installieren
+        run: |
+          pip install --upgrade pip
+          pip install pyinstaller pywebview pydantic structlog rich click \
+            httpx yt-dlp sounddevice soundfile certifi \
+            openai-whisper scenedetect librosa dmgbuild
+
+      - name: FFmpeg für macOS laden
+        run: |
+          mkdir -p vendor
+          echo "Lade FFmpeg für macOS..."
+          curl -L "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip" \
+               -o /tmp/ffmpeg.zip --silent --show-error
+          cd vendor && unzip -o /tmp/ffmpeg.zip && chmod +x ffmpeg && cd ..
+
+          echo "Lade FFprobe für macOS..."
+          curl -L "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip" \
+               -o /tmp/ffprobe.zip --silent --show-error
+          cd vendor && unzip -o /tmp/ffprobe.zip && chmod +x ffprobe && cd ..
+
+          echo "FFmpeg: $(vendor/ffmpeg -version 2>&1 | head -1)"
+
+      - name: Icon konvertieren (ICO → ICNS)
+        run: |
+          # Versuche sips (macOS built-in)
+          if [ -f "assets/retrodisc.ico" ]; then
+            mkdir -p /tmp/icon.iconset
+            # Erzeuge verschiedene Größen
+            python3 - << 'PYEOF'
+          import subprocess, os
+          from pathlib import Path
+
+          ico = Path("assets/retrodisc.ico")
+          iconset = Path("/tmp/icon.iconset")
+          iconset.mkdir(exist_ok=True)
+
+          sizes = [16, 32, 64, 128, 256, 512]
+          for s in sizes:
+              out = iconset / f"icon_{s}x{s}.png"
+              subprocess.run([
+                  "sips", "-z", str(s), str(s),
+                  str(ico), "--out", str(out)
+              ], capture_output=True)
+              out2 = iconset / f"icon_{s}x{s}@2x.png"
+              subprocess.run([
+                  "sips", "-z", str(s*2), str(s*2),
+                  str(ico), "--out", str(out2)
+              ], capture_output=True)
+
+          subprocess.run([
+              "iconutil", "-c", "icns",
+              str(iconset), "-o", "assets/retrodisc.icns"
+          ])
+          print("ICNS erstellt:", Path("assets/retrodisc.icns").stat().st_size, "bytes")
+          PYEOF
+          fi
+
+      - name: RetroDisc.app bauen
+        run: |
+          python3 -m PyInstaller \
+            --onefile \
+            --windowed \
+            --name "RetroDisc" \
+            --icon "assets/retrodisc.icns" \
+            --add-data "src/ui/app.html:src/ui" \
+            --add-data "src/ui/splash.html:src/ui" \
+            --add-data "assets:assets" \
+            --add-data "vendor/ffmpeg:vendor" \
+            --add-data "vendor/ffprobe:vendor" \
+            --collect-data "pydantic" \
+            --collect-data "certifi" \
+            --collect-data "yt_dlp" \
+            --collect-submodules "yt_dlp" \
+            --hidden-import "src.core.ffmpeg" \
+            --hidden-import "src.core.pipeline" \
+            --hidden-import "src.core.downloader" \
+            --hidden-import "src.core.disc" \
+            --hidden-import "src.services.converter" \
+            --hidden-import "src.services.search" \
+            --hidden-import "src.services.library" \
+            --hidden-import "src.services.dvd_workflow" \
+            --hidden-import "src.services.smart_edit" \
+            --hidden-import "src.services.subtitle" \
+            --hidden-import "src.services.upscaler" \
+            --hidden-import "src.services.assistant" \
+            --hidden-import "src.services.watch_folder" \
+            --hidden-import "src.config.settings" \
+            --hidden-import "src.config.presets" \
+            --hidden-import "src.models.media" \
+            --hidden-import "src.utils.sound" \
+            --hidden-import "src.bootstrap" \
+            --hidden-import "webview.platforms.cocoa" \
+            --hidden-import "pydantic_core" \
+            --hidden-import "sqlite3" \
+            --noconfirm \
+            retrodisc_portable.py
+
+      - name: DMG erstellen
+        run: |
+          python3 create_dmg.py
+          ls -lh dist/
+
+      - name: DMG prüfen
+        run: |
+          SIZE=$(du -sh dist/RetroDisc.dmg | cut -f1)
+          echo "RetroDisc.dmg: $SIZE"
+
+      - name: DMG je Architektur benennen
+        run: mv dist/RetroDisc.dmg "dist/RetroDisc-${{ matrix.arch }}.dmg"
+
+      - name: RetroDisc.dmg hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: RetroDisc-macOS-${{ matrix.arch }}
+          path: dist/RetroDisc-${{ matrix.arch }}.dmg
+          retention-days: 90
+
+  # ════════════════════════════════════════
+  # RELEASE: Beide Dateien als GitHub Release
+  # (nur bei git tag v*.*.*)
+  # ════════════════════════════════════════
+  release:
+    name: GitHub Release erstellen
+    needs: [ build-windows, build-macos ]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Windows Artifact holen
+        uses: actions/download-artifact@v4
+        with:
+          name: RetroDisc-Windows
+          path: release/
+
+      - name: macOS Artifact (Apple Silicon) holen
+        uses: actions/download-artifact@v4
+        with:
+          name: RetroDisc-macOS-AppleSilicon
+          path: release/
+
+      - name: macOS Artifact (Intel) holen
+        uses: actions/download-artifact@v4
+        with:
+          name: RetroDisc-macOS-Intel
+          path: release/
+
+      - name: Release erstellen
+        uses: softprops/action-gh-release@v2
+        with:
+          name: RetroDisc ${{ github.ref_name }}
+          body: |
+            ## RetroDisc ${{ github.ref_name }}
+
+            ### Downloads
+            | Plattform | Datei | Hinweise |
+            |-----------|-------|----------|
+            | Windows 10/11 | RetroDisc.exe | Portable, kein Installer |
+            | macOS Apple Silicon | RetroDisc-AppleSilicon.dmg | M1/M2/M3, Drag & Drop |
+            | macOS Intel | RetroDisc-Intel.dmg | Intel-Macs, Drag & Drop |
+
+            ### Windows
+            - Einfach `RetroDisc.exe` doppelklicken
+            - Portable: Läuft direkt, kein Installer nötig
+            - Beim ersten Start: FFmpeg + yt-dlp werden automatisch geladen
+
+            ### macOS
+            - DMG öffnen → RetroDisc nach Applications ziehen
+            - Falls Gatekeeper blockiert: Rechtsklick → Öffnen
+
+          files: |
+            release/RetroDisc.exe
+            release/RetroDisc-AppleSilicon.dmg
+            release/RetroDisc-Intel.dmg
+          draft: false
+          prerelease: false

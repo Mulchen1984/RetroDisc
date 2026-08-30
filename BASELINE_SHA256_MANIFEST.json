@@ -1,0 +1,744 @@
+{
+  "format": "RetroDisc baseline SHA256 manifest v1",
+  "generated_at": "2026-08-30T14:46:01+02:00",
+  "scope": "Source, UI, tests, build/config scripts, branding assets, and required vendor runtimes; excludes environments, caches, generated build trees, release outputs, and duplicate vendor download/install trees.",
+  "entry_count": 147,
+  "total_bytes": 679158086,
+  "entries": [
+    {
+      "path": ".github/workflows/build.yml",
+      "size": 10850,
+      "sha256": "2b6adc0712cf43278840a85b38d89b70ff35358c650d300e7f5878b3221a9759"
+    },
+    {
+      "path": ".gitignore",
+      "size": 446,
+      "sha256": "d33bb2a333f10a717aae07bcb4897b9e810be49c90155a47d8a4ed95fb8f96ca"
+    },
+    {
+      "path": ".hermes/app-ui-check.js",
+      "size": 63756,
+      "sha256": "db9529248545ed58262d8229896111e960db2feb2e00daffb202864c6077bbf6"
+    },
+    {
+      "path": ".hermes/retrodisc-built-download-result.png",
+      "size": 123841,
+      "sha256": "cffb6d307c54e2e7150ec5c9982e957f63273cfc165cef3247f63cfe63fd28d7"
+    },
+    {
+      "path": ".hermes/retrodisc-built.png",
+      "size": 123760,
+      "sha256": "db54764895c57e63706fd14366b76f1b3f71d1fc561a6c4985ff5b40b31455f2"
+    },
+    {
+      "path": ".hermes/retrodisc-download.png",
+      "size": 140734,
+      "sha256": "a5caf061b473be6ae440bb2bcfb7099b46a3dc735b4c0a082bb4799fd6054de7"
+    },
+    {
+      "path": ".hermes/retrodisc-url-typed.png",
+      "size": 143567,
+      "sha256": "f9ad2cf2951f37a0a07d0d8ba36ff39d08cee94790fec963dcda3ee3373aa0cb"
+    },
+    {
+      "path": ".hermes/verify_core.py",
+      "size": 2348,
+      "sha256": "759a7309cf1f82606389adf0ec70732b860ad4bccab985b8d331ba0d583b17fd"
+    },
+    {
+      "path": "assets/retrodisc.icns",
+      "size": 4112,
+      "sha256": "04819bc5189e2c28c2bb6b301a7a93c187812e81487185bb9773f2939766f501"
+    },
+    {
+      "path": "assets/retrodisc.ico",
+      "size": 200817,
+      "sha256": "12ee66f9b1bdb50d6f2b523d97f1829ffb133ef0287caa7191d4ee3c15347d22"
+    },
+    {
+      "path": "assets/retrodisc_1024.png",
+      "size": 1491346,
+      "sha256": "65d703f763f39c0bf0a1e36f5265b7de3d4e39320564b7ef138d766e6b5796bd"
+    },
+    {
+      "path": "assets/retrodisc_128.png",
+      "size": 37830,
+      "sha256": "88c41ecd8d3e6c30da67adb8ca1a492a56f2621d2e3f94a2d610a4edd0b2bd3d"
+    },
+    {
+      "path": "assets/retrodisc_16.png",
+      "size": 974,
+      "sha256": "f5d20598d8ef02ffbb11af2c54b463f215c07a85e129c95ba1091296cce57e5b"
+    },
+    {
+      "path": "assets/retrodisc_24.png",
+      "size": 1881,
+      "sha256": "36cfd5a8974aaedd3f2eb83ee68eb9ebbbb2065e85d74aa9f31874af6aca3a13"
+    },
+    {
+      "path": "assets/retrodisc_256.png",
+      "size": 132697,
+      "sha256": "db74e86321b8aedb5db58a2266a028d57ee0f450c8ce86848c6e08fd1441bbb3"
+    },
+    {
+      "path": "assets/retrodisc_32.png",
+      "size": 3127,
+      "sha256": "973b95d23572190851a862c4e3a24dc29145a7dea49cbe62929f9650296bc290"
+    },
+    {
+      "path": "assets/retrodisc_48.png",
+      "size": 6608,
+      "sha256": "86a7e2c7986b7fa94f9acc649c5229b38ac3e88e7df60a6c21fbe402a7e1255e"
+    },
+    {
+      "path": "assets/retrodisc_64.png",
+      "size": 11106,
+      "sha256": "80e80ed195a7dcc521fa836a465b228b6b882035aed46a4e84f1ae2c31bb1575"
+    },
+    {
+      "path": "assets/retrodisc_icon_preview.png",
+      "size": 132697,
+      "sha256": "db74e86321b8aedb5db58a2266a028d57ee0f450c8ce86848c6e08fd1441bbb3"
+    },
+    {
+      "path": "assets/retrodisc_startup.png",
+      "size": 2067596,
+      "sha256": "de03604a1fcea2f19420dfe604e32c0e3e3ff978d677ba73be64b2af90434b6a"
+    },
+    {
+      "path": "build.py",
+      "size": 6394,
+      "sha256": "8ae8241d415dc8b79634f757158199bf3f753ce45b0dd3c489adc26052b43dab"
+    },
+    {
+      "path": "BUILD_EXE.bat",
+      "size": 3588,
+      "sha256": "335fe2acca48bacdcce3611f7601bf9bf23c2e97561b94eacd0878998c71f1e6"
+    },
+    {
+      "path": "BUILD_MACOS.sh",
+      "size": 4453,
+      "sha256": "97f62d640ca95f8f91e6bc41fc60edba3f9bed2f0bfa6c67ef36ae3585ac5310"
+    },
+    {
+      "path": "BUILD_STANDALONE.bat",
+      "size": 5653,
+      "sha256": "12452a921bf5228922d1299687986f7db22fa656acde0b97c3bf3197915df4df"
+    },
+    {
+      "path": "BUILD_WINDOWS.bat",
+      "size": 3910,
+      "sha256": "ea9938273a279ebe6c0e97beb7784595a973172b26576f83e1dcf253f2b38cf2"
+    },
+    {
+      "path": "BUILD_WINDOWS_ALL.bat",
+      "size": 548,
+      "sha256": "f94742cc62589877429382b1afd03e7274e6af0019c59ece43c28705a6aeb46c"
+    },
+    {
+      "path": "CLAUDE.md",
+      "size": 2816,
+      "sha256": "d5417c3d5501a88febb11fb9e43892b38b164822c77cc564a802142c40c895f1"
+    },
+    {
+      "path": "create_dmg.py",
+      "size": 2645,
+      "sha256": "08507208949edbd50a5575f666e1b4989ffc7d589cbee2fc22d38acce1b79bc9"
+    },
+    {
+      "path": "EXE_BAUEN.md",
+      "size": 3200,
+      "sha256": "ca7e397c3dab7c07d075a6f7f1e1ccb388afe55d5a29895af6c0f6cac27b1fb1"
+    },
+    {
+      "path": "FUER_QWEN.md",
+      "size": 5083,
+      "sha256": "df30257beaf4a6bfc5ad0edc5b6c387f8267795291031ac7442a9e83c6839b40"
+    },
+    {
+      "path": "HERMES_PROMPT.txt",
+      "size": 2937,
+      "sha256": "5ea7f2cd0acf12bdbef145f0032e8f0c493e9211d88ce54f1af9dc4a9422a9bf"
+    },
+    {
+      "path": "installer/retrodisc_installer.py",
+      "size": 5088,
+      "sha256": "06960ce04b2436f04e6b3253349aff86bab1e6ceae73c0974854d119656c3dc9"
+    },
+    {
+      "path": "installer/retrodisc_setup.iss",
+      "size": 5263,
+      "sha256": "2ad1511498bbf4322455338e2c3ff1977d533eabce3e3544e78cc78d816f427f"
+    },
+    {
+      "path": "PORTABLE_BAUEN.bat",
+      "size": 2551,
+      "sha256": "a06239faa0ee5cca2333f11c72b6ecf7bf41d5b6415282c3c9bab8f9194a7e16"
+    },
+    {
+      "path": "prepare_vendor.py",
+      "size": 6237,
+      "sha256": "c364462e4a5e247d801f7d1759d4179f45ab733b8bd4eb397eb49b29346750c9"
+    },
+    {
+      "path": "QWEN_BUILD_ANLEITUNG.txt",
+      "size": 4134,
+      "sha256": "309c7191a91d9eb09868e319199d739e3c70bdd77748b7beab94b7bce61e6978"
+    },
+    {
+      "path": "README.md",
+      "size": 1244,
+      "sha256": "be30b213b2f3e2dc62e04df9933ec248b4d4148fb7b4b518b679f438a34b275c"
+    },
+    {
+      "path": "requirements.txt",
+      "size": 1142,
+      "sha256": "ffd4d69638b116a2e2f9d6f69993de04c19e0a69ecf17e2df878fbed45145951"
+    },
+    {
+      "path": "retrodisc.manifest",
+      "size": 1847,
+      "sha256": "1da4ee081366171478384633fb28ed2f4ce46c565c49684e5cc9aae84ea2123a"
+    },
+    {
+      "path": "retrodisc.py",
+      "size": 4459,
+      "sha256": "71edc07b1fba2973602d25407f10a2f37f8c6d8c488834aa72179eaebb76ed36"
+    },
+    {
+      "path": "retrodisc.spec",
+      "size": 4501,
+      "sha256": "772c3c2d5b05a3caf68d3da42bae66809cc5ef6b5511e90e6e4e66338f94c7dd"
+    },
+    {
+      "path": "retrodisc_final.spec",
+      "size": 5838,
+      "sha256": "08d47b418cda482bda110f2c5abe4a41465b2b6fd72307219d44d7962f3c52ab"
+    },
+    {
+      "path": "retrodisc_launcher.py",
+      "size": 61594,
+      "sha256": "4782cddd6d6a895b2a95be13a4f703607ace39ea68a40ecd851214d64d0e726b"
+    },
+    {
+      "path": "retrodisc_onefile.spec",
+      "size": 4581,
+      "sha256": "3c54160b6945e7d6629939d14bf277251aa0e16012c31444f46e5c5e70f1375a"
+    },
+    {
+      "path": "retrodisc_portable.py",
+      "size": 45173,
+      "sha256": "b0ae42b79527a4dc100a2dd5aa33c2863125f45c7bd2dced82f0e00bbe730d87"
+    },
+    {
+      "path": "scripts/create_icon.py",
+      "size": 2552,
+      "sha256": "5d5fe6189a04009137ae657e44b83ac7de450a13a0287769a717b7eba0bd593f"
+    },
+    {
+      "path": "scripts/generate_icon.py",
+      "size": 6432,
+      "sha256": "5981233a3f10df9cf257ee83a8e1e3fc45ff76e0beb766c7101bf700eed4acd6"
+    },
+    {
+      "path": "scripts/release_smoke.py",
+      "size": 3779,
+      "sha256": "5af0dd935e623b5fd6e3594c023000597264e596f1f8563c456ac2e9a58c6b54"
+    },
+    {
+      "path": "setup.py",
+      "size": 1072,
+      "sha256": "4f771305357ff80fb268523a06d9b31d5010d144b0e45c4980002d0bca78a5ac"
+    },
+    {
+      "path": "src/__init__.py",
+      "size": 94,
+      "sha256": "3964ac2cf1b81dda79b6e448eeb82c4769cef6c3a170282c1514917b6d526412"
+    },
+    {
+      "path": "src/__main__.py",
+      "size": 9989,
+      "sha256": "a19a45eec62b3f4412910eb50e5d283769505cc5525f907f87f330c7ec32179e"
+    },
+    {
+      "path": "src/bootstrap.py",
+      "size": 9244,
+      "sha256": "6e1d4372af3a0e1c28169a947387ba894f313ffb6022ddb19ee3f704d8201fd5"
+    },
+    {
+      "path": "src/config/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/config/presets.py",
+      "size": 8215,
+      "sha256": "aa1b1dd9e9a2985778918517880643d9f77f58e1a8bfc03ab3c8884a0f893091"
+    },
+    {
+      "path": "src/config/settings.py",
+      "size": 3778,
+      "sha256": "461d32530fe6f164b234b7efe7975ce431df3dd0601143e7592db59e7947d118"
+    },
+    {
+      "path": "src/core/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/core/disc.py",
+      "size": 15215,
+      "sha256": "a520df8c3174a57846acff227c34c7d45585c33cf019687d1de7511b96ca7ee5"
+    },
+    {
+      "path": "src/core/downloader.py",
+      "size": 13441,
+      "sha256": "11627e5def46b6eef31ccb8fdc558a1e581200ee8dba4519b1fe8250bb39b494"
+    },
+    {
+      "path": "src/core/ffmpeg.py",
+      "size": 15508,
+      "sha256": "647185b6aef893af4e1545afd3ff9ef6cb90b1d785145073e4f0b556c8a873e5"
+    },
+    {
+      "path": "src/core/pipeline.py",
+      "size": 6547,
+      "sha256": "26192278711391661ba3934387e4a6ab785702486477d3faae9a94a89ace38a8"
+    },
+    {
+      "path": "src/models/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/models/media.py",
+      "size": 8046,
+      "sha256": "8a22300433b1756fd4aafde2de185c8d726e02d1df361c6879103df23380ac71"
+    },
+    {
+      "path": "src/services/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/services/assistant.py",
+      "size": 7252,
+      "sha256": "592651cd9e2c1b369af1c11d98d39a5de7a217e407c82971a553583560ccc088"
+    },
+    {
+      "path": "src/services/converter.py",
+      "size": 8255,
+      "sha256": "3678a8e3e881838b6a924991e21686d92baf26727dd7830968ecacb551066ff9"
+    },
+    {
+      "path": "src/services/dvd_workflow.py",
+      "size": 14352,
+      "sha256": "22e1d540df3dc1c6b9f948b0824ee54cfd7dd84cdba64c74f8365e849790f5dc"
+    },
+    {
+      "path": "src/services/library.py",
+      "size": 12519,
+      "sha256": "66452c84f4361ec293a8a2f95246b166dc7479f3f8a2bdc08ca4923dc0aaa9dc"
+    },
+    {
+      "path": "src/services/ripper.py",
+      "size": 4979,
+      "sha256": "e1bde96b00d0a60e36b39f72f2d0b33cb136e678a8298bd1f8610b0603d744eb"
+    },
+    {
+      "path": "src/services/search.py",
+      "size": 5378,
+      "sha256": "ebd91f8f2b296fd7af5b0e504ce5efc2172e9a5335c72d5214876db7a1fca2bb"
+    },
+    {
+      "path": "src/services/smart_edit.py",
+      "size": 14906,
+      "sha256": "8430b18d41836369e05aeeb30dd4e8850b5b9501100f91758ea6462a2d2dd043"
+    },
+    {
+      "path": "src/services/subtitle.py",
+      "size": 11503,
+      "sha256": "5808787ceae1bfae11d43abf79ae0241ef6c94f74d2d7af6abd03e5a096399de"
+    },
+    {
+      "path": "src/services/upscaler.py",
+      "size": 14170,
+      "sha256": "37e6b251895f99b76bfddfa0b5a832913f1f87a39b8e13fecb9ed2b03fe21c8b"
+    },
+    {
+      "path": "src/services/watch_folder.py",
+      "size": 5709,
+      "sha256": "68f6ece6c233ceed0c50021051752b27195dcf1249d8d6313309e9bc38019f2d"
+    },
+    {
+      "path": "src/ui/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/ui/app.html",
+      "size": 136699,
+      "sha256": "2f7af4b93ac2878b9e6515c598cfce0f04829e111f829753094cc427b56278cb"
+    },
+    {
+      "path": "src/ui/desktop.py",
+      "size": 33222,
+      "sha256": "95612c8e7e6d7c83f60ee4cf7b2cd8272b77a58bd32dc102d8b1ecf4c6e49ddd"
+    },
+    {
+      "path": "src/ui/splash.html",
+      "size": 2382,
+      "sha256": "4339817d9b4f605a70b06d6d9a96b5903246f5459cc8a422f54523efa2ff3a90"
+    },
+    {
+      "path": "src/utils/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/utils/mediainfo.py",
+      "size": 1325,
+      "sha256": "0d8882bef1f1cac026421c846f0a56874555a23f0194bd2a411641ef4f32e82d"
+    },
+    {
+      "path": "src/utils/sound.py",
+      "size": 4355,
+      "sha256": "a444f1330588e263995840d23e90ee1510b5a22f320480ed73b34c249766750d"
+    },
+    {
+      "path": "START_WINDOWS.txt",
+      "size": 855,
+      "sha256": "1581fa208321364e35fb5288a14781d37d46082838601cf3d4103d7aaa4cd70e"
+    },
+    {
+      "path": "tests/fixtures/spoken_de.wav",
+      "size": 395896,
+      "sha256": "5c9fd1a615041f1dcd20de7a843c1d2ab350db860044e1a8e68479fedeffb0bb"
+    },
+    {
+      "path": "tests/fixtures/test_video.mp4",
+      "size": 325451,
+      "sha256": "2022b69cf2f9cc96f8755c558254805bf2172eb5925261606323b30ab1a453f9"
+    },
+    {
+      "path": "tests/test_core_flows.py",
+      "size": 4843,
+      "sha256": "86b05ded3f9f433b0fd21d835ecae08e0dda5b19c42cd7fd6062c65716c5613b"
+    },
+    {
+      "path": "tests/test_disc_flows.py",
+      "size": 4655,
+      "sha256": "fb2c5235f0859f6b2b8c5cb8ccc3292e5b3dfb7dbf179d5e18137515e52a27e4"
+    },
+    {
+      "path": "tests/test_ffmpeg.py",
+      "size": 4392,
+      "sha256": "f051e13d52919ca74c6afe2fc707ac84a5ac7b3a9cb8a62ae08676c9c242c42a"
+    },
+    {
+      "path": "tests/test_integration.py",
+      "size": 7532,
+      "sha256": "e5c66db394ae9620c8ce8390b4c78f9cdf049319654672026c2bab55ad7fd631"
+    },
+    {
+      "path": "tests/test_pipeline.py",
+      "size": 6699,
+      "sha256": "19ea306520c199eb0aee749c9d079bba4f54a3650dd0f354f010d06fed2be898"
+    },
+    {
+      "path": "tools/.gitkeep",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "vendor/dvdtools/_hd_bitrate.txt",
+      "size": 10,
+      "sha256": "a8f5ceb7f824d73b495e7bbea5b12c34fc723d8125c7dfd727a76722e9b8f075"
+    },
+    {
+      "path": "vendor/dvdtools/avcodec-58.dll",
+      "size": 46985728,
+      "sha256": "411837a7204df8cf5af8c3f4e7d23a25868bc33a8f4ae0f423a9282ebc6253cd"
+    },
+    {
+      "path": "vendor/dvdtools/avdevice-58.dll",
+      "size": 2635776,
+      "sha256": "1ecb4d590d28b5023db5b4b4832393f2fd2ea4b864c95f26b335b17fe820a398"
+    },
+    {
+      "path": "vendor/dvdtools/avfilter-7.dll",
+      "size": 7836160,
+      "sha256": "d1f847f7c5e392be1fe952c1add9e69e68a41a9e81061e1fbae32f2c641be23b"
+    },
+    {
+      "path": "vendor/dvdtools/avformat-58.dll",
+      "size": 10319872,
+      "sha256": "7b299604fee5d8c8ad4ae5fbf145b2b0b0ed9423d877b9a694d627540db496d9"
+    },
+    {
+      "path": "vendor/dvdtools/avutil-56.dll",
+      "size": 793088,
+      "sha256": "0956533bb020dc5ec6a55174b46bb130c423eac520f084d8e4ce7a0490f60098"
+    },
+    {
+      "path": "vendor/dvdtools/dvd+rw-format.exe",
+      "size": 74119,
+      "sha256": "15ddd548da066e4261a936b1179711f0a180241373c35f133ec2de3651444b6d"
+    },
+    {
+      "path": "vendor/dvdtools/dvd+rw-mediainfo.exe",
+      "size": 49333,
+      "sha256": "a6d16c77239fd80e25633390dce3a343e4e5cd579fd4996914e0833748191985"
+    },
+    {
+      "path": "vendor/dvdtools/dvdauthor.exe",
+      "size": 1127936,
+      "sha256": "01d9351e8ac01b35cb28ddca4a7930da29003614f5121384a6f5dd07e268459c"
+    },
+    {
+      "path": "vendor/dvdtools/DVDStyler.exe",
+      "size": 11382272,
+      "sha256": "bf6ee3164414bfaf42cdd6aefe69fef4a0eac1a50d4c520863d9086a7e51a325"
+    },
+    {
+      "path": "vendor/dvdtools/ff_vbr.ini",
+      "size": 1938,
+      "sha256": "97cfa97f73ffed228e2c50f1f14a3598ec8bb804b06d16a08e8c3d653e7cd0b3"
+    },
+    {
+      "path": "vendor/dvdtools/ff_vbr.pdf",
+      "size": 11651,
+      "sha256": "005b95fc10cab32045577bc544e2053d7e734d5521cf1a492327aa5a130f5b1e"
+    },
+    {
+      "path": "vendor/dvdtools/ffmpeg-vbr.bat",
+      "size": 11791,
+      "sha256": "a7807cc10c4b90e35e1543f36f704a88496e74dc69be1a131eb5e62bc57a45d0"
+    },
+    {
+      "path": "vendor/dvdtools/ffmpeg.exe",
+      "size": 295424,
+      "sha256": "f2b7dab246a06501165eafd6e4b672cfb79861489e9fff1747e8782697c13f8c"
+    },
+    {
+      "path": "vendor/dvdtools/ffplay.exe",
+      "size": 153600,
+      "sha256": "03782119358d84ba119521ddd043c905dcb6c331ae79a6e78687c7f40201444d"
+    },
+    {
+      "path": "vendor/dvdtools/ffprobe.exe",
+      "size": 174080,
+      "sha256": "45d6c30dc2b17760d7ec4c3f89d4202d96ef4fc25ff9a7e8534793caa0905858"
+    },
+    {
+      "path": "vendor/dvdtools/fonts.conf",
+      "size": 5226,
+      "sha256": "68011bc3741ebcea48f08ff2aed8519762a946f3e0fb9c224b1d3810ebf5bf4b"
+    },
+    {
+      "path": "vendor/dvdtools/Fox New.txt",
+      "size": 395,
+      "sha256": "2963cb23924e71ab45fefdffce8f0c003efe96bafc3ed0bb558f163844af6f8e"
+    },
+    {
+      "path": "vendor/dvdtools/German/ff_vbr.ini",
+      "size": 2059,
+      "sha256": "d61641f53127e9f37ee68e4ca5b9db7d7ecceaa66f645c93d0e269b6e29e3f42"
+    },
+    {
+      "path": "vendor/dvdtools/German/ff_vbr.pdf",
+      "size": 20392,
+      "sha256": "66b9a25e461060548cc0c89f279c68ad9415e38d7b7047134f38deac3cc32b65"
+    },
+    {
+      "path": "vendor/dvdtools/growisofs.exe",
+      "size": 120832,
+      "sha256": "56e5ab9e5fdb166dec30fed339444929ef544dc93b00acb6a31efc802142fd24"
+    },
+    {
+      "path": "vendor/dvdtools/libcairo-2.dll",
+      "size": 1302090,
+      "sha256": "23c5674b4c8685b1721976c591ee52051fab6e274a11df783c8f220577fa3f93"
+    },
+    {
+      "path": "vendor/dvdtools/libexpat-1.dll",
+      "size": 192283,
+      "sha256": "37ab4adb5faa6e64ba0d6c6ac3d314ffe05dcca8d696e634406219f80039fe87"
+    },
+    {
+      "path": "vendor/dvdtools/libfontconfig-1.dll",
+      "size": 347810,
+      "sha256": "0be0eed4a8b1d0b2592c48287052bac4d473d8deb87fed0b70ec74efd62f994d"
+    },
+    {
+      "path": "vendor/dvdtools/libfreetype-6.dll",
+      "size": 752539,
+      "sha256": "c7224ca7fefec36d16589fc35a83501596987dd27e670458ae74242f98ca5d86"
+    },
+    {
+      "path": "vendor/dvdtools/libfribidi-0.dll",
+      "size": 231816,
+      "sha256": "36116604ba6b41bdc1ef8ed0257e75a5bdc08e335010314036e28434ac489fba"
+    },
+    {
+      "path": "vendor/dvdtools/libgcc_s_dw2-1.dll",
+      "size": 119296,
+      "sha256": "d4503a5ea8b893b712b567fd2cff87570c953d07950f18864ada573283b83740"
+    },
+    {
+      "path": "vendor/dvdtools/libgcc_s_seh-1.dll",
+      "size": 78336,
+      "sha256": "8f64ebbb81c585b9141b6781e170f8673bb593a3977ba0b7fbd2c12715c1d77e"
+    },
+    {
+      "path": "vendor/dvdtools/libgmp-10.dll",
+      "size": 633671,
+      "sha256": "8d8e6495f2fa9314534c80f0f956ca3469111cd1b0b745a03746144df3221034"
+    },
+    {
+      "path": "vendor/dvdtools/libgmpxx-4.dll",
+      "size": 67739,
+      "sha256": "61542722e6a1570d22eea81a8b15de22655c976e8b5eea10fb77fb769a1b73ea"
+    },
+    {
+      "path": "vendor/dvdtools/libiconv-2.dll",
+      "size": 1055676,
+      "sha256": "954b8740a7cbe3728b136d4f36229c599d1f51534137b16e48e3d7ff9c468fdc"
+    },
+    {
+      "path": "vendor/dvdtools/libjpeg-62.dll",
+      "size": 361180,
+      "sha256": "02342172baa8f7bc89ea56210fc9a8eabd90ac65ceba13852fa19ca749088d27"
+    },
+    {
+      "path": "vendor/dvdtools/liblzma-5.dll",
+      "size": 232483,
+      "sha256": "ce34910b43d5e4285aecda0e4f64a1ba06c5d53e484f0b68d219c8d8473332ab"
+    },
+    {
+      "path": "vendor/dvdtools/libpng14-14.dll",
+      "size": 260456,
+      "sha256": "28e614df9356cb667c8dd4cac11f90aa6be53094e3b4d61cbebf9dce30856c8e"
+    },
+    {
+      "path": "vendor/dvdtools/libpng16-16.dll",
+      "size": 269928,
+      "sha256": "80ed8c80a35dd45aa47197ec37b0de6298f28297874d7fd9f48c9e22b44273d4"
+    },
+    {
+      "path": "vendor/dvdtools/libstdc++-6.dll",
+      "size": 1428992,
+      "sha256": "0fba3797992bf3b578adc7da0268aebdb786266d99a96c6f5aa675e4f1e959ac"
+    },
+    {
+      "path": "vendor/dvdtools/libxml2-2.dll",
+      "size": 1740678,
+      "sha256": "2162fd773dafbb41eb422418761eade228321ab0790040646028c5f4f867ee42"
+    },
+    {
+      "path": "vendor/dvdtools/Manono1.txt",
+      "size": 405,
+      "sha256": "339ce94be333b4521fae8d8258a23f6e2f6520da97117f0ff5064b04127b7ca5"
+    },
+    {
+      "path": "vendor/dvdtools/Manono2.txt",
+      "size": 416,
+      "sha256": "6c2f62943564195875a0f49f47fc13b43cf91fdd6749f636019b6524dea85b41"
+    },
+    {
+      "path": "vendor/dvdtools/MediaInfo.exe",
+      "size": 4774520,
+      "sha256": "6c39993b7aede264d7520b0d6137cc0d38eb3750bc7d7beca849ac978af9bf4c"
+    },
+    {
+      "path": "vendor/dvdtools/mkisofs.exe",
+      "size": 344064,
+      "sha256": "cbb635d157f0959889fb8212e46ea64554ec2e8c9d3ccf9b88523f618062551a"
+    },
+    {
+      "path": "vendor/dvdtools/MPEG Adapted.txt",
+      "size": 414,
+      "sha256": "f1faab0dc0526dbd7fe88c0fe26ed77bfba213a605f80fb3925ecbf5e109abfe"
+    },
+    {
+      "path": "vendor/dvdtools/mplex.exe",
+      "size": 167424,
+      "sha256": "2dc33d0872eba9fdf5c05180f7fa5f5376896060002674a5ea34954210abf5c0"
+    },
+    {
+      "path": "vendor/dvdtools/postproc-55.dll",
+      "size": 135168,
+      "sha256": "d140a26ad27caa5f38b43279c8c4891ee9350ec51eef58e6d66a286c6f23c34f"
+    },
+    {
+      "path": "vendor/dvdtools/spumux.exe",
+      "size": 1063424,
+      "sha256": "189a2badefa06bc62c13137bbf1b64d24f4d9c944ccca0719df3c2c94d15e1c1"
+    },
+    {
+      "path": "vendor/dvdtools/swresample-3.dll",
+      "size": 428544,
+      "sha256": "e48462096c27a5a3d31fed7afbf24ae819ee726d538924d61edd0ea51a6fd15d"
+    },
+    {
+      "path": "vendor/dvdtools/swscale-5.dll",
+      "size": 544768,
+      "sha256": "22b8ac6cb12cb1d66c6f59357adf5bc6318ad05b62dc3a2240c78f7439f3246d"
+    },
+    {
+      "path": "vendor/dvdtools/zlib1.dll",
+      "size": 137857,
+      "sha256": "2d663d66c1cf36a6836831a8ce9e0cdc66815f2b7ddcff4c9e81004d6c4b3992"
+    },
+    {
+      "path": "vendor/ffmpeg.exe",
+      "size": 204276736,
+      "sha256": "fd2ba80daca9f33862f5ed18912997185197901a2567bb0548752a0afc73ff06"
+    },
+    {
+      "path": "vendor/ffprobe.exe",
+      "size": 204067840,
+      "sha256": "634f49774fb8c85d9f3131c1194f327f96d8ed8de0d620b01e3fde06fdb6300b"
+    },
+    {
+      "path": "vendor/whisper-base/.gitattributes",
+      "size": 1477,
+      "sha256": "db7c0371f46f0840b8f25794c1e3321c9b5820a8cb6ba9694a46fc64b8fae5a6"
+    },
+    {
+      "path": "vendor/whisper-base/config.json",
+      "size": 2309,
+      "sha256": "56a6d8110d311f19c8f0471e562832c7527f146b567275bfca59fcf7c184da9a"
+    },
+    {
+      "path": "vendor/whisper-base/model.bin",
+      "size": 145217532,
+      "sha256": "d01c3014881c9c6f3133c182f3d2887eb6ca1c789a7538c5c007196857a0a6a9"
+    },
+    {
+      "path": "vendor/whisper-base/README.md",
+      "size": 1991,
+      "sha256": "b922acef3616e27b1d416260b63ba7114c732f0315012006781af2da69cd1ebf"
+    },
+    {
+      "path": "vendor/whisper-base/tokenizer.json",
+      "size": 2203239,
+      "sha256": "fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab"
+    },
+    {
+      "path": "vendor/whisper-base/vocabulary.txt",
+      "size": 459861,
+      "sha256": "34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913"
+    },
+    {
+      "path": "vendor/yt-dlp.exe",
+      "size": 18226085,
+      "sha256": "52fe3c26dcf71fbdc85b528589020bb0b8e383155cfa81b64dd447bbe35e24b8"
+    },
+    {
+      "path": "version_info.txt",
+      "size": 1144,
+      "sha256": "0e0481c777379814478df66e3860184c458b44c7cf0612f413c2de3f00388a6b"
+    }
+  ]
+}

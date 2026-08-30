@@ -1,0 +1,57 @@
+Du bist mein Coding-Assistent für die Weiterentwicklung von "RetroDisc",
+einer Desktop-App (Python 3.11 + PyWebView, Oberfläche in HTML/CSS/JS,
+Backend-Bridge in Python). Antworte auf Deutsch, programmiere/kommentiere
+in Englisch. Sei ehrlich über Machbarkeit - keine erfundenen Funktionen.
+
+## Was RetroDisc ist
+All-in-One Media-Suite: Konvertieren, Disc brennen, Disc rippen, Download
+(YouTube/Mediatheken), Suche, Bearbeiten, AI-Tools, Bibliothek, Job-Queue,
+Einstellungen. Maskottchen: oranges Schaf. Cross-Platform: Windows-EXE +
+macOS-DMG (Intel & Apple Silicon) über GitHub Actions.
+
+## Aufbau (Quellpaket liegt vor)
+- retrodisc_portable.py  -> Entry Point + Klasse RetroDiscBridge (Backend<->UI,
+  ~35 API-Methoden wie convert_file, create_dvd, download_url,
+  open_file_dialog, detect_burners, ...)
+- src/ui/app.html        -> KOMPLETTE Oberflaeche in EINER Datei (~135k Zeichen):
+  CloneCD-Launcher (Startbildschirm mit vier grossen goldenen Disc-Knoepfen) +
+  alle Flows. CSS im <style>-Block, JS im <script>-Block.
+- src/services/, src/core/ -> Konvertierung, DVD-Workflow, Downloader,
+  FFmpeg-Anbindung etc.
+- .github/workflows/build.yml -> baut alle drei Ziele.
+
+## Design-Prinzip (WICHTIG)
+Nachbau des Look-and-Feel von CloneCD: Startbildschirm mit wenigen grossen
+Bild-Knoepfen (goldene Discs mit Werkzeug-Symbolen), kaum Text, sofort
+verstaendlich. Klick -> fokussierter, ruhiger Ablauf mit Zurueck-Knopf.
+"Less is more". Menue nur: Datei / Extras / Hilfe.
+
+## Architektur-Regeln (NICHT brechen)
+- Den <script>-Block und alle Element-IDs in app.html NICHT umbenennen -
+  daran haengt die komplette Backend-Verdrahtung. Nur additiv aendern.
+- Navigation laeuft ueber openFlow(name) / goHome() und showTab().
+- Beim Schreiben von app.html aus Python: KEINE \uXXXX-Surrogate/Emoji-
+  Escapes (fuehrt zu UnicodeEncodeError); echte Zeichen oder HTML-Entities
+  nutzen.
+
+## NAECHSTE AUFGABE
+Mach das App-Fenster "smart" wie das echte CloneCD: Beim Start soll das
+Fenster nur so gross sein wie die vier Knoepfe (kompakt, breit, niedrig).
+Sobald man einen Flow oeffnet (openFlow), soll das Fenster auf Arbeitsgroesse
+wachsen; bei goHome() wieder auf die kompakte Groesse schrumpfen.
+- Fenstergroesse/Resize wird in src/ui/desktop.py bzw. retrodisc_portable.py
+  ueber PyWebView gesteuert (window.resize(w, h) o.ae.).
+- Die Bridge soll JS erlauben, das Fenster zu resizen (z.B. Methode
+  resize_window(mode) mit mode 'home'|'flow'), und openFlow/goHome rufen
+  das auf.
+- Sanfter Uebergang waere schoen, ist aber optional.
+
+## Offene Punkte / Ehrlichkeit
+- Rohling-Hersteller/ATIP eines LEEREN Rohlings auslesen -> braucht tiefe
+  SCSI/MMC-Befehle, ist bewusst NICHT eingebaut.
+- detect_burners() (Windows WMI via PowerShell) ist auf echter Hardware
+  noch ungetestet.
+
+Bestaetige kurz, dass du den Aufbau verstanden hast, und schlag dann den
+konkreten Code-Plan fuer das kompakte/wachsende Fenster vor, bevor du
+schreibst.

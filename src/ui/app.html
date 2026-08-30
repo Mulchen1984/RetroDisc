@@ -1,0 +1,2765 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>RetroDisc</title>
+<style>
+/* ════════════════════════════════════════════════════════
+   RETRODISC — "CloneDisc" Theme
+   Inspiriert von der fruehen-2000er Disc-Utility-Aesthetik:
+   gebuerstetes Metall, grosse runde glaenzende Disc-Buttons,
+   silbriges Gehaeuse, oranger Akzent, Schaf-Maskottchen.
+   Eigenstaendige Interpretation, keine Original-Assets.
+   ════════════════════════════════════════════════════════ */
+
+:root {
+  --metal-light: #f4f5f7;
+  --metal-mid:   #d2d6dd;
+  --metal-dark:  #c2c7d0;
+  --ink:         #2a323c;
+  --ink-soft:    #5a636e;
+  --line:        #b3bac4;
+  --accent:      #ff8a3c;   /* CloneCD-Orange */
+  --accent-deep: #e8721c;
+  --accent-edge: #c75a12;
+  --steel:       #3a4654;   /* dunkles Metall (Titel/Header) */
+  --steel-deep:  #2b3542;
+  --panel-bg:    #eef1f5;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  font-family: "Verdana", "Tahoma", "Segoe UI", sans-serif;
+  font-size: 11px;
+  color: var(--ink);
+  background: radial-gradient(ellipse at 50% 0%, #2a5c86 0%, #16344e 55%, #0c2236 100%);
+}
+
+/* ── APP-GEHAEUSE: gebuerstetes Aluminium ── */
+#win {
+  position: absolute;
+  top: 14px; left: 14px; right: 14px; bottom: 14px;
+  display: flex; flex-direction: column;
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(255,255,255,0.00) 0px, rgba(255,255,255,0.05) 1px,
+      rgba(0,0,0,0.025) 2px, rgba(255,255,255,0.00) 3px),
+    linear-gradient(180deg, #f4f5f7 0%, #e2e5ea 18%, #d2d6dd 60%, #c2c7d0 100%);
+  border-radius: 10px;
+  box-shadow:
+    0 18px 50px rgba(0,0,0,0.55),
+    0 2px 0 rgba(255,255,255,0.7) inset,
+    0 0 0 1px rgba(120,130,145,0.6),
+    0 0 0 3px rgba(255,255,255,0.22);
+  overflow: hidden; z-index: 1;
+}
+
+/* ── TITELLEISTE: dunkles Metall ── */
+#titlebar {
+  height: 34px; flex-shrink: 0;
+  background: linear-gradient(180deg, #3a4654 0%, #2b3542 48%, #222a35 52%, #1a212b 100%);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid #11161d;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+}
+.win-title {
+  display: flex; align-items: center; gap: 9px;
+  color: #eef2f7; font-size: 12.5px; font-weight: bold;
+  letter-spacing: 0.4px; text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+}
+.win-btns { display: flex; gap: 5px; }
+.win-btn {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: bold; cursor: pointer;
+  background: radial-gradient(circle at 35% 30%, #8a97a6, #58646f 60%, #3a444e);
+  border: 1px solid #1c232c; color: #e8edf3;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.4), 0 1px 2px rgba(0,0,0,0.4);
+}
+.win-btn:hover { filter: brightness(1.18); }
+.win-btn.close { background: radial-gradient(circle at 35% 30%, #ff9a6a, #e8502a 60%, #b8331a); }
+
+/* ── MENUELEISTE ── */
+#menubar {
+  height: 24px; flex-shrink: 0;
+  background: linear-gradient(180deg, #eef1f5 0%, #dde1e8 100%);
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; padding: 0 6px;
+}
+.menu-item { padding: 3px 10px; cursor: pointer; font-size: 11px; color: var(--ink); border-radius: 4px; }
+.menu-item:hover { background: var(--accent-deep); color: white; }
+
+/* ════════ TOOLBAR: grosse runde Disc-Buttons ════════ */
+#toolbar {
+  background: linear-gradient(180deg, #eaedf2 0%, #d7dbe2 100%);
+  border-bottom: 1px solid var(--line);
+  box-shadow: inset 0 -2px 5px rgba(0,0,0,0.07);
+  padding: 12px 14px;
+  display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap;
+  align-items: flex-start;
+}
+.tbtn {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 6px; padding: 4px; cursor: pointer;
+  background: transparent; border: none;
+  min-width: 84px; user-select: none; position: relative;
+}
+.tbtn svg {
+  width: 56px; height: 56px; border-radius: 50%; padding: 9px;
+  background: radial-gradient(circle at 38% 28%,
+    #ffffff 0%, #eef3f9 18%, #c8d2de 55%, #aab6c6 78%, #8c99ab 100%);
+  box-shadow:
+    inset 0 2px 3px rgba(255,255,255,0.95),
+    inset 0 -3px 6px rgba(0,0,0,0.22),
+    0 3px 5px rgba(0,0,0,0.30),
+    0 0 0 1px rgba(120,132,148,0.55);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+.tbtn::before {
+  content: ''; position: absolute; top: 4px; left: 50%;
+  transform: translateX(-50%);
+  width: 50px; height: 25px; border-radius: 50%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0));
+  pointer-events: none; opacity: 0.8;
+}
+.tbtn:hover svg {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow:
+    inset 0 2px 3px rgba(255,255,255,0.95),
+    inset 0 -3px 6px rgba(0,0,0,0.22),
+    0 7px 12px rgba(0,0,0,0.32),
+    0 0 0 1px rgba(120,132,148,0.55),
+    0 0 14px rgba(255,140,50,0.35);
+}
+.tbtn:active svg { transform: translateY(1px) scale(0.98); filter: brightness(0.95); }
+.tbtn.active svg {
+  box-shadow:
+    inset 0 2px 3px rgba(255,255,255,0.95),
+    inset 0 -3px 6px rgba(0,0,0,0.22),
+    0 3px 6px rgba(0,0,0,0.30),
+    0 0 0 2px var(--accent),
+    0 0 14px rgba(255,140,50,0.55);
+}
+.tbtn.active .tbtn-label { color: var(--accent-edge); }
+.tbtn-label {
+  font-size: 10px; font-weight: bold; color: #38414c;
+  text-align: center; white-space: nowrap; letter-spacing: 0.2px;
+}
+.tsep {
+  width: 1px; margin: 8px 6px; align-self: stretch;
+  background: linear-gradient(180deg, transparent, var(--line) 30%, var(--line) 70%, transparent);
+}
+
+/* Tool-Status Strip */
+#strip {
+  background: linear-gradient(180deg, #e8ebf0 0%, #d8dce3 100%);
+  border-bottom: 1px solid #b9c0ca;
+  padding: 4px 12px; display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0; font-size: 10px; color: var(--ink-soft);
+}
+.strip-badge.ok {
+  color: #1c6b1c; background: #d9f5d9; border: 1px solid #4caf50;
+  padding: 2px 9px; border-radius: 11px; font-weight: bold; font-size: 9px;
+}
+.strip-badge.warn {
+  color: #8a5a00; background: #fff2d0; border: 1px solid #e0a92a;
+  padding: 2px 9px; border-radius: 11px; font-weight: bold; font-size: 9px;
+}
+
+/* ── LAYOUT ── */
+#maincontent { flex: 1; display: flex; overflow: hidden; }
+
+/* ── LINKES PANEL ── */
+#leftpanel {
+  width: 218px; flex-shrink: 0;
+  background: linear-gradient(180deg, #e6e9ee 0%, #d2d6dd 100%);
+  border-right: 1px solid var(--line); display: flex; flex-direction: column;
+}
+.panel-title {
+  padding: 7px 12px; font-weight: bold; font-size: 11px;
+  color: white; letter-spacing: 0.3px; text-shadow: 0 1px 1px rgba(0,0,0,0.4);
+  background: linear-gradient(180deg, var(--steel) 0%, var(--steel-deep) 100%);
+  border-bottom: 1px solid #1c232c;
+}
+#filebox {
+  background: white; flex: 1; overflow-y: auto;
+  border: 1px solid #b9c0ca; margin: 6px; border-radius: 4px;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.10);
+}
+#filebox::-webkit-scrollbar, #rightpanel::-webkit-scrollbar { width: 14px; }
+#filebox::-webkit-scrollbar-track, #rightpanel::-webkit-scrollbar-track { background: #eef1f5; }
+#filebox::-webkit-scrollbar-thumb, #rightpanel::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #c2c8d0, #a8b0bb);
+  border-radius: 7px; border: 2px solid #eef1f5;
+}
+
+.frow {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px; cursor: pointer;
+  border-bottom: 1px solid #eef1f5; font-size: 11px;
+}
+.frow:hover { background: #fff1e4; }
+.frow.sel { background: var(--accent-deep); color: white; }
+.frow .frow-meta { color: #8a939e; font-size: 9px; }
+.frow.sel .frow-meta { color: #ffe2cc; }
+
+#fileInfoPanel {
+  margin: 3px 6px; background: #fff4ea; border: 1px solid #f0b988;
+  border-radius: 4px; padding: 6px 8px; font-size: 10px;
+}
+
+/* Linke Panel-Buttons: gebuerstetes Metall */
+.addfiles-btn {
+  margin: 4px 6px 0; padding: 7px 8px;
+  font-family: inherit; font-size: 11px; font-weight: bold;
+  cursor: pointer; border-radius: 5px; width: calc(100% - 12px);
+  background: linear-gradient(180deg, #fafbfc 0%, #e2e6ec 100%);
+  border: 1px solid #b9c0ca; color: var(--ink);
+}
+.addfiles-btn:hover {
+  background: linear-gradient(180deg, #fff4ea 0%, #ffe2cc 100%);
+  border-color: var(--accent); color: var(--accent-edge);
+}
+.addfiles-btn:active { background: linear-gradient(180deg, #ffd9b8 0%, #ffc89a 100%); }
+
+/* ── INHALT ── */
+#rightpanel { flex: 1; overflow-y: auto; padding: 14px; background: transparent; }
+
+.tabpanel { display: none; animation: fadein 0.15s ease; }
+.tabpanel.active { display: block; }
+@keyframes fadein { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: none;} }
+
+/* ── SECTION-BOXEN ── */
+.sect {
+  background: white; border: 1px solid #c2c8d0; border-radius: 6px;
+  margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.10); overflow: hidden;
+}
+.sect-title {
+  background: linear-gradient(180deg, var(--steel) 0%, var(--steel-deep) 100%);
+  color: white; font-weight: bold; font-size: 11px;
+  padding: 6px 12px; display: flex; align-items: center; gap: 6px;
+  letter-spacing: 0.3px; text-shadow: 0 1px 1px rgba(0,0,0,0.4);
+}
+.sect-body { padding: 12px; background: #fafbfc; }
+
+.groupbox {
+  border: 1px solid #c2c8d0; border-radius: 6px;
+  padding: 12px 10px 8px; margin: 10px 0; position: relative; background: white;
+}
+.groupbox-title {
+  position: absolute; top: -8px; left: 10px; background: #fafbfc;
+  padding: 0 6px; font-size: 11px; font-weight: bold; color: var(--ink);
+}
+
+/* ── FORMULARE ── */
+select, input[type="text"], input[type="url"], input[type="number"] {
+  background: white; border: 1px solid #b9c0ca; border-radius: 4px;
+  padding: 4px 7px; font-family: inherit; font-size: 11px;
+  height: 26px; outline: none; color: var(--ink);
+}
+select:focus, input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255,138,60,0.25); }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent-deep); cursor: pointer; }
+
+/* ── BUTTONS ── */
+.btn98 {
+  background: linear-gradient(180deg, #fafbfc 0%, #e2e6ec 100%);
+  border: 1px solid #b9c0ca; border-radius: 5px;
+  padding: 6px 16px; min-width: 80px; font-family: inherit; font-size: 11px;
+  cursor: pointer; color: var(--ink); font-weight: bold;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+}
+.btn98:hover { background: linear-gradient(180deg, #fff4ea 0%, #ffe2cc 100%); border-color: var(--accent); color: var(--accent-edge); }
+.btn98:active { background: linear-gradient(180deg, #ffd9b8 0%, #ffc89a 100%); box-shadow: inset 1px 1px 3px rgba(0,0,0,0.15); }
+.btn98.default {
+  background: linear-gradient(180deg, #ff9a4a 0%, #e8721c 100%);
+  border: 1px solid var(--accent-edge); color: white;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.3); font-weight: bold;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 4px rgba(0,0,0,0.2);
+}
+.btn98.default:hover { filter: brightness(1.08); }
+.btn98:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── DISC-KARTEN: glaenzende Mini-Discs ── */
+.disc-icons-row { display: flex; gap: 12px; flex-wrap: wrap; padding: 6px 0; }
+.disc-card {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 8px; padding: 14px 16px; cursor: pointer;
+  background: linear-gradient(180deg, #fafbfc 0%, #e8ebf0 100%);
+  border: 2px solid #c2c8d0; border-radius: 9px;
+  min-width: 92px; min-height: 92px; transition: all 0.12s;
+}
+.disc-card:hover { border-color: var(--accent); box-shadow: 0 4px 10px rgba(0,0,0,0.12); transform: translateY(-2px); }
+.disc-card.sel { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255,138,60,0.3); }
+.disc-card-label { font-size: 11px; font-weight: bold; color: var(--ink); text-align: center; }
+
+/* ── BRENN-SCHRITTE ── */
+.burn-steps { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
+.bstep {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 11px;
+  background: #fafbfc; border: 1px solid #e0e4ea; border-radius: 5px;
+}
+.bstep.on { background: linear-gradient(90deg, #fff4ea, #fffaf5); border-color: var(--accent); font-weight: bold; color: var(--accent-edge); }
+.bstep.done { background: linear-gradient(90deg, #eefdee, #f8fff8); border-color: #4caf50; color: #1c6b1c; }
+
+/* ── JOBLIST ── */
+.jobrow {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  border-bottom: 1px solid #eef1f5; font-size: 11px; background: white;
+}
+.jobrow:nth-child(even) { background: #f6f8fa; }
+.jstate { font-size: 12px; flex-shrink: 0; width: 16px; }
+.jname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jpct { font-size: 10px; color: var(--ink-soft); width: 34px; text-align: right; flex-shrink: 0; }
+
+/* ── PROGRESS BAR ── */
+.progbar-outer {
+  background: #eef1f5; border: 1px solid #b9c0ca; border-radius: 5px;
+  height: 20px; overflow: hidden; margin: 6px 0;
+}
+.progbar-inner {
+  height: 100%;
+  background: linear-gradient(180deg, #ffa257, #e8721c);
+  transition: width 0.3s; box-shadow: inset 0 2px 0 rgba(255,255,255,0.35);
+}
+
+/* ── AI KARTEN ── */
+.ai-sect {
+  background: linear-gradient(135deg, #fff7f0 0%, #fff0e4 100%);
+  border: 1px solid #f0c8a0; border-radius: 7px; padding: 12px; margin-bottom: 10px;
+}
+.ai-sect-title { color: var(--accent-edge); font-weight: bold; font-size: 11.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+
+/* ── STATUSLEISTE ── */
+#statusbar {
+  height: 24px; flex-shrink: 0;
+  background: linear-gradient(180deg, #e8ebf0 0%, #d2d6dd 100%);
+  border-top: 1px solid #b9c0ca; display: flex; align-items: center; padding: 0; gap: 1px;
+}
+.sbar-cell {
+  padding: 2px 12px; font-size: 10px; height: 100%;
+  display: flex; align-items: center; border-right: 1px solid #c2c8d0; color: var(--ink-soft);
+}
+.sbar-cell:first-child { flex: 1; color: var(--ink); }
+
+/* ── QUELL-CHECKBOXEN ── */
+.src-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; margin: 8px 0; }
+.src-chk { display: flex; align-items: center; gap: 5px; font-size: 11px; cursor: pointer; }
+
+/* ── SEARCH RESULTS ── */
+.frow-name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frow-meta { font-size: 9px; color: #8a939e; }
+
+/* ── TOGGLE ── */
+.tog {
+  width: 36px; height: 19px; border-radius: 10px;
+  background: #c2c8d0; border: 1px solid #a8b0bb; cursor: pointer;
+  position: relative; transition: all 0.2s; flex-shrink: 0;
+}
+.tog.on { background: var(--accent-deep); border-color: var(--accent-edge); }
+.tog::after {
+  content: ''; position: absolute; width: 13px; height: 13px; border-radius: 50%;
+  background: white; top: 2px; left: 2px; transition: 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+.tog.on::after { transform: translateX(17px); }
+
+/* ── SETTINGS ── */
+.sgroup { background: white; border: 1px solid #c2c8d0; border-radius: 6px; padding: 12px; margin-bottom: 10px; }
+.sgtitle { font-size: 10px; font-weight: bold; letter-spacing: 1px; color: var(--accent-edge); margin-bottom: 10px; text-transform: uppercase; }
+.srow { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #eef1f5; }
+.srow:last-child { border-bottom: none; }
+.slbl { font-size: 11px; font-weight: bold; color: var(--ink); }
+.ssub { font-size: 9px; color: #8a939e; }
+
+/* Library */
+.librow { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-bottom: 1px solid #eef1f5; cursor: pointer; font-size: 11px; }
+.librow:hover { background: #fff1e4; }
+.librow.sel { background: var(--accent-deep); color: white; }
+
+/* DVD Menu Preview */
+#menuPreview { border-radius: 6px; transition: all 0.3s; border: 1px solid #888; }
+
+/* Watch Folder Status */
+#watchStatus { font-size: 10px; color: var(--accent-edge); margin-top: 4px; font-weight: bold; }
+
+/* Queue badge */
+#qcount { font-size: 8px; fill: white; }
+
+/* ════════ LAUNCHER-ARCHITEKTUR (CloneCD-Stil) ════════ */
+#win { background: linear-gradient(180deg,#ffffff 0%,#f4f7fb 60%,#eef2f7 100%) !important; }
+#rightpanel { background: transparent !important; padding: 22px 30px !important; }
+#maincontent { background: linear-gradient(180deg,#fbfcfe,#f1f5f9); }
+#leftpanel { background: linear-gradient(180deg,#f4f7fb,#e9eef4) !important; }
+body.home-mode #toolbar, body.home-mode #strip,
+body.home-mode #maincontent, body.home-mode #flowbar { display:none !important; }
+body.flow-mode #toolbar, body.flow-mode #strip { display:none !important; }
+#homeview { flex:1; display:none; flex-direction:column; padding:40px 60px; overflow:auto; }
+body.home-mode #homeview { display:flex; }
+.home-head { text-align:center; margin-bottom:32px; }
+.home-head h1 { font-size:26px; color:#243240; font-weight:bold; letter-spacing:.3px; }
+.home-head p { font-size:13px; color:#6c7884; margin-top:6px; }
+.launch-list { display:flex; flex-direction:column; gap:13px; max-width:580px; margin:0 auto; width:100%; }
+.launch { display:flex; align-items:center; gap:22px; padding:17px 24px; cursor:pointer;
+  background:#fff; border:1px solid #e2e7ee; border-radius:14px; box-shadow:0 2px 8px rgba(40,60,90,.06);
+  transition:transform .14s,box-shadow .14s,border-color .14s; }
+.launch:hover { transform:translateY(-2px); box-shadow:0 10px 24px rgba(40,60,90,.14); border-color:#cfd8e3; }
+.launch .disc { width:74px; height:74px; border-radius:50%; flex-shrink:0; position:relative;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:inset 0 2px 3px rgba(255,255,255,.9),inset 0 -4px 8px rgba(0,0,0,.25),0 4px 8px rgba(0,0,0,.22); }
+.launch .disc::after { content:''; position:absolute; top:8px; left:50%; transform:translateX(-50%);
+  width:44px; height:21px; border-radius:50%; background:linear-gradient(180deg,rgba(255,255,255,.8),rgba(255,255,255,0)); }
+.launch .disc svg { width:36px; height:36px; position:relative; z-index:1; }
+.launch .txt h2 { font-size:18px; color:#243240; font-weight:bold; }
+.launch .txt p { font-size:12.5px; color:#6c7884; margin-top:3px; }
+.launch .go { margin-left:auto; color:#c2ccd8; font-size:26px; transition:.14s; }
+.launch:hover .go { color:#ff8a3c; transform:translateX(4px); }
+.d-blue { background:radial-gradient(circle at 38% 30%,#cfe6ff,#2f86e0 62%,#1d5fb0); }
+.d-orange { background:radial-gradient(circle at 38% 30%,#ffe0c2,#ff7a2e 62%,#d85a14); }
+.d-purple { background:radial-gradient(circle at 38% 30%,#e8d2ff,#9b59d0 62%,#6f3aa0); }
+.d-green { background:radial-gradient(circle at 38% 30%,#cdf3da,#27ae60 62%,#1a8048); }
+.secondary { display:flex; gap:8px; justify-content:center; margin-top:28px; flex-wrap:wrap; }
+.sec-btn { display:flex; align-items:center; gap:7px; padding:8px 16px; background:rgba(255,255,255,.7);
+  border:1px solid #e2e7ee; border-radius:20px; font-size:12px; color:#243240; cursor:pointer; font-weight:bold; }
+.sec-btn:hover { background:#fff; border-color:#ff8a3c; color:#c75a12; }
+#flowbar { display:none; align-items:center; gap:14px; padding:14px 30px 0; flex-shrink:0; }
+body.flow-mode #flowbar { display:flex; }
+.back { width:38px; height:38px; border-radius:10px; border:1px solid #e2e7ee; background:#fff;
+  display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:20px; color:#243240; flex-shrink:0; }
+.back:hover { border-color:#ff8a3c; color:#c75a12; }
+#flowbar h1 { font-size:21px; color:#243240; font-weight:bold; }
+#flowbar .sub { font-size:12px; color:#6c7884; }
+
+
+/* ════════ FLOW-INNENSEITEN: luftig & hell (CloneCD) ════════ */
+/* Weisse Karten statt dunkler Balken-Header */
+.sect { background:#fff; border:1px solid #e2e7ee; border-radius:14px;
+  margin-bottom:16px; box-shadow:0 2px 8px rgba(40,60,90,.05); overflow:hidden; }
+.sect-title { background:#fff !important; color:#c75a12 !important;
+  font-size:11px !important; font-weight:bold; letter-spacing:1.2px; text-transform:uppercase;
+  padding:14px 20px 4px !important; text-shadow:none !important; }
+.sect-body { padding:8px 20px 18px !important; background:#fff !important; }
+
+/* Gruppenboxen weicher */
+.groupbox { border:1px solid #e8edf3; border-radius:10px; padding:16px 14px 12px;
+  margin:12px 0; background:#fafbfd; }
+.groupbox-title { background:#fafbfd; color:#6c7884; font-weight:bold; }
+
+/* Linkes Panel heller, ohne dunklen Balken */
+.panel-title { background:#fff !important; color:#243240 !important;
+  border-bottom:1px solid #e8edf3 !important; text-shadow:none !important;
+  font-size:12px; padding:12px 14px !important; }
+#leftpanel { border-right:1px solid #e8edf3 !important; }
+.frow { padding:8px 12px; }
+.frow:hover { background:#fff4ea; }
+
+/* Disc-Karten groesser & cleaner */
+.disc-card { min-width:96px; min-height:96px; border-radius:12px; padding:16px;
+  background:#fff; border:2px solid #e2e7ee; }
+.disc-card:hover { border-color:#ff8a3c; transform:translateY(-2px); box-shadow:0 6px 14px rgba(0,0,0,.10); }
+.disc-card.sel { border-color:#ff8a3c; box-shadow:0 0 0 2px rgba(255,138,60,.25); }
+
+/* Brennschritte ruhiger */
+.bstep { background:#fafbfd; border:1px solid #eef1f5; border-radius:8px; padding:9px 14px; }
+.bstep.on { background:#fff7f0; border-color:#ffcfa0; color:#c75a12; }
+
+/* Eingaben & Buttons etwas grosszuegiger */
+select, input[type="text"], input[type="url"], input[type="number"] {
+  height:30px; border-radius:7px; font-size:12px; }
+.btn98 { padding:8px 18px; border-radius:8px; font-size:12px; }
+.btn98.default { padding:11px 26px; font-size:13px; border-radius:9px; }
+
+/* AI-Karten heller */
+.ai-sect { background:#fff; border:1px solid #f0d6bc; border-radius:12px; padding:16px 18px; }
+
+/* Mehr Luft zwischen den Karten im Flow */
+#rightpanel .tabpanel { max-width:840px; }
+
+
+/* ── Brenner- & Rohling-Karten (CloneCD-Kernerlebnis) ── */
+.dev-card { display:flex; align-items:center; gap:16px; }
+.dev-ico { width:52px; height:52px; border-radius:12px; flex-shrink:0;
+  background:linear-gradient(180deg,#f0f4f9,#dde4ee); display:flex; align-items:center; justify-content:center; }
+.dev-info h3 { font-size:15px; color:#243240; }
+.dev-info p { font-size:12px; color:#6c7884; margin-top:2px; }
+.dev-caps { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.dev-cap { font-size:10px; background:#eef4ff; color:#2f6fc0; padding:2px 9px; border-radius:10px; font-weight:bold; }
+.media-row { display:flex; align-items:center; gap:18px; }
+.media-disc { width:60px; height:60px; border-radius:50%; flex-shrink:0; position:relative;
+  background:radial-gradient(circle at 38% 30%,#e8eef5,#b8c4d2 55%,#8c9aab);
+  box-shadow:inset 0 -3px 6px rgba(0,0,0,.2),0 2px 4px rgba(0,0,0,.15); }
+.media-disc::after { content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:inset 0 0 0 1px #b8c4d2; }
+.media-disc.empty { background:radial-gradient(circle at 38% 30%,#f2f4f7,#dde2e9 55%,#c8cfd8); opacity:.5; }
+.media-stats { flex:1; }
+.mstat { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid #f0f3f7; font-size:12.5px; }
+.mstat:last-child { border:none; }
+.mstat .k { color:#6c7884; } .mstat .v { color:#243240; font-weight:bold; }
+.media-empty { color:#6c7884; font-size:13px; }
+.detect-note { font-size:11px; color:#9aa6b2; margin-top:8px; font-style:italic; }
+.refresh-btn { margin-left:auto; font-size:11px; padding:5px 12px; border-radius:8px;
+  border:1px solid #e2e7ee; background:#fff; color:#6c7884; cursor:pointer; }
+.refresh-btn:hover { border-color:#ff8a3c; color:#c75a12; }
+
+
+/* ════════ CloneCD-AUTHENTISCH: vier Knoepfe in einer Reihe ════════ */
+#homeview { padding:0 !important; }
+.cc-stage { flex:1; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:24px; width:100%; }
+.cc-row { display:flex; gap:24px; }
+.cbtn { width:152px; height:152px; cursor:pointer; border-radius:16px;
+  background:linear-gradient(180deg,#ffffff,#eef2f7); border:1px solid #d8dee6;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+  box-shadow:0 3px 10px rgba(40,60,90,.10), inset 0 1px 0 #fff;
+  transition:transform .13s, box-shadow .13s, border-color .13s; }
+.cbtn:hover { transform:translateY(-3px); border-color:#ff8a3c; box-shadow:0 12px 26px rgba(40,60,90,.18); }
+.cbtn:active { transform:translateY(-1px); }
+.cc-ico { width:92px; height:80px; position:relative; display:flex; align-items:center; justify-content:center; }
+.cc-disc { position:absolute; inset:0; border-radius:50%;
+  box-shadow:inset 0 2px 4px rgba(255,255,255,.9), inset 0 -5px 10px rgba(0,0,0,.28), 0 4px 8px rgba(0,0,0,.22); }
+.cc-shine { position:absolute; top:9px; left:50%; transform:translateX(-50%);
+  width:52px; height:25px; border-radius:50%;
+  background:linear-gradient(180deg,rgba(255,255,255,.85),rgba(255,255,255,0)); z-index:2; }
+.cc-sym { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:4; }
+.cc-hole { position:absolute; top:50%; left:50%; width:20px; height:20px;
+  transform:translate(-50%,-50%); border-radius:50%; background:#f4f7fb;
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.15); z-index:5; }
+.cc-label { font-size:13px; font-weight:bold; color:#2a323c; letter-spacing:.3px; }
+.cc-sub { color:#6c7884; font-size:12.5px; }
+.cbtn .d-blue { background:radial-gradient(circle at 38% 30%,#cfe6ff,#2f86e0 60%,#1d5fb0); }
+.cbtn .d-orange { background:radial-gradient(circle at 38% 30%,#ffe0c2,#ff7a2e 60%,#d85a14); }
+.cbtn .d-purple { background:radial-gradient(circle at 38% 30%,#e8d2ff,#9b59d0 60%,#6f3aa0); }
+.cbtn .d-green { background:radial-gradient(circle at 38% 30%,#cdf3da,#27ae60 60%,#1a8048); }
+
+
+/* ── Kompakter Startbildschirm (kleines CloneCD-Fenster) ── */
+.cc-stage { gap:16px; padding:14px 10px; }
+.cc-row { gap:14px; }
+.cbtn { width:122px; height:122px; border-radius:13px; gap:8px; }
+.cc-ico { width:74px; height:64px; }
+.cbtn .cc-label { font-size:12px; }
+.cc-sub { font-size:11.5px; }
+.cc-pills { gap:6px !important; flex-wrap:wrap; max-width:520px; }
+.cc-pill, .sec-btn { font-size:11px !important; padding:6px 12px !important; }
+
+</style>
+</head>
+
+</head>
+<body>
+
+<!-- WINDOW -->
+<div id="win">
+
+  <!-- TITLE BAR -->
+  <div id="titlebar">
+    <div class="win-title">
+      <svg width="28" height="24" viewBox="0 0 52 44" style="flex-shrink:0;margin-right:2px">
+        <ellipse cx="26" cy="26" rx="17" ry="14" fill="#fff" stroke="#d8dce3" stroke-width="1.5"/>
+        <circle cx="15" cy="20" r="7" fill="#fff"/><circle cx="26" cy="15" r="8" fill="#fff"/>
+        <circle cx="37" cy="20" r="7" fill="#fff"/><circle cx="16" cy="30" r="7" fill="#fff"/>
+        <circle cx="36" cy="30" r="7" fill="#fff"/>
+        <ellipse cx="36" cy="26" rx="10" ry="9" fill="#ff8a3c"/>
+        <ellipse cx="33" cy="22" rx="2" ry="2.4" fill="#1a212b"/>
+        <ellipse cx="41" cy="22" rx="2" ry="2.4" fill="#1a212b"/>
+        <circle cx="33.5" cy="21.3" r="0.6" fill="#fff"/><circle cx="41.5" cy="21.3" r="0.6" fill="#fff"/>
+        <path d="M30 28 Q36 32 42 28" stroke="#1a212b" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        <ellipse cx="28" cy="19" rx="3" ry="5" fill="#e8721c"/>
+        <ellipse cx="44" cy="19" rx="3" ry="5" fill="#e8721c"/>
+      </svg>
+      <span style="font-weight:bold;letter-spacing:0.6px;">RetroDisc <span style="color:#ff8a3c;">1.0</span></span>
+      <span style="font-size:10px;opacity:0.7;font-weight:normal;"> — All-in-One Media Suite</span>
+    </div>
+    <div class="win-btns">
+      <div class="win-btn" title="Minimieren">_</div>
+      <div class="win-btn" title="Maximieren">□</div>
+      <div class="win-btn" style="font-size:10px;" title="Schließen">✕</div>
+    </div>
+  </div>
+
+  <!-- MENU BAR -->
+  <div id="menubar">
+    <div class="menu-item" onclick="menuAction('file')">Datei</div>
+    <div class="menu-item" onclick="menuAction('extras')">Extras</div>
+    <div class="menu-item" onclick="menuAction('help')">Hilfe</div>
+  </div>
+
+  <!-- TOOLBAR -->
+
+  <div id="homeview">
+    <div class="cc-stage">
+      <div class="cc-row">
+        <div class="cbtn" onclick="openFlow('convert')">
+          <div class="cc-ico">
+            <svg width="92" height="80" viewBox="0 0 92 80">
+              <g transform="translate(22,42)">
+                <ellipse cx="0" cy="0" rx="25" ry="23" fill="url(#g1a)" stroke="#9a5e0e" stroke-width="1.5"/>
+                <ellipse cx="0" cy="0" rx="8.5" ry="7.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
+                <ellipse cx="0" cy="0" rx="3" ry="2.6" fill="#d98a1c"/>
+              </g>
+              <g transform="translate(58,42)">
+                <ellipse cx="0" cy="0" rx="25" ry="23" fill="url(#g1b)" stroke="#9a5e0e" stroke-width="1.5"/>
+                <ellipse cx="0" cy="0" rx="8.5" ry="7.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
+                <ellipse cx="0" cy="0" rx="3" ry="2.6" fill="#f0a830"/>
+              </g>
+              <defs>
+                <radialGradient id="g1a" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffe6a8"/><stop offset="55%" stop-color="#e09a22"/><stop offset="100%" stop-color="#b56f10"/></radialGradient>
+                <radialGradient id="g1b" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient>
+              </defs>
+            </svg>
+          </div>
+          <div class="cc-label">Konvertieren</div>
+        </div>
+        <div class="cbtn" onclick="openFlow('burn')">
+          <div class="cc-ico">
+            <svg width="92" height="80" viewBox="0 0 92 80">
+              <g transform="translate(40,44)">
+                <ellipse cx="0" cy="0" rx="29" ry="26" fill="url(#g2)" stroke="#9a5e0e" stroke-width="1.5"/>
+                <ellipse cx="0" cy="0" rx="9.5" ry="8.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
+                <ellipse cx="0" cy="0" rx="3.5" ry="3" fill="#f0a830"/>
+              </g>
+              <g transform="rotate(38 60 30)">
+                <rect x="52" y="2" width="10" height="44" rx="2" fill="#e8c84a" stroke="#9a7a10" stroke-width="1.2"/>
+                <rect x="52" y="2" width="10" height="7" fill="#c0392b" stroke="#9a7a10" stroke-width="1.2"/>
+                <path d="M52 46 L57 55 L62 46 Z" fill="#3a2a14" stroke="#9a7a10" stroke-width="1"/>
+                <path d="M54.5 50 L57 53.5 L59.5 50 Z" fill="#1a1208"/>
+              </g>
+              <defs><radialGradient id="g2" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
+            </svg>
+          </div>
+          <div class="cc-label">Brennen</div>
+        </div>
+        <div class="cbtn" onclick="openFlow('rip')">
+          <div class="cc-ico">
+            <svg width="92" height="80" viewBox="0 0 92 80">
+              <g transform="translate(46,50)">
+                <ellipse cx="0" cy="0" rx="29" ry="25" fill="url(#g3)" stroke="#9a5e0e" stroke-width="1.5"/>
+                <ellipse cx="0" cy="0" rx="9.5" ry="8.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
+                <ellipse cx="0" cy="0" rx="3.5" ry="3" fill="#f0a830"/>
+              </g>
+              <path d="M46 30 L46 7 M37 16 L46 6 L55 16" stroke="#2a7a3a" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              <defs><radialGradient id="g3" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
+            </svg>
+          </div>
+          <div class="cc-label">Rippen</div>
+        </div>
+        <div class="cbtn" onclick="openFlow('download')">
+          <div class="cc-ico">
+            <svg width="92" height="80" viewBox="0 0 92 80">
+              <g transform="translate(46,52)">
+                <ellipse cx="0" cy="0" rx="29" ry="24" fill="url(#g4)" stroke="#9a5e0e" stroke-width="1.5"/>
+                <ellipse cx="0" cy="0" rx="9.5" ry="8.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
+                <ellipse cx="0" cy="0" rx="3.5" ry="3" fill="#f0a830"/>
+              </g>
+              <path d="M46 5 L46 29 M37 20 L46 30 L55 20" stroke="#2f6fc0" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              <defs><radialGradient id="g4" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
+            </svg>
+          </div>
+          <div class="cc-label">Download</div>
+        </div>
+      </div>
+      <div class="cc-sub">Klicke auf eine der vier Aktionen.</div>
+      <div class="secondary">
+        <div class="sec-btn" onclick="openFlow('search')">Suche</div>
+        <div class="sec-btn" onclick="openFlow('edit')">Bearbeiten</div>
+        <div class="sec-btn" onclick="openFlow('ai')">AI Tools</div>
+        <div class="sec-btn" onclick="openFlow('library')">Bibliothek</div>
+        <div class="sec-btn" onclick="openFlow('queue')">Job Queue</div>
+        <div class="sec-btn" onclick="openFlow('settings')">Einstellungen</div>
+      </div>
+    </div>
+  </div>
+  <div id="flowbar">
+    <div class="back" onclick="goHome()">&lsaquo;</div>
+    <div><h1 id="flowTitle">Flow</h1><div class="sub" id="flowSub"></div></div>
+  </div>
+
+  <div id="toolbar">
+    <!-- Konvertieren: blaue Pfeile -->
+    <button class="tbtn active" onclick="showTab('convert',this)" id="tbtn-convert">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <circle cx="18" cy="18" r="15" fill="#3388dd" stroke="#1155aa" stroke-width="1.5"/>
+        <circle cx="18" cy="18" r="10" fill="none" stroke="white" stroke-width="2.5" stroke-dasharray="20 12"/>
+        <polygon points="26,18 21,13 21,23" fill="white"/>
+        <polygon points="10,18 15,23 15,13" fill="white"/>
+      </svg>
+      <span class="tbtn-label">Konvertieren</span>
+    </button>
+
+    <!-- Disc brennen: rote Flamme auf DVD -->
+    <button class="tbtn" onclick="showTab('burn',this)" id="tbtn-burn">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <ellipse cx="18" cy="24" rx="13" ry="8" fill="#666" stroke="#333" stroke-width="1"/>
+        <ellipse cx="18" cy="24" rx="13" ry="8" fill="url(#dg)" opacity="0.7"/>
+        <ellipse cx="18" cy="24" rx="4" ry="2.5" fill="#999"/>
+        <!-- Flamme -->
+        <path d="M18 6 C14 10 12 14 15 17 C13 15 16 12 18 15 C20 12 23 15 21 17 C24 14 22 10 18 6Z" fill="#ff6600"/>
+        <path d="M18 9 C16 12 15 15 17 17 C16 15 17.5 13 18 15 C18.5 13 20 15 19 17 C21 15 20 12 18 9Z" fill="#ffcc00"/>
+        <defs>
+          <radialGradient id="dg" cx="40%" cy="40%">
+            <stop offset="0%" stop-color="#fff" stop-opacity="0.4"/>
+            <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+      </svg>
+      <span class="tbtn-label">Disc brennen</span>
+    </button>
+
+    <!-- Disc rippen: DVD mit Pfeil raus -->
+    <button class="tbtn" onclick="showTab('rip',this)" id="tbtn-rip">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <ellipse cx="18" cy="24" rx="13" ry="8" fill="#884488" stroke="#552255" stroke-width="1.5"/>
+        <ellipse cx="18" cy="24" rx="13" ry="8" fill="url(#dg2)" opacity="0.6"/>
+        <ellipse cx="18" cy="24" rx="4" ry="2.5" fill="#aa66aa"/>
+        <!-- Pfeil nach oben -->
+        <line x1="18" y1="20" x2="18" y2="8" stroke="#ff8800" stroke-width="3" stroke-linecap="round"/>
+        <polygon points="18,5 13,12 23,12" fill="#ff8800"/>
+        <defs>
+          <radialGradient id="dg2" cx="40%" cy="40%">
+            <stop offset="0%" stop-color="#fff" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+      </svg>
+      <span class="tbtn-label">Disc rippen</span>
+    </button>
+
+    <div class="tsep"></div>
+
+    <!-- Download: grüner Pfeil nach unten -->
+    <button class="tbtn" onclick="showTab('download',this)" id="tbtn-download">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <circle cx="18" cy="18" r="15" fill="#228822" stroke="#115511" stroke-width="1.5"/>
+        <line x1="18" y1="8" x2="18" y2="22" stroke="white" stroke-width="3" stroke-linecap="round"/>
+        <polygon points="18,28 10,20 26,20" fill="white"/>
+        <line x1="10" y1="30" x2="26" y2="30" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <span class="tbtn-label">Download</span>
+    </button>
+
+    <!-- Suche: Lupe orange -->
+    <button class="tbtn" onclick="showTab('search',this)" id="tbtn-search">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <circle cx="15" cy="15" r="11" fill="#ffaa00" stroke="#cc7700" stroke-width="1.5"/>
+        <circle cx="15" cy="15" r="7" fill="white" opacity="0.9"/>
+        <circle cx="15" cy="15" r="4" fill="#ffaa00" opacity="0.4"/>
+        <line x1="22" y1="22" x2="31" y2="31" stroke="#884400" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="15" cy="15" r="2" fill="#cc6600"/>
+      </svg>
+      <span class="tbtn-label">Suche</span>
+    </button>
+
+    <div class="tsep"></div>
+
+    <!-- Bearbeiten: Schere lila -->
+    <button class="tbtn" onclick="showTab('edit',this)" id="tbtn-edit">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <circle cx="10" cy="12" r="5" fill="#8844cc" stroke="#5522aa" stroke-width="1.2"/>
+        <circle cx="10" cy="24" r="5" fill="#8844cc" stroke="#5522aa" stroke-width="1.2"/>
+        <circle cx="10" cy="12" r="2.5" fill="white"/>
+        <circle cx="10" cy="24" r="2.5" fill="white"/>
+        <line x1="14" y1="14" x2="32" y2="8" stroke="#8844cc" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="14" y1="22" x2="32" y2="28" stroke="#8844cc" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="20" y1="17" x2="20" y2="19" stroke="#cc2200" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span class="tbtn-label">Bearbeiten</span>
+    </button>
+
+    <!-- AI Tools: Gehirn türkis -->
+    <button class="tbtn" onclick="showTab('ai',this)" id="tbtn-ai">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <circle cx="18" cy="18" r="14" fill="#008888" stroke="#005555" stroke-width="1.5"/>
+        <!-- Gehirn-Form -->
+        <path d="M18 8 C12 8 9 12 9 16 C9 19 11 21 13 22 C13 25 15 27 18 27 C21 27 23 25 23 22 C25 21 27 19 27 16 C27 12 24 8 18 8Z" fill="white" opacity="0.85"/>
+        <path d="M18 8 C18 12 18 20 18 27 M13 22 C16 20 20 20 23 22 M11 16 C14 15 22 15 25 16" stroke="#008888" stroke-width="1" fill="none"/>
+        <!-- Funkeln -->
+        <circle cx="13" cy="11" r="1.5" fill="#00ffff" opacity="0.8"/>
+        <circle cx="23" cy="11" r="1" fill="#00ffff" opacity="0.6"/>
+      </svg>
+      <span class="tbtn-label">AI Tools</span>
+    </button>
+
+    <!-- Bibliothek: Bücher grün -->
+    <button class="tbtn" onclick="showTab('library',this)" id="tbtn-library">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <rect x="5" y="10" width="6" height="18" rx="1" fill="#cc4444" stroke="#882222" stroke-width="1"/>
+        <rect x="12" y="8" width="6" height="20" rx="1" fill="#4488cc" stroke="#224488" stroke-width="1"/>
+        <rect x="19" y="11" width="6" height="17" rx="1" fill="#44aa44" stroke="#226622" stroke-width="1"/>
+        <rect x="26" y="9" width="5" height="19" rx="1" fill="#cc8800" stroke="#885500" stroke-width="1"/>
+        <line x1="4" y1="29" x2="32" y2="29" stroke="#666" stroke-width="1.5"/>
+      </svg>
+      <span class="tbtn-label">Bibliothek</span>
+    </button>
+
+    <!-- Job Queue: Liste blau -->
+    <button class="tbtn" onclick="showTab('queue',this)" id="tbtn-queue">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <rect x="5" y="6" width="26" height="24" rx="2" fill="#ddeeff" stroke="#4488cc" stroke-width="1.5"/>
+        <rect x="9" y="11" width="18" height="3" rx="1" fill="#4488cc"/>
+        <rect x="9" y="17" width="14" height="3" rx="1" fill="#88aadd"/>
+        <rect x="9" y="23" width="10" height="3" rx="1" fill="#88aadd" opacity="0.6"/>
+        <!-- Laufend-Indikator -->
+        <circle cx="29" cy="9" r="5" fill="#ff4400"/>
+        <text x="29" y="12.5" text-anchor="middle" font-size="6" fill="white" font-weight="bold" id="qcount">0</text>
+      </svg>
+      <span class="tbtn-label">Job Queue</span>
+    </button>
+
+    <div class="tsep"></div>
+
+    <!-- Einstellungen: Zahnrad grau -->
+    <button class="tbtn" onclick="showTab('settings',this)" id="tbtn-settings">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <circle cx="18" cy="18" r="6" fill="#778899" stroke="#445566" stroke-width="1.5"/>
+        <circle cx="18" cy="18" r="3" fill="#aabbcc"/>
+        <!-- Zahnrad-Zähne -->
+        <g fill="#778899" stroke="#445566" stroke-width="0.8">
+          <rect x="16" y="5" width="4" height="5" rx="1"/>
+          <rect x="16" y="26" width="4" height="5" rx="1"/>
+          <rect x="5" y="16" width="5" height="4" rx="1"/>
+          <rect x="26" y="16" width="5" height="4" rx="1"/>
+          <rect x="8" y="8" width="4" height="4" rx="1" transform="rotate(45 10 10)"/>
+          <rect x="24" y="8" width="4" height="4" rx="1" transform="rotate(45 26 10)"/>
+          <rect x="8" y="24" width="4" height="4" rx="1" transform="rotate(45 10 26)"/>
+          <rect x="24" y="24" width="4" height="4" rx="1" transform="rotate(45 26 26)"/>
+        </g>
+      </svg>
+      <span class="tbtn-label">Einstellungen</span>
+    </button>
+  </div>
+
+  <!-- TOOL STATUS STRIP -->
+  <div id="strip">
+    <span style="font-weight:bold;font-size:10px;">Tools:</span>
+    <span class="strip-badge ok">✓ FFmpeg 6.1</span>
+    <span class="strip-badge ok">✓ yt-dlp 2024</span>
+    <span class="strip-badge warn">? dvdauthor</span>
+    <span class="strip-badge warn">? Ollama</span>
+    <span class="strip-badge ok">✓ Whisper</span>
+    <span style="margin-left:auto;font-size:10px;color:#666;">RetroDisc v1.0.0</span>
+  </div>
+
+  <!-- MAIN -->
+  <div id="maincontent">
+
+    <!-- LEFT: FILE LIST -->
+    <div id="leftpanel">
+      <div class="panel-title">📁 Quelldateien</div>
+      <!-- Drop-Zone -->
+      <div id="filebox"
+        ondragover="event.preventDefault();this.style.background='#cce8ff'"
+        ondragleave="this.style.background=''"
+        ondrop="handleFileDrop(event);this.style.background=''"
+        style="min-height:80px;cursor:pointer;"
+        title="Dateien hier ablegen oder Hinzufügen klicken">
+        <!-- filled by JS -->
+      </div>
+      <!-- Datei-Info Panel -->
+      <div id="fileInfoPanel" style="display:none;margin:4px 4px;background:#eef4ff;border:1px solid #88aacc;padding:5px 7px;font-size:10px;">
+        <div style="font-weight:bold;color:#003366;margin-bottom:3px;" id="fiInfoName"></div>
+        <div id="fiInfoDetails" style="color:#446688;line-height:1.5;"></div>
+        <div style="margin-top:4px;display:flex;gap:4px;">
+          <button class="btn98" style="font-size:9px;padding:1px 6px;" onclick="useFileForConvert()">→ Konvertieren</button>
+          <button class="btn98" style="font-size:9px;padding:1px 6px;" onclick="useFileForBurn()">→ Brennen</button>
+        </div>
+      </div>
+      <button class="addfiles-btn" onclick="openFileDialog()">📂 Dateien hinzufügen...</button>
+      <button class="addfiles-btn" onclick="openFolderBatch()" style="background:linear-gradient(180deg,#eeffee,#cceecc);">📁 Ordner (Batch)...</button>
+      <button class="addfiles-btn" style="margin-top:0;" onclick="clearFiles()">✕ Liste leeren</button>
+    </div>
+
+    <!-- RIGHT: CONTENT PANELS -->
+    <div id="rightpanel">
+
+      <!-- ══ KONVERTIEREN ══ -->
+      <div class="tabpanel active" id="tab-convert">
+
+        <div class="sect">
+          <div class="sect-title">🔄 Format auswählen</div>
+          <div class="sect-body">
+
+            <div class="disc-icons-row" id="discIconRow">
+              <div class="disc-card sel" onclick="selDType(this,'video')" data-type="video">
+                <svg width="40" height="40" viewBox="0 0 40 40" style="display:block"><rect x="3" y="9" width="30" height="20" rx="2" fill="#2266cc" stroke="#1144aa" stroke-width="1.5"/><rect x="5" y="11" width="26" height="16" rx="1" fill="#1133aa"/><polygon points="14,14 14,25 27,19.5" fill="#ffcc00"/><rect x="33" y="12" width="4" height="14" rx="1" fill="#2266cc" stroke="#1144aa" stroke-width="1"/></svg>
+                <span class="disc-card-label">Video</span>
+              </div>
+              <div class="disc-card" onclick="selDType(this,'audio')" data-type="audio">
+                <svg width="40" height="40" viewBox="0 0 40 40" style="display:block"><circle cx="20" cy="20" r="16" fill="#cc4488" stroke="#991166" stroke-width="1.5"/><circle cx="20" cy="20" r="6" fill="#992266"/><circle cx="20" cy="20" r="2.5" fill="#ff88bb"/><text x="13" y="25" font-size="15" fill="white" opacity="0.9">♪</text></svg>
+                <span class="disc-card-label">Audio</span>
+              </div>
+              <div class="disc-card" onclick="selDType(this,'device')" data-type="device">
+                <svg width="40" height="40" viewBox="0 0 40 40" style="display:block"><rect x="12" y="4" width="16" height="28" rx="3" fill="#228844" stroke="#115522" stroke-width="1.5"/><rect x="14" y="7" width="12" height="17" rx="1" fill="#44cc66"/><circle cx="20" cy="29" r="2.2" fill="#aaffaa"/><rect x="16" y="9" width="8" height="11" rx="1" fill="#99eebb"/></svg>
+                <span class="disc-card-label">Gerät</span>
+              </div>
+              <div class="disc-card" onclick="selDType(this,'disc')" data-type="disc">
+                <svg width="40" height="40" viewBox="0 0 40 40" style="display:block"><ellipse cx="20" cy="22" rx="16" ry="14" fill="#775599" stroke="#553377" stroke-width="1.5"/><ellipse cx="20" cy="22" rx="16" ry="14" fill="white" opacity="0.1"/><ellipse cx="20" cy="22" rx="5" ry="4.5" fill="#997799"/><ellipse cx="20" cy="22" rx="2" ry="1.8" fill="#ccaacc"/></svg>
+                <span class="disc-card-label">Disc-Format</span>
+              </div>
+            </div>
+
+            <div class="row" style="margin-top:8px;">
+              <label style="font-weight:bold;width:120px;">Zielformat:</label>
+              <select id="presetSel" style="width:260px;" onchange="onPresetChange()">
+                <option value="mp4_h264_1080p">MP4 (H.264, 1080p) — Universal</option>
+                <option value="mp4_h265_4k">MP4 (H.265, 4K) — Maximale Qualität</option>
+                <option value="mkv_h265_copy_audio">MKV (H.265) — Verlustarm</option>
+                <option value="avi_xvid">AVI (XviD) — Klassisch/Retro</option>
+                <option value="mp3_320k">MP3 (320 kbps) — Höchste Qualität</option>
+                <option value="flac_lossless">FLAC (Lossless) — Verlustfrei</option>
+                <option value="wav_pcm">WAV (PCM) — CD-Audio</option>
+                <option value="iphone">iPhone / iPad — Apple-optimiert</option>
+                <option value="android">Android — Universal</option>
+                <option value="dvd_pal">DVD (PAL) — Europa Standard</option>
+                <option value="dvd_ntsc">DVD (NTSC) — USA/Japan</option>
+                <option value="audio_cd">Audio-CD (CDDA)</option>
+              </select>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="sect">
+          <div class="sect-title">⚙️ Optionen</div>
+          <div class="sect-body">
+
+            <div class="row">
+              <label style="width:160px;">Ausgabe-Ordner:</label>
+              <input type="text" style="width:240px;" placeholder="C:\Videos\RetroDisc" id="outdir">
+              <button class="btn98" style="margin-left:4px;" onclick="openOutputFolderDialog()">Durchsuchen...</button>
+            </div>
+
+            <div class="row">
+              <input type="checkbox" id="chkOverwrite">
+              <label for="chkOverwrite">Vorhandene Dateien überschreiben</label>
+            </div>
+            <div class="row">
+              <input type="checkbox" id="chkSound" checked>
+              <label for="chkSound">Fertig-Sound abspielen 🔊</label>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;padding:4px 0;flex-wrap:wrap;">
+          <button class="btn98 default" onclick="goConvert()">▶ Konvertierung starten</button>
+          <button class="btn98" onclick="goBatchConvert()">📁 Ordner konvertieren</button>
+          <button class="btn98" onclick="goConvert()">+ Zur Queue</button>
+          <button class="btn98" onclick="clearFiles()">✕ Abbrechen</button>
+        </div>
+      </div>
+
+      <!-- ══ BRENNEN ══ -->
+      <div class="tabpanel" id="tab-burn">
+
+        <div class="sect">
+          <div class="sect-title" style="display:flex;align-items:center;">Brenner
+            <button class="refresh-btn" onclick="loadBurners()">Neu suchen</button>
+          </div>
+          <div class="sect-body">
+            <div id="burnerArea"><div class="media-empty">Suche nach Laufwerk...</div></div>
+          </div>
+        </div>
+
+        <div class="sect">
+          <div class="sect-title">Eingelegter Rohling</div>
+          <div class="sect-body">
+            <div id="mediaArea"><div class="media-empty">Lege einen Rohling ein.</div></div>
+          </div>
+        </div>
+
+        <div class="sect">
+          <div class="sect-title">🔥 Disc brennen</div>
+          <div class="sect-body">
+
+            <div class="disc-icons-row">
+              <div class="disc-card sel" onclick="selDisc(this)">
+                <svg width="38" height="38" viewBox="0 0 40 40" style="display:block"><ellipse cx="20" cy="22" rx="15" ry="13" fill="#cc6600" stroke="#884400" stroke-width="1.5"/><ellipse cx="20" cy="22" rx="15" ry="13" fill="white" opacity="0.15"/><ellipse cx="20" cy="22" rx="4.5" ry="4" fill="#bb5500"/><ellipse cx="20" cy="22" rx="1.8" ry="1.6" fill="#ffaa66"/></svg>
+                <span class="disc-card-label">DVD-R / DVD+R</span>
+              </div>
+              <div class="disc-card" onclick="selDisc(this)">
+                <svg width="38" height="38" viewBox="0 0 40 40" style="display:block"><ellipse cx="20" cy="22" rx="15" ry="13" fill="#cc8800" stroke="#886600" stroke-width="1.5"/><ellipse cx="20" cy="22" rx="15" ry="13" fill="white" opacity="0.15"/><ellipse cx="20" cy="22" rx="4.5" ry="4" fill="#bb7700"/><ellipse cx="20" cy="22" rx="1.8" ry="1.6" fill="#ffcc88"/><circle cx="20" cy="10" r="2" fill="#ffcc00"/></svg>
+                <span class="disc-card-label">DVD-RW</span>
+              </div>
+              <div class="disc-card" onclick="selDisc(this)">
+                <svg width="38" height="38" viewBox="0 0 40 40" style="display:block"><rect x="6" y="8" width="28" height="22" rx="2" fill="#668844" stroke="#446622" stroke-width="1.5"/><rect x="9" y="11" width="22" height="16" rx="1" fill="#88aa66"/><rect x="5" y="30" width="30" height="4" rx="1" fill="#446622"/><text x="12" y="23" font-size="12" fill="white" opacity="0.9">ISO</text></svg>
+                <span class="disc-card-label">Nur ISO</span>
+              </div>
+            </div>
+
+            <div class="groupbox" style="margin-top:12px;">
+              <div class="groupbox-title">Brenner-Einstellungen</div>
+              <div class="row">
+                <label style="width:140px;">Brenner:</label>
+                <select style="width:260px;" id="burnerSelect">
+                  <option>Bitte "Neu suchen" klicken</option>
+                </select>
+              </div>
+              <div class="row">
+                <label style="width:140px;">Schreibgeschwindigkeit:</label>
+                <select style="width:120px;" id="burnSpeed"><option value="">Auto</option><option value="2">2x</option><option value="4">4x</option><option value="8">8x</option><option value="16">16x</option></select>
+              </div>
+              <div class="row">
+                <label style="width:140px;">DVD-Standard:</label>
+                <select style="width:140px;" id="dvdStandard"><option value="PAL">PAL (Europa)</option><option value="NTSC">NTSC (USA/Japan)</option></select>
+              </div>
+            </div>
+
+            <div class="groupbox">
+              <div class="groupbox-title">DVD-Optionen</div>
+              <div class="row">
+                <label style="width:140px;">Disc-Titel:</label>
+                <input type="text" style="width:260px;" placeholder="Mein Film" id="dvdtitle">
+              </div>
+              <div class="row">
+                <label style="width:140px;">Seitenverhältnis:</label>
+                <div class="row" style="gap:16px;margin:0;">
+                  <label><input type="radio" name="aspect" value="16:9" checked> 16:9 Widescreen</label>
+                  <label><input type="radio" name="aspect" value="4:3"> 4:3 Vollbild</label>
+                </div>
+              </div>
+              <div class="row">
+                <input type="checkbox" id="chkVerify" checked>
+                <label for="chkVerify">Disc nach dem Brennen verifizieren</label>
+              </div>
+              <div class="row">
+                <input type="checkbox" id="chkEject" checked>
+                <label for="chkEject">Disc nach Abschluss auswerfen</label>
+              </div>
+            </div>
+
+            <div class="burn-steps" id="burnsteps">
+              <div class="bstep on" id="bs1"><span class="bstep-ico">📂</span> 1. Quelldateien prüfen</div>
+              <div class="bstep" id="bs2"><span class="bstep-ico">🔄</span> 2. Video in DVD-Format konvertieren</div>
+              <div class="bstep" id="bs3"><span class="bstep-ico">📀</span> 3. DVD-Struktur erstellen (dvdauthor)</div>
+              <div class="bstep" id="bs4"><span class="bstep-ico">🖼️</span> 4. ISO-Image erzeugen</div>
+              <div class="bstep" id="bs5"><span class="bstep-ico">🔥</span> 5. Auf Disc schreiben</div>
+              <div class="bstep" id="bs6"><span class="bstep-ico">✅</span> 6. Fertig!</div>
+            </div>
+
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn98 default" onclick="goBurn()">🔥 Brennen starten</button>
+          <button class="btn98" onclick="createISO()">💿 Nur ISO erstellen</button>
+          <button class="btn98" onclick="goHome()">Abbrechen</button>
+        </div>
+      </div>
+
+      <!-- ══ RIP ══ -->
+      <div class="tabpanel" id="tab-rip">
+        <div class="sect">
+          <div class="sect-title">📥 Disc rippen</div>
+          <div class="sect-body">
+            <div class="groupbox" style="margin-top:12px;">
+              <div class="groupbox-title">Laufwerk</div>
+              <div class="row">
+                <label style="width:120px;">Disc-Laufwerk:</label>
+                <select style="width:280px;" id="ripDriveSelect">
+                  <option>Bitte Laufwerk erkennen</option>
+                </select>
+              </div>
+              <div class="row">
+                <label style="width:120px;">Ausgabe-Format:</label>
+                <select style="width:200px;" id="ripFormat">
+                  <option value="mp4_h264">MP4 (H.264) — Universal</option>
+                  <option value="mkv_h265">MKV (H.265) — Verlustarm</option>
+                  <option value="mkv_copy">MKV (Original-Stream kopieren)</option>
+                  <option value="iso">ISO-Image (1:1 Kopie)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn98 default" onclick="goRip()">📥 Rippen starten</button>
+          <button class="btn98" onclick="showDiscInfo()">Disc-Info anzeigen</button>
+          <button class="btn98" onclick="goHome()">Abbrechen</button>
+        </div>
+      </div>
+
+      <!-- ══ DOWNLOAD ══ -->
+      <div class="tabpanel" id="tab-download">
+        <div class="sect">
+          <div class="sect-title">⬇️ Online Download (YouTube · Mediatheken)</div>
+          <div class="sect-body">
+            <div class="row">
+              <label style="width:60px;font-weight:bold;">URL:</label>
+              <input type="text" id="urlinp" style="flex:1;user-select:text;pointer-events:auto;" autocomplete="off" spellcheck="false"
+                     onkeydown="if(event.key==='Enter'){event.preventDefault();goDL();}"
+                     placeholder="YouTube-URL, ARD/ZDF/Arte-Link, Playlist...">
+              <button class="btn98" style="margin-left:4px;" onclick="goDL()">⬇ Laden</button>
+            </div>
+
+            <div class="groupbox">
+              <div class="groupbox-title">Download-Optionen</div>
+              <div class="row">
+                <label style="width:160px;">Qualität:</label>
+                <select style="width:220px;" id="downloadQuality">
+                  <option value="best">Beste verfügbar</option>
+                  <option value="4k">4K (2160p)</option>
+                  <option value="1080p">1080p (Full HD)</option>
+                  <option value="720p">720p (HD)</option>
+                  <option value="480p">480p (SD)</option>
+                  <option value="mp3">Nur Audio (MP3 320k)</option>
+                  <option value="flac">Nur Audio (FLAC)</option>
+                </select>
+              </div>
+
+              <div class="row">
+                <label style="width:160px;">Untertitel:</label>
+                <select style="width:190px;" id="downloadSubtitles"><option value="none">Keine</option><option value="all">Verfügbare Untertitel</option></select>
+              </div>
+              <div class="row">
+                <span style="color:#555;">Metadaten und Thumbnail werden automatisch eingebettet.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn98 default" onclick="goDL()">⬇ Download starten</button>
+          <button class="btn98" onclick="goHome()">Abbrechen</button>
+        </div>
+      </div>
+
+      <!-- ══ SUCHE ══ -->
+      <div class="tabpanel" id="tab-search">
+        <div class="sect">
+          <div class="sect-title">🔍 Mediensuche — YouTube & alle ÖR-Mediatheken</div>
+          <div class="sect-body">
+            <div class="row">
+              <label style="width:80px;font-weight:bold;">Suche:</label>
+              <input type="text" id="sinp" style="flex:1;" placeholder="Tatort, Konzert, Dokumentation, Musik...">
+              <button class="btn98" style="margin-left:4px;" onclick="doSearch()">Suchen</button>
+            </div>
+          </div>
+        </div>
+        <div class="sect">
+          <div class="sect-title">📋 Ergebnisse</div>
+          <div id="sresults" style="background:white;border:2px solid;border-color:#808080 #fff #fff #808080;min-height:200px;padding:4px;">
+            <div style="padding:20px;color:#666;font-size:11px;">Suchbegriff eingeben und alle Quellen gleichzeitig durchsuchen.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn98" onclick="doSearch()">🔍 Suchen</button>
+          <button class="btn98" id="dlSelBtn" disabled onclick="downloadSelectedResults()">⬇ Ausgewähltes laden</button>
+          <button class="btn98" id="burnSelBtn" disabled onclick="burnSelectedResults()">🔥 Ausgewähltes auf DVD</button>
+        </div>
+      </div>
+
+      <!-- ══ AI ══ -->
+      <div class="tabpanel" id="tab-ai">
+        <div class="sect">
+          <div class="sect-title">🤖 KI-Assistent (Ollama)</div>
+          <div class="sect-body">
+            <div class="row">
+              <label style="width:80px;font-weight:bold;">Befehl:</label>
+              <input type="text" id="aiinp" style="flex:1;" placeholder='"Lade Tatort und brenne auf DVD" · "5 Min Konzert-Highlights" · "Beste Einstellung für iPhone?"'>
+              <button class="btn98" style="margin-left:4px;" onclick="doAI()">Ausführen</button>
+            </div>
+            <div style="margin-top:8px;background:white;border:2px solid;border-color:#808080 #fff #fff #808080;min-height:50px;padding:6px;font-size:11px;" id="airesp">
+              Tippe einen Befehl in natürlicher Sprache — die KI erstellt den Aktionsplan automatisch.
+            </div>
+          </div>
+        </div>
+
+        <div class="ai-sect">
+          <div class="ai-sect-title">🎬 KI Auto-Edit / Smart Highlights</div>
+          <div style="font-size:11px;color:#333;margin-bottom:6px;">Analysiert Konzert-Videos automatisch (Szenenerkennung · Audio-Peaks · Gesichter) und schneidet die besten Momente zusammen.</div>
+          <div class="row">
+            <label style="width:120px;">Zieldauer:</label>
+            <select style="width:160px;" id="smartDuration"><option value="300">5 Minuten</option><option value="180">3 Minuten</option><option value="600">10 Minuten</option></select>
+            <button class="btn98" style="margin-left:8px;" onclick="startSmartEdit()">▶ Starten</button>
+          </div>
+        </div>
+
+        <div class="ai-sect">
+          <div class="ai-sect-title">🔭 Video Upscaling (Real-ESRGAN)</div>
+          <div style="font-size:11px;color:#333;margin-bottom:6px;">SD-Videos auf HD oder 4K hochskalieren. GPU-beschleunigt (NVIDIA/AMD/Intel Vulkan).</div>
+          <div class="row">
+            <label style="width:120px;">Skalierungsfaktor:</label>
+            <select style="width:180px;" id="upscaleScale"><option value="4">4x (SD → 4K)</option><option value="2">2x (HD → Full HD)</option></select>
+            <button class="btn98" style="margin-left:8px;" onclick="startUpscale()">▶ Starten</button>
+          </div>
+        </div>
+
+        <div class="ai-sect">
+          <div class="ai-sect-title">💬 Untertitel-Generator (Faster Whisper)</div>
+          <div style="font-size:11px;color:#333;margin-bottom:6px;">Automatische Spracherkennung und SRT-Generierung. Das Base-Modell ist vollständig offline enthalten.</div>
+          <div class="row">
+            <label style="width:120px;">Whisper-Modell:</label>
+            <select style="width:160px;" id="subtitleModel"><option value="base">base (offline)</option><option value="small">small (Download)</option><option value="medium">medium (Download)</option><option value="large-v3">large-v3 (Download)</option></select>
+            <label style="margin-left:8px;">Sprache:</label>
+            <select style="width:110px;" id="subtitleLanguage"><option value="">Automatisch</option><option value="de">Deutsch</option><option value="en">Englisch</option></select>
+            <button class="btn98" style="margin-left:8px;" onclick="startSubtitle()">▶ Starten</button>
+          </div>
+        </div>
+
+        <div class="ai-sect">
+          <div class="ai-sect-title">🎞️ Frame Interpolation (RIFE)</div>
+          <div style="font-size:11px;color:#333;margin-bottom:6px;">Framerate auf 60fps erhöhen für flüssige Wiedergabe. Ideal für alte Heimvideos und Konzertaufnahmen.</div>
+          <div class="row">
+            <label style="width:120px;">Ziel-Framerate:</label>
+            <select style="width:160px;" id="interpolateFps"><option value="60">60 fps</option><option value="48">48 fps</option><option value="30">30 fps</option></select>
+            <button class="btn98" style="margin-left:8px;" onclick="startInterpolate()">▶ Starten</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ QUEUE ══ -->
+      <div class="tabpanel" id="tab-queue">
+        <div class="sect">
+          <div class="sect-title">📋 Aktueller Job</div>
+          <div class="sect-body" id="curjob" style="display:none;">
+            <div class="row">
+              <label style="font-weight:bold;" id="cjname"></label>
+              <span id="cjpct" style="margin-left:auto;font-size:10px;color:#444;"></span>
+            </div>
+            <div class="progbar-outer">
+              <div class="progbar-inner" id="cjbar" style="width:0%"></div>
+            </div>
+            <div id="cjstatus" style="font-size:10px;color:#666;margin-top:2px;"></div>
+          </div>
+          <div id="nojob" class="sect-body" style="font-size:11px;color:#666;">Kein aktiver Job.</div>
+        </div>
+
+        <div class="sect">
+          <div class="sect-title">📋 Job-Liste</div>
+          <div id="jlist" style="background:white;border:2px solid;border-color:#808080 #fff #fff #808080;min-height:120px;">
+            <div style="padding:16px;color:#666;font-size:11px;">Keine Jobs vorhanden.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:6px;">
+          <button class="btn98" onclick="clearQ()">✕ Queue leeren</button>
+        <button class="btn98" onclick="openOutputFolder()">📂 Output öffnen</button>
+        </div>
+      </div>
+
+
+      <!-- ══ BEARBEITEN ══ -->
+      <div class="tabpanel" id="tab-edit">
+        <div class="sect">
+          <div class="sect-title">✂️ Video schneiden (Trim)</div>
+          <div class="sect-body">
+            <div class="row">
+              <label style="width:160px;">Quelldatei:</label>
+              <input type="text" id="trimFile" style="flex:1;" placeholder="Datei wählen oder aus Liste" readonly>
+              <button class="btn98" style="margin-left:4px;" onclick="setTrimFile()">Wählen</button>
+            </div>
+            <div style="background:white;border:2px solid;border-color:#808080 #fff #fff #808080;height:80px;margin:8px 0;display:flex;align-items:center;justify-content:center;" id="trimTimeline">
+              <span style="color:#aaa;font-size:11px;">Timeline — Datei wählen um Vorschau zu laden</span>
+            </div>
+            <div class="row">
+              <label style="width:100px;">Start (Sek.):</label>
+              <input type="number" id="trimStart" style="width:100px;" value="0" min="0" step="0.5">
+              <label style="width:100px;margin-left:16px;">Ende (Sek.):</label>
+              <input type="number" id="trimEnd" style="width:100px;" value="60" min="1" step="0.5">
+              <span id="trimDurLabel" style="margin-left:12px;font-size:10px;color:#666;"></span>
+            </div>
+            <div style="margin-top:8px;">
+              <button class="btn98 default" onclick="doTrim()">✂️ Schneiden</button>
+              <button class="btn98" onclick="previewTrim()">▶ Vorschau</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sect">
+          <div class="sect-title">🔗 Videos zusammenfügen (Merge)</div>
+          <div class="sect-body">
+            <div style="background:white;border:2px solid;border-color:#808080 #fff #fff #808080;min-height:80px;padding:4px;" id="mergeList">
+              <div style="padding:8px;color:#aaa;font-size:11px;">Keine Dateien — aus der linken Liste ziehen oder unten hinzufügen</div>
+            </div>
+            <div style="margin-top:6px;display:flex;gap:6px;">
+              <button class="btn98" onclick="addToMerge()">+ Hinzufügen</button>
+              <button class="btn98" onclick="clearMerge()">✕ Leeren</button>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <label style="width:120px;">Ausgabe-Datei:</label>
+              <input type="text" id="mergeOutput" style="flex:1;" placeholder="merged_output.mp4">
+            </div>
+            <div style="margin-top:8px;">
+              <button class="btn98 default" onclick="doMerge()">🔗 Zusammenfügen</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="sect">
+          <div class="sect-title">🗑️ Watch Folder</div>
+          <div class="sect-body">
+            <div style="font-size:11px;color:#444;margin-bottom:8px;">
+              Ordner überwachen — neue Dateien werden automatisch verarbeitet.
+            </div>
+            <div class="row">
+              <label style="width:120px;">Ordner:</label>
+              <input type="text" id="watchFolder" style="flex:1;" placeholder="C:\Videos\Eingang">
+              <button class="btn98" style="margin-left:4px;" onclick="chooseWatchFolder()">Wählen</button>
+            </div>
+            <div class="row">
+              <label style="width:120px;">Aktion:</label>
+              <select id="watchAction" style="width:180px;">
+                <option value="convert">Konvertieren</option>
+                <option value="burn_dvd">Auf DVD brennen</option>
+                <option value="extract_audio">Audio extrahieren</option>
+              </select>
+            </div>
+            <div class="row">
+              <label style="width:120px;">Preset:</label>
+              <select id="watchPreset" style="width:180px;">
+                <option value="mp4_h264_1080p">MP4 (H.264, 1080p)</option>
+                <option value="mp3_320k">MP3 (320 kbps)</option>
+                <option value="dvd_pal">DVD (PAL)</option>
+              </select>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:6px;">
+              <button class="btn98 default" onclick="startWatchFolder()">▶ Watch Folder starten</button>
+              <button class="btn98" onclick="stopWatchFolder()">⏹ Stoppen</button>
+            </div>
+            <div id="watchStatus" style="font-size:10px;color:#666;margin-top:6px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ BIBLIOTHEK ══ -->
+      <div class="tabpanel" id="tab-library">
+        <div class="sect">
+          <div class="sect-title">📚 Media Bibliothek</div>
+          <div class="sect-body">
+            <div style="display:flex;gap:6px;margin-bottom:8px;align-items:center;">
+              <input type="text" id="libSearch" style="flex:1;" placeholder="Suchen... (Titel, Dateiname, Artist)"
+                onkeydown="if(event.key==='Enter') searchLibrary()">
+              <select id="libFilter" style="width:120px;">
+                <option value="">Alle Typen</option>
+                <option value="video">Nur Video</option>
+                <option value="audio">Nur Audio</option>
+              </select>
+              <button class="btn98" onclick="searchLibrary()">Suchen</button>
+              <button class="btn98" onclick="scanLibrary()">📂 Ordner scannen</button>
+            </div>
+            <div id="libStats" style="font-size:10px;color:#666;margin-bottom:6px;"></div>
+            <div id="libResults" style="background:white;border:2px solid;border-color:#808080 #fff #fff #808080;min-height:200px;overflow-y:auto;max-height:400px;">
+              <div style="padding:16px;color:#aaa;font-size:11px;">
+                Noch keine Dateien gescannt.<br>
+                Auf "Ordner scannen" klicken um die Bibliothek aufzubauen.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MediaInfo Panel -->
+        <div class="sect" id="mediainfoPanel" style="display:none;">
+          <div class="sect-title">ℹ️ Datei-Information</div>
+          <div class="sect-body" id="mediainfoContent" style="font-size:11px;"></div>
+        </div>
+      </div>
+
+      <!-- ══ SETTINGS ══ -->
+      <div class="tabpanel" id="tab-settings">
+        <div class="sect">
+          <div class="sect-title">⚙️ Tool-Pfade</div>
+          <div class="sect-body">
+            <div class="row"><label style="width:140px;">FFmpeg:</label><input id="settingsFfmpeg" type="text" style="width:260px;"><button class="btn98" style="margin-left:4px;" onclick="chooseToolPath('settingsFfmpeg')">Durchsuchen</button></div>
+            <div class="row"><label style="width:140px;">FFprobe:</label><input id="settingsFfprobe" type="text" style="width:260px;"><button class="btn98" style="margin-left:4px;" onclick="chooseToolPath('settingsFfprobe')">Durchsuchen</button></div>
+            <div class="row"><label style="width:140px;">yt-dlp:</label><input id="settingsYtdlp" type="text" style="width:260px;"><button class="btn98" style="margin-left:4px;" onclick="chooseToolPath('settingsYtdlp')">Durchsuchen</button></div>
+            <div class="row"><label style="width:140px;">dvdauthor:</label><input id="settingsDvdauthor" type="text" style="width:260px;"><button class="btn98" style="margin-left:4px;" onclick="chooseToolPath('settingsDvdauthor')">Durchsuchen</button></div>
+            <div class="row"><label style="width:140px;">Ollama-Host:</label><input id="settingsOllamaHost" type="text" style="width:260px;" value="http://localhost:11434"></div>
+          </div>
+        </div>
+        <div class="sect">
+          <div class="sect-title">⚙️ Allgemeine Einstellungen</div>
+          <div class="sect-body">
+            <div class="row"><label style="width:180px;">DVD-Standard:</label><select id="settingsDvdStandard" style="width:160px;"><option value="PAL">PAL (Europa)</option><option value="NTSC">NTSC</option></select></div>
+            <div class="row"><label style="width:180px;">Whisper-Modell:</label><select id="settingsWhisperModel" style="width:160px;"><option value="base" selected>base (offline)</option><option value="small">small</option><option value="medium">medium</option><option value="large-v3">large-v3</option></select></div>
+            <div class="row"><label style="width:180px;">Ollama-Modell:</label><select id="settingsOllamaModel" style="width:160px;"><option>phi3:mini</option><option>llama3.2:3b</option><option>mistral:7b</option></select></div>
+            <div class="row"><label style="width:180px;">Output-Ordner:</label><input id="settingsOutputDir" type="text" style="width:260px;"><button class="btn98" style="margin-left:4px;" onclick="chooseSettingsFolder('settingsOutputDir')">Durchsuchen</button></div>
+            <div class="row"><label style="width:180px;">Download-Ordner:</label><input id="settingsDownloadDir" type="text" style="width:260px;"><button class="btn98" style="margin-left:4px;" onclick="chooseSettingsFolder('settingsDownloadDir')">Durchsuchen</button></div>
+            <div class="row">
+              <input type="checkbox" checked id="snd">
+              <label for="snd"> Fertig-Sound abspielen</label>
+              <button class="btn98" style="font-size:9px;padding:2px 8px;margin-left:8px;" onclick="testSound()">🔊 Test</button>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn98 default" onclick="saveSettings()">💾 Speichern</button>
+          <button class="btn98" onclick="goHome()">Abbrechen</button>
+        </div>
+      </div>
+
+    </div><!-- /rightpanel -->
+  </div><!-- /maincontent -->
+
+  <!-- STATUS BAR -->
+  <div id="statusbar">
+    <div class="sbar-cell" id="stxt">Bereit</div>
+    <div class="sbar-cell" style="width:160px;">FFmpeg 6.1 · Python 3.12</div>
+    <div class="sbar-cell" style="width:100px;">Windows 11</div>
+  </div>
+
+</div><!-- /win -->
+
+
+<script>
+// State
+const S={files:[],selFile:null,selPreset:'mp4_h264_1080p',jobs:[],cat:'all',burnMode:'disc'};
+
+// Init
+function init(){
+  S.files=[];
+  S.selFile=null;
+  renderFiles();
+  renderJobs();
+  setStat('Bereit — bitte echte Medien über "Dateien hinzufügen" importieren.');
+}
+
+function renderFiles(){
+  const b=document.getElementById('filebox');
+  if(!S.files.length){b.innerHTML='<div style="padding:8px;color:#888;font-size:11px;">Keine Dateien</div>';return;}
+  b.innerHTML=S.files.map((f,i)=>`
+    <div class="frow ${S.selFile===i?'sel':''}" onclick="selF(${i})">
+      <span class="frow-icon">${f.ico}</span>
+      <div class="frow-info">
+        <div class="frow-name">${f.n}</div>
+        <div class="frow-meta">${f.sz} · ${f.dur}</div>
+      </div>
+    </div>`).join('');
+}
+function clearFiles(){S.files=[];S.selFile=null;renderFiles();}
+// Tabs
+function _baseShowTab(name, btn){
+  document.querySelectorAll('.tabpanel').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tbtn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  if(btn) btn.classList.add('active');
+}
+
+// Disc type selector
+function selDType(el, type){
+  document.querySelectorAll('#discIconRow .disc-card').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel');
+  const opts = {
+    video: [
+      ['mp4_h264_1080p','MP4 Video (H.264, 1080p) — Universal'],
+      ['mp4_h265_4k','MP4 Video (H.265, 4K) — Hohe Qualität'],
+      ['mkv_h265_copy_audio','MKV Video (H.265) — Verlustarm'],
+      ['avi_xvid','AVI Video (XviD) — Klassisch/Retro']
+    ],
+    audio: [
+      ['mp3_320k','MP3 Audio (320 kbps)'],
+      ['flac_lossless','FLAC Audio (verlustfrei)'],
+      ['wav_pcm','WAV Audio (PCM)']
+    ],
+    device: [
+      ['iphone','iPhone / iPad — MP4 H.264'],
+      ['android','Android — MP4 H.264']
+    ],
+    disc: [
+      ['dvd_pal','Video-DVD PAL — Europa'],
+      ['dvd_ntsc','Video-DVD NTSC — USA/Japan'],
+      ['audio_cd','Audio-CD']
+    ]
+  };
+  const sel = document.getElementById('presetSel');
+  sel.innerHTML = (opts[type] || opts.video).map(([v,t]) => `<option value="${v}">${t}</option>`).join('');
+  setStat('Zielformat-Gruppe: ' + ({video:'Video',audio:'Audio',device:'Gerät',disc:'Disc-Format'}[type] || type));
+}
+function selDisc(el,mode='disc'){
+  const label=el.querySelector('.disc-card-label')?.textContent||'';
+  if(label.includes('ISO')) mode='iso';
+  el.closest('.disc-icons-row').querySelectorAll('.disc-card').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel');
+  S.burnMode=mode;
+  setStat(mode==='iso'?'Ausgabe: DVD-ISO-Datei':'Ausgabe: Video-DVD brennen');
+}
+
+// Sound
+function playSound(){
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    [{f:880,t:0,d:.18},{f:1108,t:.14,d:.18},{f:1318,t:.28,d:.18},{f:1760,t:.42,d:.5}].forEach(({f,t,d})=>{
+      const o=ctx.createOscillator(),g=ctx.createGain();
+      o.type='sine';o.frequency.value=f;
+      g.gain.setValueAtTime(.3,ctx.currentTime+t);
+      g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+t+d);
+      o.connect(g).connect(ctx.destination);o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+d+.05);
+    });
+  }catch(e){}
+}
+
+function clearQ(){
+  if(api()) api().clear_completed();
+  S.jobs=S.jobs.filter(j=>j.state==='running');
+  renderJobs();
+}
+
+function fmtDuration(sec){
+  if(sec===undefined || sec===null || sec==='') return '';
+  if(typeof sec === 'string') return sec;
+  sec = Math.round(Number(sec));
+  if(!Number.isFinite(sec)) return '';
+  const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
+}
+function menuAction(kind){
+  if(kind==='file') { openFileDialog(); return; }
+  if(kind==='extras') { showTab('settings', document.getElementById('tbtn-settings')); setStat('Extras: Einstellungen geöffnet.'); return; }
+  if(kind==='help') { alert('RetroDisc 1.0\n\nLokale Medienkonvertierung, Batch-Verarbeitung, Videoschnitt, Downloads, Untertitel, DVD-/ISO-Erstellung, Brennen und Rippen ungeschützter Medien.\n\nPhysische Disc-Aktionen benötigen ein geeignetes Laufwerk und Medium; kopiergeschützte Medien benötigen ein separates, rechtmäßig verwendetes Entschlüsselungswerkzeug.'); return; }
+}
+
+// ── BACKEND API BRIDGE
+// Gibt die pywebview API zurück, oder null im Browser-Modus.
+// Prüft LIVE bei jedem Aufruf (nicht gecacht), damit Buttons auch
+// funktionieren sobald die Bridge nach dem Start verfügbar wird.
+function api(){
+  return (window.pywebview && window.pywebview.api) ? window.pywebview.api : null;
+}
+
+window.onBackendEvent = function(payload) {
+  const {event, data} = payload;
+  switch(event) {
+    case 'tools_ready':
+      updateToolBadges(data); break;
+    case 'job_queued':
+      S.jobs.push({id:data.id, name:data.name, state:'pending', prog:0, status:''});
+      renderJobs(); updateJobBadge(); break;
+    case 'job_progress':
+      const jp = S.jobs.find(j=>j.id===data.id);
+      if(jp){ jp.prog=data.progress; jp.status=data.status; jp.state='running'; }
+      if(S.jobs.find(j=>j.state==='running')){
+        document.getElementById('cjbar').style.width = data.progress+'%';
+        document.getElementById('cjpct').textContent = Math.floor(data.progress)+'%';
+        document.getElementById('cjstatus').textContent = data.status||'';
+        document.getElementById('curjob').style.display='block';
+        document.getElementById('cjname').textContent = data.name;
+        document.getElementById('nojob').style.display='none';
+      }
+      renderJobs(); break;
+    case 'job_done':
+      const jd = S.jobs.find(j=>j.id===data.id);
+      if(jd){ jd.state='done'; jd.prog=100; }
+      document.getElementById('curjob').style.display='none';
+      document.getElementById('nojob').style.display='block';
+      setStat('✓ Fertig: '+data.name+(data.elapsed?' ('+data.elapsed+'s)':''));
+      renderJobs(); updateJobBadge();
+      if(document.getElementById('chkSound')&&document.getElementById('chkSound').checked) playSound();
+      if(document.getElementById('snd')&&document.getElementById('snd').checked) playSound();
+      animBurnDone(); break;
+    case 'job_failed':
+      const jf = S.jobs.find(j=>j.id===data.id);
+      if(jf){ jf.state='failed'; }
+      document.getElementById('curjob').style.display='none';
+      document.getElementById('nojob').style.display='block';
+      setStat('✗ Fehler: '+(data.error||data.name));
+      renderJobs(); updateJobBadge(); break;
+    case 'queue_empty':
+      setStat('Bereit — alle Jobs abgeschlossen'); break;
+    case 'scan_progress':
+      setStat('Scan: '+data.current+'/'+data.total+' — '+data.file); break;
+  }
+};
+
+function updateToolBadges(tools){
+  const strip=document.getElementById('strip');
+  if(!strip) return;
+  const badges = {
+    ffmpeg: tools.ffmpeg?.ok ? '✓ FFmpeg '+tools.ffmpeg.version : '✗ FFmpeg fehlt',
+    ytdlp:  tools.ytdlp?.ok  ? '✓ yt-dlp '+tools.ytdlp.version  : '✗ yt-dlp fehlt',
+  };
+  Object.entries(badges).forEach(([k,v])=>{
+    const el=document.getElementById('badge-'+k);
+    if(el){ el.textContent=v; el.className='strip-badge '+(v.startsWith('✓')?'ok':'warn'); }
+  });
+}
+
+function updateJobBadge(){
+  const running = S.jobs.filter(j=>j.state!=='done'&&j.state!=='failed').length;
+  // Badge könnte im Toolbar-Button sein (optional)
+}
+
+// Actions — echte API-Aufrufe
+async function goConvert(){
+  if(!S.files.length){alert('Bitte zuerst Dateien hinzufügen!');return;}
+  const sel=document.getElementById('presetSel');
+  const preset=sel.value||'mp4_h264_1080p';
+  const file=S.selFile!==null?S.files[S.selFile].path:S.files[0].path;
+  if(!file){alert('Keine Datei ausgewählt!');return;}
+  const outputDir=(document.getElementById('outdir')?.value||'').trim();
+  const overwrite=Boolean(document.getElementById('chkOverwrite')?.checked);
+  const a=api();
+  if(a){
+    try{
+      const r=JSON.parse(await a.convert_file(file,preset,outputDir||null,overwrite));
+      if(r.error) alert('Fehler: '+r.error);
+      else {
+        setStat('Konvertierung zur Queue hinzugefügt.');
+        showTab('queue',document.getElementById('tbtn-queue'));
+      }
+    }catch(e){ alert('Konvertierung konnte nicht gestartet werden: '+e); }
+  } else {
+    alert('Backend noch nicht bereit — Konvertierung nicht möglich.');
+  }
+}
+
+async function goBurn(){
+  const t=document.getElementById('dvdtitle').value||'RetroDisc DVD';
+  if(!S.files.length){alert('Bitte zuerst Dateien hinzufügen!');return;}
+  if(S.burnMode==='iso'){ await createISO(); return; }
+  const device=document.getElementById('burnerSelect')?.value||'';
+  if(!device){alert('Bitte zuerst einen Brenner auswählen!');return;}
+  const standard=document.getElementById('dvdStandard')?.value||'PAL';
+  const aspect=document.querySelector('input[name="aspect"]:checked')?.value||'16:9';
+  const speedValue=document.getElementById('burnSpeed')?.value||'';
+  const speed=speedValue?Number(speedValue):null;
+  const verify=Boolean(document.getElementById('chkVerify')?.checked);
+  const eject=Boolean(document.getElementById('chkEject')?.checked);
+  const a=api();
+  if(a){
+    try{
+      const paths=JSON.stringify(S.files.map(f=>f.path));
+      const r=JSON.parse(await a.create_dvd(paths,t,standard,aspect,true,device,speed,verify,eject));
+      if(r.error) alert('Fehler: '+r.error);
+      else { showTab('queue',document.getElementById('tbtn-queue')); }
+    }catch(e){ alert('Brennen konnte nicht gestartet werden: '+e); }
+  } else {
+    alert('Backend noch nicht bereit — Brennen nicht möglich.');
+  }
+}
+
+async function goDL(){
+  const input=document.getElementById('urlinp');
+  const u=(input.value||'').trim();
+  if(!/^https?:\/\/\S+$/i.test(u)){
+    alert('Bitte eine gültige HTTP- oder HTTPS-URL eingeben!');
+    input.focus();
+    return;
+  }
+  const quality=document.getElementById('downloadQuality')?.value||'best';
+  const subtitleValue=document.getElementById('downloadSubtitles')?.value||'none';
+  const audioOnly=['mp3','flac','wav'].includes(quality);
+  const subtitles=subtitleValue!=='none';
+  const a=api();
+  if(a){
+    try{
+      setStat('Download wird zur Queue hinzugefügt...');
+      const r=JSON.parse(await a.download_url(u,quality,audioOnly,subtitles));
+      if(r.error){ alert('Fehler: '+r.error); setStat('Download konnte nicht gestartet werden.'); }
+      else {
+        setStat('Download zur Queue hinzugefügt.');
+        showTab('queue',document.getElementById('tbtn-queue'));
+      }
+    }catch(e){ alert('Download konnte nicht gestartet werden: '+e); }
+  } else {
+    alert('Backend noch nicht bereit — Download nicht möglich.');
+  }
+}
+
+async function doSearch(){
+  const q=document.getElementById('sinp').value; if(!q)return;
+  const res=document.getElementById('sresults');
+  res.innerHTML='<div style="padding:8px;font-size:11px;color:#666;">Suche läuft...</div>';
+  const a=api();
+  if(a){
+    const raw=JSON.parse(await a.search_media(q, '[]', 15));
+    if(raw.error){res.innerHTML='<div style="padding:8px;color:red;font-size:11px;">'+raw.error+'</div>';return;}
+    if(!raw.length){res.innerHTML='<div style="padding:8px;font-size:11px;color:#666;">Keine Ergebnisse für "'+q+'".</div>';return;}
+    res.innerHTML=raw.map((r,i)=>`
+      <div class="frow" style="padding:4px 6px;" data-url="${escAttr(r.url)}" data-title="${escAttr(r.title)}" onclick="toggleSearchSel(this)">
+        <span style="font-size:16px;">${r.source==='youtube'?'▶️':'📺'}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:bold;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(r.title)}</div>
+          <div style="font-size:9px;color:#666;">${fmtDuration(r.duration||r.duration_seconds)||''} · ${r.quality||''} · ${(r.source||'').toUpperCase()}</div>
+        </div>
+        <button class="btn98" style="font-size:9px;padding:2px 6px;min-width:0;"
+          onclick="dlResult(event,'${escAttr(r.url)}','${escAttr(r.title)}')">⬇ DL</button>
+      </div>`).join('');
+    updateSearchSelButtons();
+  } else {
+    res.innerHTML='<div style="padding:8px;font-size:11px;color:#a55;">Backend noch nicht bereit — Suche nicht möglich.</div>';
+  }
+}
+
+function toggleSearchSel(row){
+  row.classList.toggle('sel');
+  updateSearchSelButtons();
+}
+
+function getSelectedSearchResults(){
+  return Array.from(document.querySelectorAll('#sresults .frow.sel'))
+    .map(row => ({url: row.dataset.url, title: row.dataset.title}));
+}
+
+function updateSearchSelButtons(){
+  const n = document.querySelectorAll('#sresults .frow.sel').length;
+  const dlBtn = document.getElementById('dlSelBtn');
+  const burnBtn = document.getElementById('burnSelBtn');
+  if(dlBtn) dlBtn.disabled = n === 0;
+  if(burnBtn) burnBtn.disabled = n === 0;
+}
+
+async function dlResult(e, url, title){
+  e.stopPropagation();
+  const a=api();
+  if(a){
+    const result=JSON.parse(await a.download_url(url));
+    if(result.error) alert('Download fehlgeschlagen: '+result.error);
+    else showTab('queue',document.getElementById('tbtn-queue'));
+  } else {
+    alert('Backend noch nicht bereit — Download nicht möglich.');
+  }
+}
+
+async function downloadSelectedResults(){
+  const items = getSelectedSearchResults();
+  if(!items.length) return;
+  const a=api();
+  if(!a){ alert('Backend noch nicht bereit — Download nicht möglich.'); return; }
+  for(const item of items){
+    const result = JSON.parse(await a.download_url(item.url));
+    if(result.error) alert('Download fehlgeschlagen ('+item.title+'): '+result.error);
+  }
+  showTab('queue', document.getElementById('tbtn-queue'));
+}
+
+async function burnSelectedResults(){
+  const items = getSelectedSearchResults();
+  if(!items.length) return;
+  const a=api();
+  if(!a){ alert('Backend noch nicht bereit — Download nicht möglich.'); return; }
+  for(const item of items){
+    const result = JSON.parse(await a.download_url(item.url, 'best', false, 'burn_dvd', false));
+    if(result.error) alert('Download fehlgeschlagen ('+item.title+'): '+result.error);
+  }
+  showTab('queue', document.getElementById('tbtn-queue'));
+}
+
+async function doAI(){
+  const v=document.getElementById('aiinp').value; if(!v)return;
+  const r=document.getElementById('airesp');
+  r.textContent='KI analysiert...';
+  const a=api();
+  if(a){
+    try {
+      const res=JSON.parse(await a.run_assistant(v));
+      r.textContent = res.message || JSON.stringify(res, null, 2);
+    } catch(e){ r.textContent='Fehler: '+e; }
+  } else {
+    r.textContent='Backend noch nicht bereit — Assistent nicht verfügbar.';
+  }
+}
+
+// Datei-Import über Dialog
+async function openFileDialog(){
+  const a=api();
+  if(!a){ setStat('Backend noch nicht bereit — Dateiimport nicht möglich.'); return; }
+  try{
+    const r=JSON.parse(await a.open_file_dialog());
+    if(r.error){ setStat(r.error); return; }
+    const files = r.files || [r];
+    files.forEach(f=>{
+      if(!f.path) return;
+      if(!S.files.find(x=>x.path===f.path)){
+        const type = f.type || (f.video && f.video.length ? 'video' : 'audio');
+        S.files.push({
+          n:f.name || f.path.split(/[\\/]/).pop(),
+          path:f.path,
+          ico:type==='audio'?'🎵':'🎬',
+          sz:f.size_fmt || f.size_formatted || f.size || '',
+          dur:f.duration_fmt || f.duration_formatted || f.duration || ''
+        });
+      }
+    });
+    renderFiles();
+    setStat(files.length + ' Datei(en) importiert.');
+  }catch(e){ alert('Dateiimport fehlgeschlagen: '+e); }
+}
+
+async function openOutputFolderDialog(){
+  const a=api();
+  if(!a || !a.open_folder_dialog){ alert('Backend noch nicht bereit — Ordnerauswahl nicht möglich.'); return; }
+  const r=JSON.parse(await a.open_folder_dialog());
+  if(r.folder) document.getElementById('outdir').value = r.folder;
+  else if(r.error) setStat(r.error);
+}
+// Hilfsfunktionen
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s){ return s.replace(/'/g,"\\'").replace(/"/g,'\\"'); }
+
+function animBurnDone(){
+  document.querySelectorAll('.bstep').forEach(el=>{
+    el.classList.remove('on'); el.classList.add('done');
+  });
+  setTimeout(()=>document.querySelectorAll('.bstep').forEach(e=>e.classList.remove('done')),3000);
+}
+function setStat(t){document.getElementById('stxt').textContent=t;}
+
+// ═══════════════════════════════════════════════════════════════
+// VOLLSTÄNDIGE API-VERDRAHTUNG — alle Buttons rufen echtes Backend
+// ═══════════════════════════════════════════════════════════════
+
+// Hilfsfunktion: Datei aus Dateiliste holen
+function getSelectedFile() {
+  if (!S.files.length) return null;
+  return S.selFile !== null ? S.files[S.selFile] : S.files[0];
+}
+
+// ── AI Tools vollständig verdrahtet ──────────────────────────────
+
+async function startSmartEdit() {
+  const f = getSelectedFile();
+  if (!f) { alert('Bitte zuerst eine Videodatei hinzufügen!'); return; }
+  const durSel = document.getElementById('smartDuration');
+  const dur = durSel ? parseInt(durSel.value, 10) : 300;
+  const a = api();
+  if (a) {
+    setStat('KI Auto-Edit wird gestartet...');
+    const r = JSON.parse(await a.create_highlights(f.path, dur));
+    if (r.error) alert('Fehler: ' + r.error);
+    else showTab('queue', document.getElementById('tbtn-queue'));
+  } else {
+    alert('Backend noch nicht bereit — Auto-Edit nicht möglich.');
+  }
+}
+
+async function startUpscale() {
+  const f = getSelectedFile();
+  if (!f) { alert('Bitte zuerst eine Videodatei hinzufügen!'); return; }
+  const scaleSel = document.getElementById('upscaleScale');
+  const scale = scaleSel ? parseInt(scaleSel.value, 10) : 4;
+  const a = api();
+  if (a) {
+    setStat('Video-Upscaling wird gestartet...');
+    const r = JSON.parse(await a.upscale_video(f.path, scale));
+    if (r.error) alert('Fehler: ' + r.error);
+    else showTab('queue', document.getElementById('tbtn-queue'));
+  } else {
+    alert('Backend noch nicht bereit — Upscaling nicht möglich.');
+  }
+}
+
+async function startSubtitle() {
+  const f = getSelectedFile();
+  if (!f) { alert('Bitte zuerst eine Videodatei hinzufügen!'); return; }
+  const modelSel = document.getElementById('subtitleModel');
+  const languageSel = document.getElementById('subtitleLanguage');
+  const model = modelSel ? modelSel.value : 'base';
+  const language = languageSel ? languageSel.value : '';
+  const a = api();
+  if (a) {
+    setStat('Whisper Untertitel-Generierung läuft...');
+    const r = JSON.parse(await a.generate_subtitles(f.path, language, model, 'srt'));
+    if (r.error) alert('Fehler: ' + r.error);
+    else showTab('queue', document.getElementById('tbtn-queue'));
+  } else {
+    alert('Backend noch nicht bereit — Untertitel-Erstellung nicht möglich.');
+  }
+}
+
+async function startInterpolate() {
+  const f = getSelectedFile();
+  if (!f) { alert('Bitte zuerst eine Videodatei hinzufügen!'); return; }
+  const fpsSel = document.getElementById('interpolateFps');
+  const fps = fpsSel ? parseFloat(fpsSel.value) : 60.0;
+  const a = api();
+  if (a) {
+    setStat('Frame-Interpolation wird gestartet...');
+    const r = JSON.parse(await a.interpolate_video(f.path, fps));
+    if (r.error) alert('Fehler: ' + r.error);
+    else showTab('queue', document.getElementById('tbtn-queue'));
+  } else {
+    alert('Backend noch nicht bereit — Frame-Interpolation nicht möglich.');
+  }
+}
+
+// ── ISO erstellen ────────────────────────────────────────────────
+async function createISO() {
+  if (!S.files.length) { alert('Bitte zuerst Dateien hinzufügen!'); return; }
+  const t = document.getElementById('dvdtitle').value || 'RetroDisc';
+  const a = api();
+  if (a) {
+    setStat('ISO-Erstellung läuft...');
+    const paths = JSON.stringify(S.files.map(f => f.path));
+    const standard=document.getElementById('dvdStandard')?.value||'PAL';
+    const aspect=document.querySelector('input[name="aspect"]:checked')?.value||'16:9';
+    const r = JSON.parse(await a.create_dvd(paths, t, standard, aspect, false, '', null, false, false));
+    if (r.error) alert('Fehler: ' + r.error);
+    else showTab('queue', document.getElementById('tbtn-queue'));
+  } else {
+    alert('Backend noch nicht bereit — ISO-Erstellung nicht möglich.');
+  }
+}
+
+// ── Disc rippen ──────────────────────────────────────────────────
+async function goRip() {
+  const a = api();
+  const device=document.getElementById('ripDriveSelect')?.value||'';
+  const fmt=document.getElementById('ripFormat')?.value||'mkv_h265';
+  if(!device){ alert('Bitte zuerst ein Disc-Laufwerk auswählen!'); return; }
+  if (a) {
+    try{
+      const r = JSON.parse(await a.rip_disc(device, fmt));
+      if (r.error) alert('Fehler: ' + r.error);
+      else showTab('queue', document.getElementById('tbtn-queue'));
+    }catch(e){ alert('Rippen konnte nicht gestartet werden: '+e); }
+  } else {
+    alert('Backend noch nicht bereit — Rippen nicht möglich.');
+  }
+}
+
+async function showDiscInfo(){
+  const a=api();
+  const device=document.getElementById('ripDriveSelect')?.value||'';
+  if(!a || !device){ alert('Bitte zuerst ein Disc-Laufwerk auswählen!'); return; }
+  try{
+    const info=JSON.parse(await a.get_disc_info(device));
+    if(info.error){ alert('Fehler: '+info.error); return; }
+    if(!info.present){ alert('In '+device+' ist kein Medium eingelegt.'); return; }
+    const capacity=info.capacity_gb!=null?'\nKapazität: '+info.capacity_gb+' GB':'';
+    alert('Laufwerk: '+device+'\nMedium: '+(info.profile||info.type||'unbekannt')+
+      '\nStatus: '+(info.blank?'leer':(info.readable?'lesbar':'eingelegt'))+capacity);
+  }catch(e){ alert('Disc-Info konnte nicht gelesen werden: '+e); }
+}
+
+// ── Einstellungen speichern ──────────────────────────────────────
+async function chooseToolPath(inputId){
+  const a=api();
+  if(!a) return;
+  const r=JSON.parse(await a.open_tool_dialog());
+  if(r.path) document.getElementById(inputId).value=r.path;
+  else if(r.error && r.error!=='Abgebrochen') alert(r.error);
+}
+async function chooseSettingsFolder(inputId){
+  const a=api();
+  if(!a) return;
+  const r=JSON.parse(await a.open_folder_dialog());
+  if(r.folder) document.getElementById(inputId).value=r.folder;
+  else if(r.error && r.error!=='Abgebrochen') alert(r.error);
+}
+
+async function saveSettings() {
+  const a = api();
+  if (!a) { alert('Backend nicht bereit.'); return; }
+  const current = JSON.parse(await a.get_settings());
+  current.tools.ffmpeg=document.getElementById('settingsFfmpeg').value;
+  current.tools.ffprobe=document.getElementById('settingsFfprobe').value;
+  current.tools.ytdlp=document.getElementById('settingsYtdlp').value;
+  current.tools.dvdauthor=document.getElementById('settingsDvdauthor').value;
+  current.ai.ollama_host=document.getElementById('settingsOllamaHost').value||'http://localhost:11434';
+  current.directories.output_dir=document.getElementById('settingsOutputDir').value;
+  current.directories.download_dir=document.getElementById('settingsDownloadDir').value;
+  current.conversion.dvd_standard=document.getElementById('settingsDvdStandard').value;
+  current.ai.whisper_model=document.getElementById('settingsWhisperModel').value;
+  current.ai.ollama_model=document.getElementById('settingsOllamaModel').value;
+  current.sound.play_on_complete=document.getElementById('snd').checked;
+  const r = JSON.parse(await a.save_settings(JSON.stringify(current)));
+  if (r.error) alert('Fehler beim Speichern: ' + r.error);
+  else { setStat('✓ Einstellungen gespeichert'); alert('Einstellungen gespeichert!'); }
+}
+
+// ── Settings laden und ins Formular eintragen ────────────────────
+async function loadSettingsIntoForm() {
+  const a = api();
+  if (!a) return;
+  try {
+    const s = JSON.parse(await a.get_settings());
+    document.getElementById('settingsFfmpeg').value=s.tools.ffmpeg||'';
+    document.getElementById('settingsFfprobe').value=s.tools.ffprobe||'';
+    document.getElementById('settingsYtdlp').value=s.tools.ytdlp||'';
+    document.getElementById('settingsDvdauthor').value=s.tools.dvdauthor||'';
+    document.getElementById('settingsOllamaHost').value=s.ai?.ollama_host||'http://localhost:11434';
+    document.getElementById('settingsOutputDir').value=s.directories.output_dir||'';
+    document.getElementById('settingsDownloadDir').value=s.directories.download_dir||'';
+    document.getElementById('settingsDvdStandard').value=s.conversion?.dvd_standard||'PAL';
+    document.getElementById('settingsWhisperModel').value=s.ai?.whisper_model||'base';
+    document.getElementById('settingsOllamaModel').value=s.ai?.ollama_model||'phi3:mini';
+    document.getElementById('snd').checked=s.sound?.play_on_complete!==false;
+  } catch(e) { console.log('Settings laden:', e); }
+}
+
+// ── Tool-Status beim Start laden ─────────────────────────────────
+async function loadToolStatus() {
+  const a = api();
+  if (!a) return;
+  try {
+    const tools = JSON.parse(await a.check_tools());
+    const strip = document.getElementById('strip');
+    if (!strip) return;
+    const badges = strip.querySelectorAll('.strip-badge');
+    const map = {ffmpeg: tools.ffmpeg, ffprobe: tools.ffprobe, ytdlp: tools.ytdlp};
+    let i = 0;
+    for (const [name, info] of Object.entries(map)) {
+      if (badges[i]) {
+        const ok = info && info.available;
+        badges[i].textContent = ok ? '✓ ' + name : '✗ ' + name + ' fehlt';
+        badges[i].className = 'strip-badge ' + (ok ? 'ok' : 'warn');
+      }
+      i++;
+    }
+  } catch(e) { console.log('Tool-Status:', e); }
+}
+
+// ── Queue periodisch aktualisieren ───────────────────────────────
+async function refreshQueue() {
+  const a = api();
+  if (!a) return;
+  try {
+    const jobs = JSON.parse(await a.get_queue());
+    // State aus Backend in lokalen State übernehmen
+    jobs.forEach(bj => {
+      const lj = S.jobs.find(j => j.id === bj.id);
+      if (lj) {
+        lj.state = bj.state;
+        lj.prog  = bj.progress;
+      } else if (bj.state !== 'done') {
+        S.jobs.push({id: bj.id, name: bj.name, state: bj.state,
+                     prog: bj.progress, status: ''});
+      }
+    });
+    renderJobs();
+    updateJobBadge();
+    // Laufender Job im Detail-Panel
+    const running = S.jobs.find(j => j.state === 'running');
+    if (running) {
+      document.getElementById('curjob').style.display = 'block';
+      document.getElementById('nojob').style.display  = 'none';
+      document.getElementById('cjname').textContent   = running.name;
+      document.getElementById('cjbar').style.width    = running.prog + '%';
+      document.getElementById('cjpct').textContent    = Math.floor(running.prog) + '%';
+    }
+  } catch(e) {}
+}
+
+// ── Cancel Job ───────────────────────────────────────────────────
+async function cancelJob(jobId) {
+  const a = api();
+  if (a) await a.cancel_job(jobId);
+  S.jobs = S.jobs.filter(j => j.id !== jobId);
+  renderJobs(); updateJobBadge();
+}
+
+// ── Output-Ordner öffnen ─────────────────────────────────────────
+async function openOutputFolder() {
+  const a = api();
+  if (a) await a.open_output_folder();
+}
+
+// ── Startup ─────────────────────────────────────────────────────
+async function startup() {
+  await loadToolStatus();
+  await loadSettingsIntoForm();
+  await loadPresetsFromBackend();
+  await loadWatchFolders();
+  await loadBurners();
+  // Alle 2 Sekunden Queue aktualisieren
+  setInterval(refreshQueue, 2000);
+}
+
+// Echte onPythonEvent-Verbindung (von Python via evaluate_js gesendet)
+window.onPythonEvent = function(payload) {
+  const {event, data} = payload;
+  if (window.onBackendEvent) window.onBackendEvent(payload);
+};
+
+
+// ═══════════════════════════════════════════════════════════════
+// BEARBEITEN-TAB: Trim, Merge, Watch Folder
+// ═══════════════════════════════════════════════════════════════
+
+let S_merge = [];       // Dateien für Merge
+let S_trimFile = null;  // Aktuelle Trim-Datei
+
+
+// ── Trim ─────────────────────────────────────────────────────────
+function setTrimFile() {
+  const f = getSelectedFile ? getSelectedFile() : (S.files[S.selFile] || S.files[0]);
+  if (!f) { alert('Bitte zuerst eine Datei in der linken Liste auswählen!'); return; }
+  S_trimFile = f;
+  document.getElementById('trimFile').value = f.path || f.n;
+  // Dauer aus MediaInfo laden
+  loadTrimDuration(f.path || f.n);
+}
+
+async function loadTrimDuration(path) {
+  const a = api();
+  if (!a) return;
+  try {
+    const info = JSON.parse(await a.get_mediainfo(path));
+    if (info.error) return;
+    const dur = info.duration_fmt || '';
+    const durSec = parseDurationToSeconds(dur);
+    if (durSec > 0) {
+      document.getElementById('trimEnd').value = durSec;
+      document.getElementById('trimDurLabel').textContent =
+        `Gesamtdauer: ${dur}`;
+      // Einfache Timeline anzeigen
+      const tl = document.getElementById('trimTimeline');
+      tl.innerHTML = `<div style="width:100%;padding:8px;font-size:10px;color:#444;">
+        <strong>${info.name}</strong><br>
+        Dauer: ${info.duration_fmt} · ${info.resolution||''} · 
+        ${info.video?.[0]?.codec||''} · ${info.audio?.[0]?.codec||''}<br>
+        <div style="margin-top:6px;background:#ddd;height:12px;border:1px solid #aaa;position:relative;">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#0a246a;opacity:0.5;" id="trimRangeBar"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:9px;color:#888;margin-top:2px;">
+          <span>0s</span><span>${durSec}s</span>
+        </div>
+      </div>`;
+    }
+  } catch(e) {}
+}
+
+function parseDurationToSeconds(fmt) {
+  const parts = (fmt || '').split(':').reverse();
+  let sec = 0;
+  if (parts[0]) sec += parseFloat(parts[0]);
+  if (parts[1]) sec += parseInt(parts[1]) * 60;
+  if (parts[2]) sec += parseInt(parts[2]) * 3600;
+  return sec;
+}
+
+async function doTrim() {
+  const file = S_trimFile || getSelectedFile();
+  if (!file) { alert('Bitte zuerst eine Datei wählen!'); return; }
+  const start = parseFloat(document.getElementById('trimStart').value) || 0;
+  const end = parseFloat(document.getElementById('trimEnd').value) || 60;
+  if (end <= start) { alert('Ende muss nach dem Start liegen!'); return; }
+  const a = api();
+  if (a) {
+    setStat('Trim läuft...');
+    const r = JSON.parse(await a.trim_video(file.path || file.n, start, end));
+    if (r.error) alert('Fehler: ' + r.error);
+    else {
+      showTab('queue', document.getElementById('tbtn-queue'));
+      setStat('✓ Trim gestartet');
+    }
+  } else {
+    alert('Backend noch nicht bereit — Videoschnitt nicht möglich.');
+  }
+}
+
+async function previewTrim() {
+  const file=S_trimFile||getSelectedFile();
+  if(!file){ alert('Bitte zuerst eine Datei wählen!'); return; }
+  const start=parseFloat(document.getElementById('trimStart').value)||0;
+  const end=parseFloat(document.getElementById('trimEnd').value)||60;
+  if(end<=start){ alert('Ende muss nach dem Start liegen!'); return; }
+  const a=api();
+  if(!a){ alert('Backend nicht bereit.'); return; }
+  setStat('Vorschau wird erstellt...');
+  const r=JSON.parse(await a.preview_trim(file.path||file.n,start,end));
+  if(r.error) alert('Vorschau fehlgeschlagen: '+r.error);
+  else setStat('✓ Vorschau im Standardplayer geöffnet');
+}
+
+// ── Merge ─────────────────────────────────────────────────────────
+function addToMerge() {
+  const f = getSelectedFile ? getSelectedFile() : null;
+  if (!f) { alert('Bitte zuerst eine Datei in der Liste auswählen!'); return; }
+  if (S_merge.find(x => (x.path||x.n) === (f.path||f.n))) {
+    alert('Diese Datei ist bereits in der Merge-Liste!'); return;
+  }
+  S_merge.push(f);
+  renderMergeList();
+}
+
+function clearMerge() {
+  S_merge = [];
+  renderMergeList();
+}
+
+function renderMergeList() {
+  const el = document.getElementById('mergeList');
+  if (!S_merge.length) {
+    el.innerHTML = '<div style="padding:8px;color:#aaa;font-size:11px;">Keine Dateien</div>';
+    return;
+  }
+  el.innerHTML = S_merge.map((f, i) => `
+    <div style="display:flex;align-items:center;gap:6px;padding:3px 6px;border-bottom:1px solid #eee;font-size:11px;">
+      <span style="color:#666;width:20px;text-align:right;">${i+1}.</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.n||f.path}</span>
+      <button style="padding:1px 5px;font-size:9px;cursor:pointer;border:1px solid #aaa;background:#f5f5f5;"
+        onclick="S_merge.splice(${i},1);renderMergeList()">✕</button>
+    </div>`).join('');
+}
+
+async function doMerge() {
+  if (S_merge.length < 2) { alert('Mindestens 2 Dateien zum Zusammenfügen nötig!'); return; }
+  const outName = document.getElementById('mergeOutput').value || 'merged_output.mp4';
+  const paths = JSON.stringify(S_merge.map(f => f.path || f.n));
+  const a = api();
+  if (a) {
+    setStat('Merge läuft...');
+    const r = JSON.parse(await a.merge_videos(paths, outName));
+    if (r.error) alert('Fehler: ' + r.error);
+    else showTab('queue', document.getElementById('tbtn-queue'));
+  } else {
+    alert('Backend noch nicht bereit — Zusammenfügen nicht möglich.');
+  }
+}
+
+// ── Watch Folder ──────────────────────────────────────────────────
+async function chooseWatchFolder() {
+  const a = api();
+  if (a) {
+    const r = JSON.parse(await a.open_folder_dialog());
+    if (r.folder) document.getElementById('watchFolder').value = r.folder;
+  } else {
+    setStat('Backend noch nicht bereit — Ordnerauswahl nicht möglich.');
+  }
+}
+
+async function startWatchFolder() {
+  const folder = document.getElementById('watchFolder').value;
+  if (!folder) { alert('Bitte zuerst einen Ordner wählen!'); return; }
+  const action = document.getElementById('watchAction').value;
+  const preset = document.getElementById('watchPreset').value;
+  const a = api();
+  if (a) {
+    const r = JSON.parse(await a.set_watch_folder(folder, preset, action, true));
+    if (r.error) alert('Fehler: ' + r.error);
+    else document.getElementById('watchStatus').textContent =
+      '▶ Überwacht: ' + folder + ' → ' + action;
+  } else {
+    document.getElementById('watchStatus').textContent = 'Backend noch nicht bereit — Watch Folder nicht gestartet.';
+  }
+}
+
+async function stopWatchFolder() {
+  const a=api();
+  if(!a){ document.getElementById('watchStatus').textContent='Backend nicht bereit.'; return; }
+  try{
+    const r=JSON.parse(await a.set_watch_folder('', '', 'convert', false));
+    if(r.error) alert('Fehler: '+r.error);
+    else document.getElementById('watchStatus').textContent = '⏹ Gestoppt';
+  }catch(e){ alert('Watch Folder konnte nicht gestoppt werden: '+e); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BIBLIOTHEK-TAB
+// ═══════════════════════════════════════════════════════════════
+
+async function scanLibrary() {
+  const a = api();
+  if (!a) {
+    document.getElementById('libStats').textContent = 'Backend noch nicht bereit — Bibliothek-Scan nicht verfügbar';
+    return;
+  }
+  const result = await a.open_folder_dialog();
+  const r = JSON.parse(result);
+  if (r.error) return;
+  setStat('Bibliothek wird gescannt: ' + r.folder);
+  document.getElementById('libStats').textContent = 'Scannen läuft...';
+  const sr = JSON.parse(await a.scan_library(r.folder));
+  if (sr.error) {
+    document.getElementById('libStats').textContent = 'Fehler: ' + sr.error;
+  } else {
+    await loadLibraryStats();
+    await searchLibrary();
+  }
+}
+
+async function loadLibraryStats() {
+  const a = api();
+  if (!a) return;
+  try {
+    const s = JSON.parse(await a.get_library_stats());
+    const el = document.getElementById('libStats');
+    if (s.total !== undefined) {
+      const size = s.total_size ? (s.total_size / 1024 / 1024 / 1024).toFixed(1) + ' GB' : '';
+      el.textContent = `${s.total} Dateien · ${s.videos||0} Videos · ${s.audio||0} Audio ${size}`;
+    }
+  } catch(e) {}
+}
+
+async function searchLibrary() {
+  const a = api();
+  const q = document.getElementById('libSearch').value;
+  const filter = document.getElementById('libFilter').value;
+
+  let items = [];
+  if (a) {
+    if (q) {
+      const r = JSON.parse(await a.search_library(q));
+      items = Array.isArray(r) ? r : [];
+    } else {
+      const r = JSON.parse(await a.get_library(filter, 100));
+      items = Array.isArray(r) ? r : [];
+    }
+  } else {
+    document.getElementById('libStats').textContent = 'Backend noch nicht bereit — Bibliothek nicht verfügbar.';
+    items = [];
+  }
+
+  renderLibrary(items);
+}
+
+function renderLibrary(items) {
+  const el = document.getElementById('libResults');
+  if (!items.length) {
+    el.innerHTML = '<div style="padding:16px;color:#aaa;font-size:11px;">Keine Einträge gefunden.</div>';
+    return;
+  }
+  el.innerHTML = items.map(f => {
+    const dur = formatDur(f.duration || 0);
+    const size = formatSize(f.file_size || 0);
+    const res = (f.width && f.height) ? `${f.width}×${f.height}` : '';
+    const codec = f.video_codec || f.audio_codec || '';
+    const icon = f.media_type === 'audio' ? '🎵' : '🎬';
+    return `<div class="frow" style="padding:4px 8px;" onclick="showMediaInfo('${escAttr(f.path||f.filename)}')">
+      <span style="font-size:16px;flex-shrink:0;">${icon}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:bold;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          ${escHtml(f.filename || f.path || '')}
+        </div>
+        <div style="font-size:9px;color:#666;">
+          ${dur} · ${size} ${res ? '· '+res : ''} ${codec ? '· '+codec : ''}
+        </div>
+      </div>
+      <button class="btn98" style="font-size:9px;padding:2px 5px;min-width:0;" onclick="addLibFileToQueue(event,'${escAttr(f.path||f.filename)}')">+</button>
+    </div>`;
+  }).join('');
+}
+
+function formatDur(sec) {
+  if (!sec) return '';
+  const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = Math.floor(sec%60);
+  return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` :
+                 `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function formatSize(bytes) {
+  if (!bytes) return '';
+  if (bytes > 1e9) return (bytes/1e9).toFixed(1) + ' GB';
+  if (bytes > 1e6) return (bytes/1e6).toFixed(0) + ' MB';
+  return (bytes/1e3).toFixed(0) + ' KB';
+}
+
+async function showMediaInfo(path) {
+  const panel = document.getElementById('mediainfoPanel');
+  const content = document.getElementById('mediainfoContent');
+  panel.style.display = 'block';
+  content.innerHTML = 'Lade...';
+  const a = api();
+  if (!a) { content.innerHTML = 'Backend noch nicht bereit — MediaInfo nicht verfügbar'; return; }
+  try {
+    const info = JSON.parse(await a.get_mediainfo(path));
+    if (info.error) { content.innerHTML = 'Fehler: ' + info.error; return; }
+    content.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:11px;">
+        <tr><td style="padding:2px 8px;font-weight:bold;width:140px;">Datei</td><td>${escHtml(info.name||'')}</td></tr>
+        <tr style="background:#f5f5f5;"><td style="padding:2px 8px;font-weight:bold;">Typ</td><td>${info.type||''} · ${info.container||''}</td></tr>
+        <tr><td style="padding:2px 8px;font-weight:bold;">Dauer</td><td>${info.duration_fmt||''}</td></tr>
+        <tr style="background:#f5f5f5;"><td style="padding:2px 8px;font-weight:bold;">Größe</td><td>${info.size_fmt||''}</td></tr>
+        <tr><td style="padding:2px 8px;font-weight:bold;">Auflösung</td><td>${info.resolution||'–'}</td></tr>
+        ${info.video?.length ? `<tr style="background:#f5f5f5;"><td style="padding:2px 8px;font-weight:bold;">Video</td>
+          <td>${info.video.map(v=>`${v.codec} ${v.width}×${v.height} @ ${v.fps}fps`).join(', ')}</td></tr>` : ''}
+        ${info.audio?.length ? `<tr><td style="padding:2px 8px;font-weight:bold;">Audio</td>
+          <td>${info.audio.map(a=>`${a.codec} ${a.channels}ch @ ${a.sample_rate}Hz${a.language?' ['+a.language+']':''}`).join(', ')}</td></tr>` : ''}
+        ${info.subs?.length ? `<tr style="background:#f5f5f5;"><td style="padding:2px 8px;font-weight:bold;">Untertitel</td>
+          <td>${info.subs.map(s=>s.lang||s.codec).join(', ')}</td></tr>` : ''}
+        ${info.title ? `<tr><td style="padding:2px 8px;font-weight:bold;">Titel</td><td>${escHtml(info.title)}</td></tr>` : ''}
+        ${info.artist ? `<tr style="background:#f5f5f5;"><td style="padding:2px 8px;font-weight:bold;">Artist</td><td>${escHtml(info.artist)}</td></tr>` : ''}
+      </table>
+      <div style="margin-top:8px;display:flex;gap:5px;">
+        <button class="btn98" onclick="addLibFileToQueueDirect('${escAttr(path)}')">+ Zur Konvertierung</button>
+        <button class="btn98" onclick="document.getElementById('mediainfoPanel').style.display='none'">Schließen</button>
+      </div>`;
+  } catch(e) { content.innerHTML = 'Fehler: ' + e; }
+}
+
+async function addLibFileToQueue(e, path) {
+  e.stopPropagation();
+  addLibFileToQueueDirect(path);
+}
+
+function addLibFileToQueueDirect(path) {
+  const fname = path.split('\\').pop().split('/').pop();
+  if (!S.files.find(f => f.path === path)) {
+    S.files.push({ path, n: fname, sz: '', dur: '', ico: '🎬' });
+    renderFiles();
+  }
+  showTab('convert', document.getElementById('tbtn-convert'));
+  setStat('✓ ' + fname + ' zur Konvertierung hinzugefügt');
+}
+
+// Bibliothek beim Laden des Tabs aktualisieren
+function showTab(name, btn) {
+  _baseShowTab(name, btn);
+  if (name === 'library') {
+    loadLibraryStats();
+    searchLibrary();
+  }
+  if (name === 'edit') {
+    updateMenuPreview();
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// NEUE FEATURES: Drag-Drop, MediaInfo, Batch, Presets, Sound
+// ═══════════════════════════════════════════════════════════════
+
+// ── Drag-Drop Handler ────────────────────────────────────────────
+async function handleFileDrop(event) {
+  event.preventDefault();
+  const items = [...event.dataTransfer.items];
+  const files = [...event.dataTransfer.files];
+
+  for (const file of files) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    const mediaExts = ['mp4','mkv','avi','mov','wmv','flv','webm','mpg',
+                       'mpeg','vob','ts','mp3','flac','wav','aac','ogg',
+                       'm4a','iso','m4v'];
+    if (!mediaExts.includes(ext)) continue;
+
+    // Temporären Pfad erstellen (pywebview gibt uns den echten Pfad)
+    const icon = ['mp3','flac','wav','aac','ogg','m4a'].includes(ext) ? '🎵' : '🎬';
+    const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+    const entry = {
+      n: file.name,
+      path: file.path || file.name, // Electron/pywebview gibt file.path
+      sz: sizeMB + ' MB',
+      dur: '–',
+      ico: icon,
+      ext: ext,
+    };
+
+    if (!S.files.find(f => f.n === entry.n)) {
+      S.files.push(entry);
+      // Echte Dateianalyse im Hintergrund
+      analyzeDroppedFile(entry);
+    }
+  }
+  renderFiles();
+}
+
+async function analyzeDroppedFile(entry) {
+  const a = api();
+  if (!a || !entry.path || entry.path === entry.n) return;
+  try {
+    const info = JSON.parse(await a.get_mediainfo(entry.path));
+    if (info.error) return;
+    // Update entry mit echten Daten
+    entry.dur = info.duration_fmt || '–';
+    entry.sz  = info.size_fmt || entry.sz;
+    if (info.resolution) entry.res = info.resolution;
+    renderFiles();
+  } catch(e) {}
+}
+
+// ── Datei-Info Panel (links) ──────────────────────────────────────
+async function selectFileAndShowInfo(i) {
+  S.selFile = i;
+  renderFiles();
+  const f = S.files[i];
+  const panel = document.getElementById('fileInfoPanel');
+  const nameEl = document.getElementById('fiInfoName');
+  const detailEl = document.getElementById('fiInfoDetails');
+
+  panel.style.display = 'block';
+  nameEl.textContent = f.n;
+  detailEl.textContent = 'Lade Infos...';
+
+  const a = api();
+  if (a && (f.path && f.path !== f.n)) {
+    try {
+      const info = JSON.parse(await a.get_mediainfo(f.path));
+      if (!info.error) {
+        const lines = [];
+        if (info.duration_fmt) lines.push('⏱ ' + info.duration_fmt);
+        if (info.size_fmt)     lines.push('💾 ' + info.size_fmt);
+        if (info.resolution)   lines.push('📐 ' + info.resolution);
+        if (info.video?.[0])   lines.push('🎬 ' + info.video[0].codec + ' @ ' + info.video[0].fps + 'fps');
+        if (info.audio?.[0])   lines.push('🎵 ' + info.audio[0].codec + ' ' + info.audio[0].channels + 'ch');
+        if (info.subs?.length) lines.push('💬 ' + info.subs.map(s=>s.lang||'sub').join(', '));
+        detailEl.innerHTML = lines.join('<br>');
+        // Update file in list
+        f.dur = info.duration_fmt || f.dur;
+        f.sz  = info.size_fmt || f.sz;
+        renderFiles();
+      } else {
+        detailEl.textContent = f.sz + (f.dur !== '–' ? ' · ' + f.dur : '');
+      }
+    } catch(e) {
+      detailEl.textContent = f.sz;
+    }
+  } else {
+    detailEl.textContent = f.sz + (f.dur !== '–' ? ' · ' + f.dur : '');
+  }
+}
+
+function useFileForConvert() {
+  showTab('convert', document.getElementById('tbtn-convert'));
+}
+function useFileForBurn() {
+  showTab('burn', document.getElementById('tbtn-burn'));
+}
+
+function selF(i) {
+  selectFileAndShowInfo(i);
+}
+
+// ── Presets dynamisch laden ───────────────────────────────────────
+async function loadPresetsFromBackend() {
+  const a = api();
+  if (!a) return;
+
+  const sel = document.getElementById('presetSel');
+  if (!sel) return;
+
+  try {
+    const presets = JSON.parse(await a.get_presets());
+    if (!Array.isArray(presets) || !presets.length) return;
+
+    // Optgroups nach Kategorie
+    const cats = {
+      video:  'Video',
+      audio:  'Audio',
+      device: 'Gerät',
+      disc:   'Disc-Format',
+    };
+    sel.innerHTML = '';
+    for (const [cat, label] of Object.entries(cats)) {
+      const group = presets.filter(p => p.category === cat);
+      if (!group.length) continue;
+      const optgroup = document.createElement('optgroup');
+      optgroup.label = label;
+      for (const p of group) {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.name;
+        optgroup.appendChild(opt);
+      }
+      sel.appendChild(optgroup);
+    }
+    setStat('✓ ' + presets.length + ' Presets geladen');
+  } catch(e) {
+    console.log('Presets laden:', e);
+  }
+}
+
+function onPresetChange() {
+  const sel = document.getElementById('presetSel');
+  if (!sel) return;
+  const val = sel.value;
+  // Disc-Karten synchron auswählen
+  const catMap = {
+    mp4_h264_1080p: 'video', mp4_h265_4k: 'video',
+    mkv_h265_copy_audio: 'video', avi_xvid: 'video', webm_vp9: 'video',
+    mp3_320k: 'audio', mp3_192k: 'audio', flac_lossless: 'audio',
+    wav_pcm: 'audio', aac_256k: 'audio',
+    iphone: 'device', android: 'device', ps5: 'device', smart_tv: 'device',
+    dvd_pal: 'disc', dvd_ntsc: 'disc', audio_cd: 'disc',
+  };
+  const cat = catMap[val];
+  if (cat) {
+    document.querySelectorAll('#discIconRow .disc-card').forEach(c => {
+      c.classList.toggle('sel', c.dataset.type === cat);
+    });
+  }
+}
+
+// ── Batch-Konvertierung ───────────────────────────────────────────
+async function goBatchConvert() {
+  const a = api();
+  const sel = document.getElementById('presetSel');
+  const preset = sel ? sel.value : 'mp4_h264_1080p';
+
+  if (a) {
+    const r = JSON.parse(await a.open_folder_for_batch());
+    if (r.error) return;
+    setStat('Batch-Konvertierung wird gestartet...');
+    const result = JSON.parse(await a.convert_batch(r.folder, preset));
+    if (result.error) alert('Batch-Fehler: ' + result.error);
+    else showTab('queue', document.getElementById('tbtn-queue'));
+  } else {
+    alert('Backend noch nicht bereit — Batch-Konvertierung nicht möglich.');
+  }
+}
+
+// ── Ordner für Batch öffnen (aus linker Panel) ────────────────────
+async function openFolderBatch() {
+  await goBatchConvert();
+}
+
+// ── Sound Test ────────────────────────────────────────────────────
+async function testSound() {
+  const a = api();
+  if (a) {
+    JSON.parse(await a.play_sound());
+  } else {
+    playSound(); // lokale JS-Implementation
+  }
+  setStat('🔊 Fertig-Sound gespielt');
+}
+
+
+// ── Watch Folder Status laden ─────────────────────────────────────
+async function loadWatchFolders() {
+  const a = api();
+  if (!a) return;
+  try {
+    const wf = JSON.parse(await a.get_watch_folders());
+    const statusEl = document.getElementById('watchStatus');
+    if (statusEl && wf.length) {
+      statusEl.textContent = '▶ Aktiv: ' + wf[0].folder;
+      const folderEl = document.getElementById('watchFolder');
+      if (folderEl) folderEl.value = wf[0].folder;
+    }
+  } catch(e) {}
+}
+
+// ── Queue: Job abbrechen per Button ──────────────────────────────
+function renderJobs() {
+  const l = document.getElementById('jlist');
+  if (!S.jobs.length) {
+    l.innerHTML = '<div style="padding:16px;color:#666;font-size:11px;">Keine Jobs vorhanden.</div>';
+    return;
+  }
+  const icons = { pending:'⏳', running:'🔄', done:'✅', failed:'❌', cancelled:'⛔' };
+  l.innerHTML = S.jobs.map(j => `
+    <div class="jobrow" style="${j.state==='running'?'background:#e8f4ff;':''}">
+      <span class="jstate">${icons[j.state]||'⏳'}</span>
+      <span class="jname" title="${j.name||''}">${j.name||j.id}</span>
+      ${j.state==='running'||j.state==='pending' ? `
+        <div style="flex:1;background:#ddd;height:8px;border:1px solid #aaa;margin:0 6px;overflow:hidden;border-radius:2px;">
+          <div style="height:100%;width:${j.prog||0}%;background:repeating-linear-gradient(90deg,#1144aa 0,#1144aa 10px,#3366cc 10px,#3366cc 12px);transition:width 0.3s;"></div>
+        </div>
+        <span class="jpct" style="font-size:9px;width:28px;">${Math.floor(j.prog||0)}%</span>
+        <button style="padding:1px 5px;font-size:9px;cursor:pointer;border:1px solid #cc4444;color:#cc4444;background:#fff3f3;margin-left:3px;" 
+          onclick="cancelJobUI('${j.id}')">✕</button>
+      ` : `<span class="jpct">${Math.floor(j.prog||0)}%</span>`}
+    </div>`).join('');
+}
+
+async function cancelJobUI(jobId) {
+  if (!confirm('Job abbrechen?')) return;
+  await cancelJob(jobId);
+}
+
+
+// ── Korrekter Start: erst UI aufbauen, dann auf die Python-Bridge warten ──
+// init() ist reines JavaScript (Tabs, Buttons) -> sofort OK
+
+// ── Brenner-/Rohling-Erkennung anzeigen ──
+async function loadBurners(){
+  const ba = document.getElementById('burnerArea');
+  const ma = document.getElementById('mediaArea');
+  if(!ba) return;
+  const a = api();
+  if(!a){ ba.innerHTML = '<div class="media-empty">Backend startet noch...</div>'; return; }
+  ba.innerHTML = '<div class="media-empty">Suche nach Laufwerk...</div>';
+  try{
+    const r = JSON.parse(await a.detect_burners());
+    if(r.error || !r.drives || r.drives.length===0){
+      ba.innerHTML = '<div class="media-empty">Kein optisches Laufwerk gefunden.</div>'
+        + (r.note ? '<div class="detect-note">'+r.note+'</div>' : '')
+        + (r.error ? '<div class="detect-note">'+r.error+'</div>' : '');
+      ma.innerHTML = '<div class="media-empty">-</div>';
+      return;
+    }
+    const driveOptions = r.drives.map(d =>
+      '<option value="'+escAttr(d.letter||'')+'">'+escHtml((d.letter||'?')+' — '+(d.name||'Optisches Laufwerk'))+'</option>'
+    ).join('');
+    const burnerSelect=document.getElementById('burnerSelect');
+    const ripDriveSelect=document.getElementById('ripDriveSelect');
+    if(burnerSelect) burnerSelect.innerHTML=driveOptions;
+    if(ripDriveSelect) ripDriveSelect.innerHTML=driveOptions;
+
+    const d = r.drives[0];
+    let caps = (d.caps||[]).map(c=>'<span class="dev-cap">'+c+'</span>').join('');
+    ba.innerHTML =
+      '<div class="dev-card">'+
+        '<div class="dev-ico"><svg width="28" height="28" viewBox="0 0 28 28"><rect x="3" y="8" width="22" height="12" rx="2" fill="#7f8c9a"/><circle cx="14" cy="14" r="3" fill="#fff"/><rect x="6" y="10" width="2" height="2" fill="#4caf50"/></svg></div>'+
+        '<div class="dev-info"><h3>'+d.name+'</h3>'+
+          '<p>Laufwerk '+(d.letter||'?')+' \u00b7 erkannt \u00fcber System</p>'+
+          '<div class="dev-caps">'+caps+'</div></div>'+
+      '</div>'+
+      (caps ? '<div class="detect-note">Faehigkeiten aus Laufwerksname abgeleitet.</div>' : '');
+    // Rohling
+    const m = d.media || {present:false};
+    if(!m.present){
+      ma.innerHTML = '<div class="media-row"><div class="media-disc empty"></div>'+
+        '<div class="media-stats"><div class="media-empty">Kein Rohling eingelegt - bitte einlegen.</div></div></div>';
+    } else if(m.readable){
+      ma.innerHTML = '<div class="media-row"><div class="media-disc"></div>'+
+        '<div class="media-stats">'+
+        '<div class="mstat"><span class="k">Status</span><span class="v">Medium eingelegt</span></div>'+
+        '<div class="mstat"><span class="k">Kapazitaet</span><span class="v">'+m.capacity_gb+' GB</span></div>'+
+        '</div></div>';
+    } else {
+      ma.innerHTML = '<div class="media-row"><div class="media-disc"></div>'+
+        '<div class="media-stats">'+
+        '<div class="mstat"><span class="k">Status</span><span class="v">Rohling erkannt</span></div>'+
+        '</div></div>'+
+        '<div class="detect-note">Hersteller &amp; genaue Kapazitaet eines leeren Rohlings sind ohne Tieferkennung nicht auslesbar.</div>';
+    }
+  }catch(e){
+    ba.innerHTML = '<div class="media-empty">Fehler beim Auslesen.</div><div class="detect-note">'+e+'</div>';
+  }
+}
+
+// ── LAUNCHER-NAVIGATION (CloneCD-Stil) ──
+const FLOW_TITLES = {
+  convert:['Konvertieren','Format waehlen und umwandeln'],
+  burn:['Disc brennen','Rohling einlegen und brennen'],
+  rip:['Disc rippen','DVD oder CD als Datei einlesen'],
+  download:['Download','Video aus dem Netz holen'],
+  search:['Suche','Medien finden'],
+  edit:['Bearbeiten','Schneiden und Menue gestalten'],
+  ai:['AI Tools','KI-gestuetzte Funktionen'],
+  library:['Bibliothek','Deine konvertierten Dateien'],
+  queue:['Job Queue','Laufende und fertige Aufgaben'],
+  settings:['Einstellungen','Tools und Optionen']
+};
+function openFlow(name){
+  document.body.classList.remove('home-mode');
+  document.body.classList.add('flow-mode');
+  // Do not resize through the pywebview API here: on some Windows/WebView2
+  // runtimes, calling window.resize from a JS bridge thread minimizes the app.
+  const btn = document.getElementById('tbtn-'+name);
+  showTab(name, btn);
+  if(name==='burn'){ setTimeout(loadBurners, 50); }
+  if(name==='download'){ setTimeout(()=>document.getElementById('urlinp')?.focus(), 50); }
+  const t = FLOW_TITLES[name] || [name,''];
+  document.getElementById('flowTitle').textContent = t[0];
+  document.getElementById('flowSub').textContent = t[1];
+}
+function goHome(){
+  document.body.classList.remove('flow-mode');
+  document.body.classList.add('home-mode');
+}
+// Beim Start im Home-Modus
+document.body.classList.add('home-mode');
+
+init();
+
+// startup() braucht die pywebview-Bridge (window.pywebview.api).
+// Die wird von PyWebView NACH dem Laden injiziert und meldet sich
+// mit dem Event 'pywebviewready'. Vorher waren alle api()-Aufrufe null
+// -> deshalb taten die Buttons nichts.
+function startBackend(){
+  if (window.__retrodisc_started) return;   // nur einmal
+  window.__retrodisc_started = true;
+  startup();
+}
+
+if (window.pywebview && window.pywebview.api) {
+  // Bridge schon da (schneller Rechner)
+  startBackend();
+} else {
+  // Auf die Bridge warten
+  window.addEventListener('pywebviewready', startBackend);
+  // Sicherheitsnetz: falls das Event verpasst wurde, pollen
+  let _tries = 0;
+  const _poll = setInterval(() => {
+    if (window.pywebview && window.pywebview.api) {
+      clearInterval(_poll);
+      startBackend();
+    } else if (++_tries > 100) {   // nach ~10s aufgeben
+      clearInterval(_poll);
+      console.warn('pywebview-Bridge nicht gefunden - Browser-Modus');
+      startBackend();
+    }
+  }, 100);
+}
+</script>
+</body>
+</html>

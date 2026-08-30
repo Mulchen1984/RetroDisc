@@ -1,0 +1,36 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Generated audits and temporary files
+.audit_tmp/
+*.log
+*.tmp
+*.temp
+*.bak
+*~
+
+# Build and release outputs (keep on disk, do not version)
+build/
+dist/
+Output/
+*.pkg
+*.iso
+*.dmg
+
+# Downloaded/generated third-party runtimes and ML models
+vendor/
+
+# IDE and OS metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

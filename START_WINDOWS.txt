@@ -1,0 +1,25 @@
+RetroDisc - Weiterentwicklung auf Windows
+==========================================
+
+1) Python 3.11+ installieren (python.org), beim Setup "Add to PATH" anhaken.
+
+2) In diesem Ordner ein Terminal oeffnen (Shift + Rechtsklick -> "PowerShell hier oeffnen")
+   und einrichten:
+
+   python -m venv .venv
+   .\.venv\Scripts\activate
+   pip install -r requirements.txt
+
+3) FFmpeg muss verfuegbar sein:
+   - entweder ffmpeg.exe + ffprobe.exe in den Ordner tools\ legen
+   - oder FFmpeg systemweit installieren (im PATH)
+
+4) Starten:
+   python retrodisc_portable.py
+
+5) Als EXE bauen (optional):
+   - lokal:  BUILD_WINDOWS.bat ausfuehren
+   - oder ueber GitHub Actions (.github/workflows/build.yml)
+
+Den Coding-Assistenten (Hermes o.ae.) mit dem Text in HERMES_PROMPT.txt fuettern.
+Naechster sinnvoller Schritt steht dort: das kompakte/wachsende CloneCD-Fenster.
