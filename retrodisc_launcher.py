@@ -224,6 +224,7 @@ class RetroDiscBridge:
 
     def __init__(self, window=None):
         self.window = window
+        self._splash_transition_started = False
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(
             target=lambda: self._loop.run_forever(), daemon=True
@@ -1102,12 +1103,27 @@ class RetroDiscBridge:
     def splash_complete(self):
         """Wird vom Splash-Screen aufgerufen wenn er fertig ist."""
         log.info("Splash fertig - lade Haupt-UI")
-        if self.window:
+        if self.window and not self._splash_transition_started:
+            self._splash_transition_started = True
             ui_html = BUNDLE_DIR / "src" / "ui" / "app.html"
             html_content = ui_html.read_text(encoding="utf-8")
-            # Keep the main page on the same inline origin as the splash.
-            # Loading file:// here can make WebView2 lose the injected JS API.
-            self.window.load_html(html_content)
+
+            def load_main_ui():
+                try:
+                    if self.window:
+                        # Keep the main page on the same inline origin as the
+                        # splash. Loading file:// here can make WebView2 lose
+                        # the injected JS API.
+                        self.window.load_html(html_content)
+                except Exception as exc:
+                    log.error("Haupt-UI konnte nicht geladen werden", error=str(exc))
+
+            # Return the API response before replacing the splash document.
+            # Otherwise pywebview tries to resolve the JS promise after its
+            # callback table has already been destroyed by the navigation.
+            transition = threading.Timer(0.05, load_main_ui)
+            transition.daemon = True
+            transition.start()
         return json.dumps({"ok": True})
 
 

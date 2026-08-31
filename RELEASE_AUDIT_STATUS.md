@@ -185,3 +185,17 @@ Verifikation auf dem aktuellen Source:
 - Unabhängige QA durch einen einzelnen, read-only Claude-Sonnet/high-Auftrag: **PASS, keine Release-Blocker**. Eine mögliche längere Shutdown-Dauer bei mehreren gleichzeitig hängenden nativen Prozessen wurde als nicht blockierende Härtungsoption dokumentiert; aktuelle Cancel-/Shutdown-Regressionen sind grün.
 
 Nächster Gate: Source Freeze erstellen, danach ausschließlich aus diesem Commit frische Release-Artefakte bauen und testen.
+
+### 2026-08-31 18:26–18:51 CEST — Erster Freeze-Build invalidiert, Splash-Race geschlossen
+
+- Der zunächst bei Commit `f706f7b` eingefrorene Source bestand erneut alle Gates und wurde mit `build.py --clean` zu EXE, Portable-ZIP und Installer gebaut.
+- Die neue `dist/RetroDisc.exe` startete als eigenständiger Prozess, veröffentlichte das antwortende Fenster `RetroDisc 1.0` und entpackte die gebündelten Runtime-Dateien. Gebündelte FFmpeg-/FFprobe-/yt-dlp-Binaries starteten; FFmpeg erzeugte und konvertierte ein reales H.264/AAC-Testvideo, das FFprobe korrekt als 320×180/H.264/AAC validierte.
+- Der separate Start derselben EXE aus dem frisch entpackten Portable-ZIP reproduzierte jedoch bei jedem Start einen unbehandelten `webview.errors.JavascriptException`-Traceback im Fehlerkanal. Dieser Build und seine drei Artefakte wurden damit als Releasebeleg verworfen.
+- Exakte Ursache: `RetroDiscBridge.splash_complete()` ersetzte das Splash-Dokument synchron über `load_html`, bevor pywebview den JavaScript-Promise der Bridge-Methode beantworten konnte. Nach der Navigation existierte der registrierte `splash_complete`-Callback im alten Dokument nicht mehr.
+- Kleinster Fix: Der Dokumentwechsel wird einmalig über einen daemonisierten 50-ms-Timer geplant. Die API-Methode antwortet damit vor der Navigation; doppelte Übergänge werden durch `_splash_transition_started` verhindert, Ladefehler werden geloggt.
+- Neuer Regressionstest `test_splash_transition_returns_before_replacing_the_document` beweist, dass vor der Bridge-Antwort kein `load_html` ausgeführt wird, dass der Timer daemonisiert ist und dass ein zweiter Aufruf keine zweite Navigation plant.
+- Vollständige Source-Gates nach dem Fix: `pytest -q` **67 passed in 8.61s**, `compileall` Exitcode 0, `.hermes/verify_core.py` Exitcode 0 mit realem MP3-Job, Inline-JavaScript-Syntax grün, produktiver UI/API-Vergleich mit 47 Aufrufen und 0 fehlenden Zielen/Signaturfehlern.
+- Vollständiger Real-Media-Smoke `build/e2e-smoke-20260831-184856`: Exitcode 0; Trim, Merge, Upscale, Interpolation, Highlights, deutsche Faster-Whisper-SRT und DVD-ISO erfolgreich.
+- Ein einzelner enger, read-only Claude-Sonnet/high-Review des Splash-Fixes und Regressionstests: **PASS, kein Release-Blocker**. Keine Parallelaufträge und keine Claude-Änderungen.
+
+Nächster Gate: neuen Source Freeze aus dem Splash-Fix erstellen; anschließend alle drei Artefakte erneut sauber bauen und ausschließlich den neuen Build testen.

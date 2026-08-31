@@ -232,3 +232,41 @@ def test_startup_branding_is_embedded_and_bridge_can_finish_splash():
     assert "def splash_complete(self): return self._bridge.splash_complete()" in launcher
     assert "self.window.load_html(html_content)" in launcher
     assert (PROJECT_ROOT / "assets" / "retrodisc_startup.png").is_file()
+
+
+def test_splash_transition_returns_before_replacing_the_document(monkeypatch):
+    scheduled = []
+
+    class FakeWindow:
+        loaded_html = None
+
+        def load_html(self, html):
+            self.loaded_html = html
+
+    class FakeTimer:
+        daemon = False
+
+        def __init__(self, interval, callback):
+            self.interval = interval
+            self.callback = callback
+            scheduled.append(self)
+
+        def start(self):
+            pass
+
+    bridge = RetroDiscBridge.__new__(RetroDiscBridge)
+    bridge.window = FakeWindow()
+    bridge._splash_transition_started = False
+    monkeypatch.setattr("retrodisc_launcher.threading.Timer", FakeTimer)
+
+    assert json.loads(bridge.splash_complete()) == {"ok": True}
+    assert bridge.window.loaded_html is None
+    assert len(scheduled) == 1
+    assert scheduled[0].interval > 0
+    assert scheduled[0].daemon is True
+
+    scheduled[0].callback()
+    assert "<!DOCTYPE html>" in bridge.window.loaded_html
+
+    assert json.loads(bridge.splash_complete()) == {"ok": True}
+    assert len(scheduled) == 1
