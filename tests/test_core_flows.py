@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import ast
+import importlib
+import json
 import re
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
 from src.config.presets import ALL_PRESETS
+from src.config.settings import AppSettings
 from src.core.downloader import Downloader, DownloadError
-from retrodisc_launcher import get_splash_url
+from retrodisc_launcher import RetroDiscBridge, get_splash_url
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -112,6 +117,109 @@ def test_ui_has_no_duplicate_functions_or_simulated_job_fallbacks():
     assert not duplicates, f"Doppelte JavaScript-Funktionen: {duplicates}"
     for forbidden in ("_origStartup", "Math.random()", "addJob(", "(Demo)"):
         assert forbidden not in html, f"Simulierter oder toter UI-Pfad gefunden: {forbidden}"
+
+
+def test_ui_has_no_removed_dvd_menu_or_unsupported_search_burn_hooks():
+    html = UI_FILE.read_text(encoding="utf-8")
+    for forbidden in (
+        "updateMenuPreview()", "burnSelectedResults", "burnSelBtn", "chkSound",
+        "ISO-Image (1:1 Kopie)", "S.jobs=S.jobs.filter(j=>j.state==='running');",
+    ):
+        assert forbidden not in html, f"Toter oder nicht verdrahteter UI-Pfad gefunden: {forbidden}"
+    launcher = (PROJECT_ROOT / "retrodisc_launcher.py").read_text(encoding="utf-8")
+    for forbidden in ("get_dvd_menu_templates", "set_dvd_menu", "self._dvd_menu"):
+        assert forbidden not in launcher, f"Tote DVD-Menü-API gefunden: {forbidden}"
+
+
+def test_whisper_runtime_dependency_is_declared_packaged_and_importable():
+    requirements = (PROJECT_ROOT / "requirements.txt").read_text(encoding="utf-8")
+    assert re.search(r"^requests(?:[<>=!~].*)?(?:\s+#.*)?$", requirements, re.MULTILINE)
+
+    build_tree = ast.parse((PROJECT_ROOT / "build.py").read_text(encoding="utf-8"))
+    runtime_deps = next(
+        ast.literal_eval(node.value)
+        for node in build_tree.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "RUNTIME_DEPS" for target in node.targets)
+    )
+    assert "requests" in runtime_deps
+
+    spec = (PROJECT_ROOT / "retrodisc_final.spec").read_text(encoding="utf-8")
+    assert re.search(r'"requests"', spec)
+    assert importlib.import_module("requests")
+    assert importlib.import_module("faster_whisper")
+
+
+def test_bridge_dynamic_jobs_submit_distinct_per_job_handlers():
+    bridge = object.__new__(RetroDiscBridge)
+    captured = []
+    bridge.converter = SimpleNamespace()
+    bridge.downloader = SimpleNamespace(validate_url=lambda url: url)
+    bridge._submit_job = lambda job, handler: (
+        captured.append((job, handler)) or json.dumps({"job_id": job.id})
+    )
+
+    source = PROJECT_ROOT / "tests" / "fixtures" / "test_video.mp4"
+    assert "job_id" in json.loads(bridge.convert_file(str(source), "mp4_h264_1080p"))
+    assert "job_id" in json.loads(bridge.download_url("https://example.com/video"))
+
+    assert len(captured) == 2
+    assert captured[0][0].id != captured[1][0].id
+    assert captured[0][1] is not captured[1][1]
+
+    launcher = (PROJECT_ROOT / "retrodisc_launcher.py").read_text(encoding="utf-8")
+    module = ast.parse(launcher)
+    bridge_class = next(
+        node for node in module.body
+        if isinstance(node, ast.ClassDef) and node.name == "RetroDiscBridge"
+    )
+    watch_method = next(
+        node for node in bridge_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "set_watch_folder"
+    )
+    watch_source = ast.get_source_segment(launcher, watch_method)
+    assert "await self.pipeline.submit(job, handler=handler)" in watch_source
+
+
+def test_bridge_save_settings_merges_and_applies_runtime_dependencies(tmp_path):
+    bridge = object.__new__(RetroDiscBridge)
+    bridge.settings = AppSettings()
+    bridge.settings.tools.mkisofs = "preserve-mkisofs"
+    bridge.ffmpeg = SimpleNamespace(ffmpeg_path="old-ffmpeg", ffprobe_path="old-ffprobe")
+    bridge.converter = SimpleNamespace(output_dir=None)
+    bridge.downloader = SimpleNamespace(ytdlp_path="old-ytdlp", ffmpeg_path="old-ffmpeg", output_dir=None)
+    bridge.disc = SimpleNamespace(
+        dvdauthor="old-dvdauthor", mkisofs="old-mkisofs",
+        growisofs="old-growisofs", cdrecord="old-cdrecord",
+    )
+    bridge.pipeline = SimpleNamespace(max_concurrent=99)
+
+    payload = {
+        "tools": {
+            "ffmpeg": "new-ffmpeg",
+            "ffprobe": "new-ffprobe",
+            "ytdlp": "new-ytdlp",
+            "dvdauthor": "new-dvdauthor",
+        },
+        "directories": {
+            "output_dir": str(tmp_path / "output"),
+            "download_dir": str(tmp_path / "downloads"),
+        },
+    }
+    with patch.object(AppSettings, "save", autospec=True) as save_mock:
+        result = json.loads(bridge.save_settings(json.dumps(payload)))
+
+    assert result == {"ok": True}
+    save_mock.assert_called_once()
+    assert bridge.settings.tools.mkisofs == "preserve-mkisofs"
+    assert bridge.ffmpeg.ffmpeg_path == "new-ffmpeg"
+    assert bridge.ffmpeg.ffprobe_path == "new-ffprobe"
+    assert bridge.converter.output_dir == tmp_path / "output"
+    assert bridge.downloader.ytdlp_path == "new-ytdlp"
+    assert bridge.downloader.ffmpeg_path == "new-ffmpeg"
+    assert bridge.downloader.output_dir == tmp_path / "downloads"
+    assert bridge.disc.dvdauthor == "new-dvdauthor"
+    assert bridge.disc.mkisofs == "preserve-mkisofs"
 
 
 def test_startup_branding_is_embedded_and_bridge_can_finish_splash():

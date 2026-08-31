@@ -79,7 +79,7 @@ hiddenimports = [
 
     # Netzwerk
     "httpx", "httpx._transports.default",
-    "httpcore", "certifi", "charset_normalizer",
+    "httpcore", "certifi", "charset_normalizer", "requests",
 
     # yt-dlp — alle Extraktoren
     "yt_dlp",

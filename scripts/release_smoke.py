@@ -4,8 +4,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from src.core.disc import DiscTools
 from src.core.ffmpeg import FFmpeg
@@ -15,7 +20,6 @@ from src.services.smart_edit import SmartEdit
 from src.services.subtitle import SubtitleGenerator
 from src.services.upscaler import VideoUpscaler
 
-ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "test_video.mp4"
 SPEECH_FIXTURE = ROOT / "tests" / "fixtures" / "spoken_de.wav"
 FFMPEG = ROOT / "vendor" / "ffmpeg.exe"

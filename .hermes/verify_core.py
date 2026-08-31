@@ -4,15 +4,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import tempfile
 import time
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from retrodisc_launcher import RetroDiscBridge
 from src.models.media import JobState
 
 
-root = Path(__file__).resolve().parent.parent
+root = ROOT
 source = root / "tests" / "fixtures" / "test_video.mp4"
 out_dir = Path(tempfile.mkdtemp(prefix="retrodisc_convert_"))
 bridge = RetroDiscBridge()

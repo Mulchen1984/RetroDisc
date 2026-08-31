@@ -290,7 +290,6 @@ class RetroDiscBridge:
         self.library = MediaLibrary(ffmpeg=self.ffmpeg)
         self.library.open()
         self._watch = None
-        self._dvd_menu = {"template": "classic", "title": "RetroDisc", "chapters": []}
 
         log.info("Bridge initialisiert")
 
@@ -306,6 +305,7 @@ class RetroDiscBridge:
         self._emit("job_done", {
             "id": job.id,
             "name": job.params.get("display_name", job.id),
+            "type": job.job_type.value,
             "output": str(job.output_path) if job.output_path else None,
             "elapsed": round(job.elapsed_seconds, 1),
         })
@@ -441,8 +441,6 @@ class RetroDiscBridge:
             params={"display_name": f"{source.name} -> {preset.display_name}",
                     "overwrite": bool(overwrite)},
         )
-        self._wire_job_progress(job)
-
         async def _handler(j):
             result = await self.converter.convert_file(
                 j.input_files[0], j.preset, j.output_path, job=j,
@@ -450,14 +448,7 @@ class RetroDiscBridge:
             )
             j.output_path = result
 
-        self.pipeline.register_handler(JobType.CONVERT.value, _handler)
-        self._async(self.pipeline.submit(job))
-        if not self.pipeline._is_running:
-            self._async(self.pipeline.start())
-
-        self._emit("job_queued", {"id": job.id,
-                                  "name": job.params["display_name"]})
-        return json.dumps({"job_id": job.id, "status": "queued"})
+        return self._submit_job(job, _handler)
 
     def get_presets(self, category: str = None) -> str:
         from src.config.presets import ALL_PRESETS, get_presets_by_category
@@ -490,8 +481,6 @@ class RetroDiscBridge:
                     "subtitles": bool(subtitles),
                     "display_name": f"Download: {url[:50]}"},
         )
-        self._wire_job_progress(job)
-
         async def _handler(j):
             result = await self.downloader.download(
                 url=j.params["url"],
@@ -503,14 +492,7 @@ class RetroDiscBridge:
             )
             j.output_path = result
 
-        self.pipeline.register_handler(JobType.DOWNLOAD.value, _handler)
-        self._async(self.pipeline.submit(job))
-        if not self.pipeline._is_running:
-            self._async(self.pipeline.start())
-
-        self._emit("job_queued", {"id": job.id,
-                                  "name": job.params["display_name"]})
-        return json.dumps({"job_id": job.id, "status": "queued"})
+        return self._submit_job(job, _handler)
 
     # ── Suche ─────────────────────────────────────────────────────────
     def search_media(self, query: str, sources: str = "[]", max_results: int = 15) -> str:
@@ -546,11 +528,46 @@ class RetroDiscBridge:
     def get_settings(self) -> str:
         return self.settings.model_dump_json()
 
+    @staticmethod
+    def _deep_merge_settings(current: dict, updates: dict) -> dict:
+        """Merge UI partial settings without resetting hidden preferences."""
+        merged = dict(current)
+        for key, value in updates.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = RetroDiscBridge._deep_merge_settings(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+
+    def _apply_runtime_settings(self) -> None:
+        """Apply persisted paths/directories to already-created services."""
+        tools = self.settings.tools
+        directories = self.settings.directories
+        self.ffmpeg.ffmpeg_path = tools.ffmpeg
+        self.ffmpeg.ffprobe_path = tools.ffprobe
+        self.converter.output_dir = directories.output_dir
+        self.downloader.ytdlp_path = tools.ytdlp
+        self.downloader.ffmpeg_path = tools.ffmpeg
+        self.downloader.output_dir = directories.download_dir
+        self.disc.dvdauthor = tools.dvdauthor
+        self.disc.mkisofs = tools.mkisofs
+        self.disc.growisofs = tools.growisofs
+        self.disc.cdrecord = tools.cdrecord
+        self.pipeline.max_concurrent = self.settings.conversion.max_concurrent_jobs
+
     def save_settings(self, data: str) -> str:
         try:
             from src.config.settings import AppSettings
-            self.settings = AppSettings.model_validate_json(data)
-            self.settings.save()
+            updates = json.loads(data)
+            if not isinstance(updates, dict):
+                raise ValueError("Einstellungen müssen ein JSON-Objekt sein.")
+            merged = self._deep_merge_settings(
+                self.settings.model_dump(mode="json"), updates
+            )
+            new_settings = AppSettings.model_validate(merged)
+            new_settings.save()
+            self.settings = new_settings
+            self._apply_runtime_settings()
             return json.dumps({"ok": True})
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -647,11 +664,10 @@ class RetroDiscBridge:
 
     # ── Gemeinsame Queue-Hilfe ─────────────────────────────────────────
     def _submit_job(self, job, handler) -> str:
-        """Registriert den Handler, stellt den Job sicher in die Queue und startet sie."""
+        """Stellt Job und dessen unverwechselbaren Handler sicher in die Queue."""
         self._wire_job_progress(job)
-        self.pipeline.register_handler(job.job_type.value, handler)
         try:
-            self._async(self.pipeline.submit(job)).result(timeout=5)
+            self._async(self.pipeline.submit(job, handler=handler)).result(timeout=5)
         except Exception as e:
             return json.dumps({"error": f"Job konnte nicht eingereiht werden: {e}"})
         if not self.pipeline._is_running:
@@ -1037,11 +1053,14 @@ class RetroDiscBridge:
                             j.input_files[0], j.preset, job=j, overwrite=False)
 
                 self._wire_job_progress(job)
-                self.pipeline.register_handler(job.job_type.value, handler)
-                await self.pipeline.submit(job)
+                await self.pipeline.submit(job, handler=handler)
                 if not self.pipeline._is_running:
                     asyncio.create_task(self.pipeline.start())
-                self._emit("job_queued", {"id": job.id, "name": job.params["display_name"]})
+                self._emit("job_queued", {
+                    "id": job.id,
+                    "name": job.params["display_name"],
+                    "type": job.job_type.value,
+                })
 
             self._watch = WatchFolder(path, [rule], self.pipeline, submit_callback=_submit_watched)
             self._async(self._watch.start())
@@ -1061,32 +1080,6 @@ class RetroDiscBridge:
                        "preset": r.preset, "enabled": r.enabled} for r in watch.rules],
         }])
 
-    # ── DVD-Menü-Konfiguration ─────────────────────────────────────────
-    def get_dvd_menu_templates(self) -> str:
-        return json.dumps([
-            {"id": "classic", "name": "Klassisch", "desc": "Schwarz und klar", "preview": "🎬"},
-            {"id": "cinema", "name": "Cinema", "desc": "Vorhang und Gold", "preview": "🎭"},
-            {"id": "nature", "name": "Natur", "desc": "Grüne Farbtöne", "preview": "🌿"},
-            {"id": "retro", "name": "Retro", "desc": "VHS-Look", "preview": "📼"},
-            {"id": "minimal", "name": "Minimal", "desc": "Klare Typografie", "preview": "◻"},
-            {"id": "family", "name": "Familie", "desc": "Freundliche Farben", "preview": "👨‍👩‍👧"},
-            {"id": "concert", "name": "Konzert", "desc": "Spotlight-Look", "preview": "🎸"},
-            {"id": "holiday", "name": "Urlaub", "desc": "Sonnen-Motiv", "preview": "🌅"},
-        ])
-
-    def set_dvd_menu(self, template_id: str, title: str,
-                     chapters: str = "[]") -> str:
-        valid = {x["id"] for x in json.loads(self.get_dvd_menu_templates())}
-        if template_id not in valid:
-            return json.dumps({"error": f"Unbekanntes DVD-Menü-Template: {template_id}"})
-        try:
-            chapter_list = json.loads(chapters) if isinstance(chapters, str) else chapters
-            self._dvd_menu = {"template": template_id,
-                              "title": (title or "RetroDisc DVD").strip(),
-                              "chapters": chapter_list or []}
-            return json.dumps({"ok": True, "config": self._dvd_menu})
-        except Exception as e:
-            return json.dumps({"error": str(e)})
 
     def check_tools(self, *args):
         return self.get_tool_status()
@@ -1096,8 +1089,8 @@ class RetroDiscBridge:
         try:
             if self._watch and self._watch._running:
                 self._async(self._watch.stop()).result(timeout=3)
-            if self.pipeline._is_running:
-                self._async(self.pipeline.stop()).result(timeout=5)
+            if self.pipeline._is_running or self.pipeline._running or self.pipeline._queue:
+                self._async(self.pipeline.shutdown()).result(timeout=5)
         except Exception as e:
             log.warning("Backend-Cleanup unvollständig", error=str(e))
         try:
@@ -1167,8 +1160,7 @@ class RetroDiscApi:
     def merge_videos(self, *args): return self._bridge.merge_videos(*args)
     def set_watch_folder(self, *args): return self._bridge.set_watch_folder(*args)
     def get_watch_folders(self, *args): return self._bridge.get_watch_folders(*args)
-    def get_dvd_menu_templates(self, *args): return self._bridge.get_dvd_menu_templates(*args)
-    def set_dvd_menu(self, *args): return self._bridge.set_dvd_menu(*args)
+
     def cancel_job(self, *args): return self._bridge.cancel_job(*args)
     def splash_complete(self): return self._bridge.splash_complete()
 

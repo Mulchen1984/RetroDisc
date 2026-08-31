@@ -36,6 +36,7 @@ class Pipeline:
         self._queue: deque[Job] = deque()
         self._running: list[Job] = []
         self._completed: list[Job] = []
+        self._tasks: dict[str, asyncio.Task] = {}
         self._is_running = False
         self._lock = asyncio.Lock()
 
@@ -46,15 +47,21 @@ class Pipeline:
 
         # Job-Handler Registry
         self._handlers: dict[str, Callable] = {}
+        # Dynamische Bridge-Aufträge können pro Job unterschiedliche
+        # Closures/Parameter besitzen. Ein reines Typ-Registry würde den
+        # Handler älterer, noch wartender Jobs beim nächsten Submit ersetzen.
+        self._job_handlers: dict[str, Callable] = {}
 
     def register_handler(self, job_type: str, handler: Callable) -> None:
         """Registriert einen Handler für einen Job-Typ."""
         self._handlers[job_type] = handler
         log.info("Handler registriert", job_type=job_type)
 
-    async def submit(self, job: Job) -> str:
+    async def submit(self, job: Job, handler: Optional[Callable] = None) -> str:
         """Fügt einen Job zur Queue hinzu."""
         async with self._lock:
+            if handler is not None:
+                self._job_handlers[job.id] = handler
             self._queue.append(job)
             log.info("Job submitted", job_id=job.id, type=job.job_type.value,
                      queue_size=len(self._queue))
@@ -76,7 +83,7 @@ class Pipeline:
                     while self._queue and len(self._running) < self.max_concurrent:
                         job = self._queue.popleft()
                         self._running.append(job)
-                        asyncio.create_task(self._execute_job(job))
+                        self._tasks[job.id] = asyncio.create_task(self._execute_job(job))
                         _notified_empty = False
 
                 # Queue-Leer-Event einmalig senden
@@ -96,6 +103,19 @@ class Pipeline:
         self._is_running = False
         log.info("Pipeline Stop angefordert")
 
+    async def shutdown(self) -> None:
+        """Stoppt Queue und laufende Jobs inklusive nativer Prozesse."""
+        self._is_running = False
+        async with self._lock:
+            job_ids = [job.id for job in self._queue] + [job.id for job in self._running]
+        for job_id in job_ids:
+            await self.cancel_job(job_id)
+        for _ in range(100):
+            if not self._running:
+                break
+            await asyncio.sleep(0.01)
+        log.info("Pipeline heruntergefahren", remaining=len(self._running))
+
     async def cancel_job(self, job_id: str) -> bool:
         """Bricht einen Job ab."""
         async with self._lock:
@@ -103,6 +123,7 @@ class Pipeline:
             for job in self._queue:
                 if job.id == job_id:
                     self._queue.remove(job)
+                    self._job_handlers.pop(job.id, None)
                     job.mark_cancelled()
                     log.info("Job aus Queue entfernt", job_id=job_id)
                     return True
@@ -120,6 +141,9 @@ class Pipeline:
                             process.kill()
                         except ProcessLookupError:
                             pass
+                    task = self._tasks.get(job_id)
+                    if task is not None and task is not asyncio.current_task():
+                        task.cancel()
                     log.info("Laufender Job abgebrochen", job_id=job_id)
                     return True
 
@@ -131,7 +155,9 @@ class Pipeline:
         log.info("Job gestartet", job_id=job.id, type=job.job_type.value)
 
         try:
-            handler = self._handlers.get(job.job_type.value)
+            handler = self._job_handlers.pop(job.id, None)
+            if handler is None:
+                handler = self._handlers.get(job.job_type.value)
             if handler is None:
                 raise ValueError(f"Kein Handler für Job-Typ: {job.job_type.value}")
 
@@ -159,6 +185,8 @@ class Pipeline:
                     self.on_job_failed(job)
 
         finally:
+            self._job_handlers.pop(job.id, None)
+            self._tasks.pop(job.id, None)
             async with self._lock:
                 if job in self._running:
                     self._running.remove(job)

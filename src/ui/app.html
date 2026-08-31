@@ -933,10 +933,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
               <input type="checkbox" id="chkOverwrite">
               <label for="chkOverwrite">Vorhandene Dateien überschreiben</label>
             </div>
-            <div class="row">
-              <input type="checkbox" id="chkSound" checked>
-              <label for="chkSound">Fertig-Sound abspielen 🔊</label>
-            </div>
+
           </div>
         </div>
 
@@ -1064,7 +1061,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
                   <option value="mp4_h264">MP4 (H.264) — Universal</option>
                   <option value="mkv_h265">MKV (H.265) — Verlustarm</option>
                   <option value="mkv_copy">MKV (Original-Stream kopieren)</option>
-                  <option value="iso">ISO-Image (1:1 Kopie)</option>
+                  <option value="iso">ISO-Image (Dateisystem-Kopie)</option>
                 </select>
               </div>
             </div>
@@ -1142,7 +1139,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
         <div style="display:flex;gap:8px;">
           <button class="btn98" onclick="doSearch()">🔍 Suchen</button>
           <button class="btn98" id="dlSelBtn" disabled onclick="downloadSelectedResults()">⬇ Ausgewähltes laden</button>
-          <button class="btn98" id="burnSelBtn" disabled onclick="burnSelectedResults()">🔥 Ausgewähltes auf DVD</button>
+
         </div>
       </div>
 
@@ -1229,7 +1226,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
           </div>
         </div>
         <div style="display:flex;gap:8px;margin-top:6px;">
-          <button class="btn98" onclick="clearQ()">✕ Queue leeren</button>
+          <button class="btn98" onclick="clearQ()">✕ Erledigte entfernen</button>
         <button class="btn98" onclick="openOutputFolder()">📂 Output öffnen</button>
         </div>
       </div>
@@ -1297,7 +1294,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
               <label style="width:120px;">Aktion:</label>
               <select id="watchAction" style="width:180px;">
                 <option value="convert">Konvertieren</option>
-                <option value="burn_dvd">Auf DVD brennen</option>
+                <option value="burn_dvd">DVD-ISO erstellen</option>
                 <option value="extract_audio">Audio extrahieren</option>
               </select>
             </div>
@@ -1484,9 +1481,10 @@ function playSound(){
   }catch(e){}
 }
 
-function clearQ(){
-  if(api()) api().clear_completed();
-  S.jobs=S.jobs.filter(j=>j.state==='running');
+async function clearQ(){
+  const a=api();
+  if(a) await a.clear_completed();
+  S.jobs=S.jobs.filter(j=>j.state==='running'||j.state==='pending');
   renderJobs();
 }
 
@@ -1539,9 +1537,8 @@ window.onBackendEvent = function(payload) {
       document.getElementById('nojob').style.display='block';
       setStat('✓ Fertig: '+data.name+(data.elapsed?' ('+data.elapsed+'s)':''));
       renderJobs(); updateJobBadge();
-      if(document.getElementById('chkSound')&&document.getElementById('chkSound').checked) playSound();
-      if(document.getElementById('snd')&&document.getElementById('snd').checked) playSound();
-      animBurnDone(); break;
+      if(data.type==='burn_dvd') animBurnDone();
+      break;
     case 'job_failed':
       const jf = S.jobs.find(j=>j.id===data.id);
       if(jf){ jf.state='failed'; }
@@ -1689,9 +1686,7 @@ function getSelectedSearchResults(){
 function updateSearchSelButtons(){
   const n = document.querySelectorAll('#sresults .frow.sel').length;
   const dlBtn = document.getElementById('dlSelBtn');
-  const burnBtn = document.getElementById('burnSelBtn');
   if(dlBtn) dlBtn.disabled = n === 0;
-  if(burnBtn) burnBtn.disabled = n === 0;
 }
 
 async function dlResult(e, url, title){
@@ -1718,17 +1713,6 @@ async function downloadSelectedResults(){
   showTab('queue', document.getElementById('tbtn-queue'));
 }
 
-async function burnSelectedResults(){
-  const items = getSelectedSearchResults();
-  if(!items.length) return;
-  const a=api();
-  if(!a){ alert('Backend noch nicht bereit — Download nicht möglich.'); return; }
-  for(const item of items){
-    const result = JSON.parse(await a.download_url(item.url, 'best', false, 'burn_dvd', false));
-    if(result.error) alert('Download fehlgeschlagen ('+item.title+'): '+result.error);
-  }
-  showTab('queue', document.getElementById('tbtn-queue'));
-}
 
 async function doAI(){
   const v=document.getElementById('aiinp').value; if(!v)return;
@@ -1950,7 +1934,12 @@ async function saveSettings() {
   current.sound.play_on_complete=document.getElementById('snd').checked;
   const r = JSON.parse(await a.save_settings(JSON.stringify(current)));
   if (r.error) alert('Fehler beim Speichern: ' + r.error);
-  else { setStat('✓ Einstellungen gespeichert'); alert('Einstellungen gespeichert!'); }
+  else {
+    document.getElementById('dvdStandard').value=current.conversion.dvd_standard;
+    document.getElementById('subtitleModel').value=current.ai.whisper_model;
+    setStat('✓ Einstellungen gespeichert');
+    alert('Einstellungen gespeichert!');
+  }
 }
 
 // ── Settings laden und ins Formular eintragen ────────────────────
@@ -1970,6 +1959,8 @@ async function loadSettingsIntoForm() {
     document.getElementById('settingsWhisperModel').value=s.ai?.whisper_model||'base';
     document.getElementById('settingsOllamaModel').value=s.ai?.ollama_model||'phi3:mini';
     document.getElementById('snd').checked=s.sound?.play_on_complete!==false;
+    document.getElementById('dvdStandard').value=s.conversion?.dvd_standard||'PAL';
+    document.getElementById('subtitleModel').value=s.ai?.whisper_model||'base';
   } catch(e) { console.log('Settings laden:', e); }
 }
 
@@ -2029,8 +2020,20 @@ async function refreshQueue() {
 // ── Cancel Job ───────────────────────────────────────────────────
 async function cancelJob(jobId) {
   const a = api();
-  if (a) await a.cancel_job(jobId);
-  S.jobs = S.jobs.filter(j => j.id !== jobId);
+  if (!a) { alert('Backend nicht bereit — Job kann nicht abgebrochen werden.'); return; }
+  try {
+    const result = JSON.parse(await a.cancel_job(jobId));
+    if (result.error || !result.ok) {
+      alert('Job konnte nicht abgebrochen werden: ' + (result.error || 'Job nicht gefunden'));
+      return;
+    }
+    const job = S.jobs.find(j => j.id === jobId);
+    if (job) { job.state = 'cancelled'; job.status = 'Abgebrochen'; }
+    setStat('⛔ Job abgebrochen');
+  } catch(e) {
+    alert('Job konnte nicht abgebrochen werden: ' + e);
+    return;
+  }
   renderJobs(); updateJobBadge();
 }
 
@@ -2385,9 +2388,6 @@ function showTab(name, btn) {
   if (name === 'library') {
     loadLibraryStats();
     searchLibrary();
-  }
-  if (name === 'edit') {
-    updateMenuPreview();
   }
 }
 

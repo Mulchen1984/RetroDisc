@@ -1,6 +1,7 @@
 """Tests für Pipeline, Converter, Presets und Sound."""
 
 import asyncio
+import sys
 import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -73,6 +74,111 @@ class TestPipeline:
         cancelled = await pipeline.cancel_job(job.id)
         assert cancelled is True
         assert pipeline.queue_size == 0
+
+    @pytest.mark.asyncio
+    async def test_per_job_handlers_do_not_overwrite_each_other(self):
+        """Queued jobs of the same type must retain their own closure/inputs."""
+        pipeline = Pipeline(play_sound=False)
+        executed = []
+
+        async def first_handler(job):
+            executed.append((job.id, "first"))
+
+        async def second_handler(job):
+            executed.append((job.id, "second"))
+
+        first = Job(job_type=JobType.MERGE)
+        second = Job(job_type=JobType.MERGE)
+        await pipeline.submit(first, handler=first_handler)
+        await pipeline.submit(second, handler=second_handler)
+
+        runner = asyncio.create_task(pipeline.start())
+        try:
+            for _ in range(100):
+                if first.state == JobState.DONE and second.state == JobState.DONE:
+                    break
+                await asyncio.sleep(0.01)
+        finally:
+            await pipeline.stop()
+            await asyncio.wait_for(runner, timeout=1)
+
+        assert executed == [(first.id, "first"), (second.id, "second")]
+
+    @pytest.mark.asyncio
+    async def test_cancel_running_job_terminates_attached_process(self):
+        pipeline = Pipeline(play_sound=False)
+
+        async def process_handler(job):
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-c", "import time; time.sleep(30)"
+            )
+            job._process = proc
+            try:
+                await proc.wait()
+            finally:
+                job._process = None
+
+        job = Job(job_type=JobType.CONVERT)
+        await pipeline.submit(job, handler=process_handler)
+        runner = asyncio.create_task(pipeline.start())
+        proc = None
+        try:
+            for _ in range(200):
+                proc = getattr(job, "_process", None)
+                if job.state == JobState.RUNNING and proc is not None:
+                    break
+                await asyncio.sleep(0.01)
+            assert proc is not None and proc.returncode is None
+            assert await pipeline.cancel_job(job.id) is True
+            await asyncio.wait_for(proc.wait(), timeout=2)
+            assert job.state == JobState.CANCELLED
+            assert proc.returncode is not None
+        finally:
+            if proc is not None and proc.returncode is None:
+                proc.kill()
+                await proc.wait()
+            await pipeline.stop()
+            await asyncio.wait_for(runner, timeout=1)
+
+    @pytest.mark.asyncio
+    async def test_shutdown_cancels_queued_and_running_jobs(self):
+        pipeline = Pipeline(play_sound=False)
+
+        async def process_handler(job):
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-c", "import time; time.sleep(30)"
+            )
+            job._process = proc
+            try:
+                await proc.wait()
+            finally:
+                job._process = None
+
+        running = Job(job_type=JobType.CONVERT)
+        queued = Job(job_type=JobType.CONVERT)
+        await pipeline.submit(running, handler=process_handler)
+        await pipeline.submit(queued, handler=process_handler)
+        runner = asyncio.create_task(pipeline.start())
+        proc = None
+        try:
+            for _ in range(200):
+                proc = getattr(running, "_process", None)
+                if proc is not None:
+                    break
+                await asyncio.sleep(0.01)
+            assert proc is not None and proc.returncode is None
+            await pipeline.shutdown()
+            await asyncio.wait_for(runner, timeout=1)
+            await asyncio.wait_for(proc.wait(), timeout=2)
+            assert running.state == JobState.CANCELLED
+            assert queued.state == JobState.CANCELLED
+            assert pipeline.queue_size == 0
+            assert pipeline.running_count == 0
+        finally:
+            if proc is not None and proc.returncode is None:
+                proc.kill()
+                await proc.wait()
+            await pipeline.stop()
 
 
 class TestJob:

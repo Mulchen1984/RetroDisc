@@ -13,6 +13,7 @@ httpx>=0.27.0             # Async HTTP Client (Mediathek-API)
 
 # === AI / ML ===
 faster-whisper>=1.2.0     # Offline-Untertitel (Base-Modell im Build)
+requests>=2.31.0          # Von faster-whisper 1.2 zur Laufzeit importiert, aber upstream nicht deklariert
 numpy>=1.26.0
 
 # === Smart Edit / Highlights (optional; FFmpeg-Fallback ist eingebaut) ===
