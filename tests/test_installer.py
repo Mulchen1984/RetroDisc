@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from src.utils.subprocesses import decode_console_output
+
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER_SOURCE = ROOT / "installer" / "retrodisc_installer.py"
 
@@ -203,6 +205,9 @@ def test_generated_uninstaller_deletes_its_own_directory(tmp_path, monkeypatch):
     module.write_uninstaller(install_dir)
     uninstaller = install_dir / "Uninstall RetroDisc.cmd"
     env = dict(os.environ)
+    # Bewusst Bytes einlesen: cmd.exe schreibt seine deutschen Meldungen in
+    # der OEM-Codepage. Mit text=True stirbt der Reader-Thread an cp1252 und
+    # die Diagnose unten waere leer, obwohl sie den Fehler zeigen soll.
     proc = subprocess.run(
         f'call "{uninstaller}"',
         cwd=str(install_dir),
@@ -210,14 +215,16 @@ def test_generated_uninstaller_deletes_its_own_directory(tmp_path, monkeypatch):
         shell=True,
         stdin=subprocess.DEVNULL,
         capture_output=True,
-        text=True,
         timeout=60,
     )
+    stdout = decode_console_output(proc.stdout)
+    stderr = decode_console_output(proc.stderr)
 
     assert proc.returncode == 0, (
         f"uninstaller exited {proc.returncode}\n"
-        f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+        f"stdout:\n{stdout}\nstderr:\n{stderr}"
     )
+    assert not stderr.strip(), f"Uninstaller schrieb auf stderr:\n{stderr}"
     deadline = time.time() + 30
     while time.time() < deadline and install_dir.exists():
         time.sleep(0.25)

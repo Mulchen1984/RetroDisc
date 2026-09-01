@@ -1,22 +1,22 @@
 # RetroDisc Release-Audit-Status
 
-Letzte Aktualisierung: 2026-09-01 14:47 CEST
+Letzte Aktualisierung: 2026-09-01 15:55 CEST
 
 ## Verbindlicher Abschlussstatus
 
 NOT RELEASE READY
 
-Begründung: Produkt-, Portable- und visuelle Artefakt-QA sind grün. Die reale Installer-QA fand anschließend einen Deinstallationsfehler (Exitcode 32/leerer Restordner), der im aktuellen Source behoben und regressiongetestet ist. Erneuter Freeze, Installer-Neubau und reale Wiederholung der Deinstallation stehen noch aus. Zusätzlich fehlt auf dem Host ein öffentlich vertrauenswürdiges Code-Signing-Zertifikat; die funktionierende Signierpipeline kann deshalb noch keine gültig signierten öffentlichen Artefakte erzeugen.
+Begründung: Source-, Medien-, UI-, Installer- und Deinstallationslogik sind vollständig grün; der korrigierte Installer wurde final neu gebaut und deinstalliert sauber. Die finalen App-/Portable-Bytes können auf diesem Zielrechner jedoch nicht ausgeführt werden: Windows Code Integrity blockiert die unsignierte EXE mit Events 3033/3077 wegen des nicht erfüllten Enterprise-Signaturniveaus. Auf dem Host ist kein geeignetes Code-Signing-Zertifikat konfiguriert. Ohne vertrauenswürdige Signatur oder ausdrückliche Administratorfreigabe und anschließenden erneuten Artefaktlauf ist der verpflichtende finale Runtime-Gate nicht erfüllbar.
 
 ## Aktueller Checkpoint
 
 - Branch: `main`
-- Aktueller HEAD: `4127261dcd81badb8780bc9a81c7402440f443ee` (`AUDIT: document verified release baseline`)
+- Letzter Freeze-Commit: `80b4f3ccfc231880ff0745025e0b5b06c06177a4` (`RELEASE: harden uninstall and signing pipeline`)
 - Baseline-Commit: `e29f41d` (`BASELINE: preserve initial RetroDisc source state`)
-- Aktueller Arbeitsbaum: elf dokumentierte und vollständig verifizierte Dateien; Source-Audit und unabhängige QA PASS, Source-Freeze-Commit als nächster Schritt
+- Aktueller Arbeitsbaum: Encoding-Härtung der Windows-Subprozessausgabe (siehe Journal 2026-09-01 15:40–15:55); alle Source-Gates auf diesem Stand grün, neuer Freeze steht aus
 - Baseline-Manifest: `BASELINE_SHA256_MANIFEST.json`
-- Manifestumfang: 147 Einträge, 679158086 Bytes
-- Live-Verifikation gegen Manifest: 0 fehlende oder abweichende Einträge
+- Manifestumfang: 147 Einträge, 679158086 Bytes, Stand `e29f41d`
+- Live-Verifikation gegen Manifest: 0 fehlende Einträge; 20 Einträge weichen ab. Das ist erwartet und kein Defekt: Es sind genau die Dateien, die seit `e29f41d` in den dokumentierten Arbeitsblöcken bewusst geändert wurden. Das Manifest ist der historische Ausgangsbeleg, kein Gate für den jeweils aktuellen Commit.
 - Das Manifest umfasst Source/UI/Tests/Build-Konfiguration/Assets und benötigte Vendor-Runtimes; Build-Ausgaben, Caches und Umgebungen sind ausgeschlossen.
 
 ## Eingelesener Bestand
@@ -233,3 +233,67 @@ Nächster Gate: neuen Source-Freeze aus diesem vollständig verifizierten Stand 
 - Externer Distributionsblocker: `Get-AuthenticodeSignature` meldet für App und Installer `NotSigned`; auf dem Host sind weder Signierumgebungsvariablen noch ein Code-Signing-Zertifikat vorhanden. Windows Application Control blockiert die identische Portable-EXE aus `%TEMP%`, während sie aus dem freigegebenen Projektpfad vollständig funktioniert.
 
 Nächster Gate: korrigierten Installer-/Signierstand einfrieren, final neu bauen, reale Install-/Deinstallations-QA wiederholen und danach Status ausschließlich anhand der neuen Hashes setzen. Eine öffentliche `RELEASE READY`-Freigabe bleibt ohne vertrauenswürdige Signatur ausgeschlossen.
+
+### 2026-09-01 14:48–15:03 CEST — Finaler Build und Enterprise-Signaturblocker
+
+- Finaler Source-Freeze: `80b4f3ccfc231880ff0745025e0b5b06c06177a4` (`RELEASE: harden uninstall and signing pipeline`). Arbeitsbaum abgesehen von der bewusst nicht versionierten, veralteten `AGENTS.md` sauber.
+- Finaler Clean-Build aus diesem Commit erfolgreich. Die Signierpipeline meldete erwartungsgemäß ausdrücklich, dass kein Zertifikat konfiguriert ist und App/Installer unsigniert bleiben.
+- Finale Artefakte:
+  - `dist/RetroDisc.exe`: 538339903 Bytes, SHA-256 `3422A2CD953097FAAA3F10A944B3CB81DAB5C985C352BA66D2F32DC6C72206B9`.
+  - `Output/RetroDisc_1.0.0_Portable.zip`: 535968928 Bytes, SHA-256 `D61DE5758ABA263CD7CCAEE1B876BB0AB62CF56E03E92C903FFDC8376743D342`.
+  - `Output/RetroDisc_Setup_1.0.0.exe`: 544376190 Bytes, SHA-256 `89ED6F21D56D20ABB531B353D7DC2D9912C814C31861AEF0DB248572D95B48EC`.
+- ZIP-Integrität PASS: enthaltene EXE ist byteidentisch zur finalen `dist`-EXE; README und START_WINDOWS vorhanden.
+- Reale finale Installer-/Uninstaller-QA PASS: Installation in isolierten Zielpfad, installierte EXE byteidentisch; isolierte Desktop-/Startmenü-Links erstellt; Uninstaller-Elternprozess Exitcode 0 und stderr leer; Installationsordner nach 1535 ms vollständig entfernt; alle isolierten Links entfernt.
+- Der finale direkte Runtime-Gate ist BLOCK: Sowohl `dist/RetroDisc.exe` als auch die identische ZIP-EXE werden ohne Prozessstart durch die lokale Windows-Anwendungssteuerung abgewiesen. Der Versuch in einem separaten normalen `%LOCALAPPDATA%\Programs\RetroDisc-Portable-QA-80b4f3c`-Pfad ändert das Ergebnis nicht.
+- Read-only CodeIntegrity-Evidenz: Event 3033 meldet für die exakte finale EXE, dass sie das erforderliche Enterprise-Signaturniveau nicht erfüllt; Event 3077 meldet einen Verstoß gegen Policy-ID `{0283ac0f-fff1-49ae-ada1-8a933130cad6}`. `Get-AuthenticodeSignature` bestätigt `NotSigned`; kein `Zone.Identifier` und `Unblock-File` ändert die Richtlinienentscheidung nicht.
+- Auch für die installierte finale Kopie existieren entsprechende 3033/3077-Ereignisse. Eine zwischenzeitliche Fensterbeobachtung wird deshalb nicht als belastbarer finaler Startbeleg gewertet.
+- Die zuvor erfolgreichen Runtime-, YouTube-, Cancel-, Konsolenfenster- und visuellen Tests gelten für den unmittelbar vorherigen App-Source-gleichen Zwischenbuild, nicht als Beleg für den blockierten finalen Hash. Die alten Screenshots bleiben als Designbeleg erhalten, werden aber nicht als finaler Runtime-Gate ausgegeben.
+- Kein Prozess der finalen EXE läuft; keine Policy, ACL, Signatur oder Systemeinstellung wurde umgangen oder verändert.
+
+Verbleibender externer Gate: öffentlich/enterprise-vertrauenswürdiges Code-Signing-Zertifikat bereitstellen (oder ausdrückliche Administrator-Whitelist), `python build.py --clean --sign` ausführen und genau die neu signierten Hashes erneut durch EXE-, Portable-, Installations-, visuellen und realen Medien-Runtime-Gate führen. Bis dahin bleibt der verbindliche Status **NOT RELEASE READY**.
+
+### 2026-09-01 15:40–15:55 CEST — Startblocker präzise identifiziert und Encoding-Härtung
+
+Startblocker: exakte Ursache statt "Windows Application Control"
+
+- Read-only ausgelesen: `HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy` meldet `VerifiedAndReputablePolicyState = 1`. Die blockierende Policy-ID `{0283ac0f-fff1-49ae-ada1-8a933130cad6}` liegt als `{0283AC0F-FFF1-49AE-ADA1-8A933130CAD6}.cip` unter `C:\Windows\System32\CodeIntegrity\CiPolicies\Active`.
+- Damit ist der Blocker konkret **Smart App Control im erzwingenden Zustand**, nicht eine per Gruppenrichtlinie ausgerollte Enterprise-WDAC-Policy. `Win32_DeviceGuard` bestätigt User-Mode-Code-Integrity-Enforcement (Status 2).
+- Praktische Folge für die Freigabe: Smart App Control lässt unsignierte Artefakte ohne Reputation grundsätzlich nicht starten. Ein Abschalten ist auf Windows eine Einbahnstraße (nur per Windows-Neuinstallation reversibel) und wurde deshalb **nicht** vorgenommen; es wurde keine Policy, ACL oder Einstellung verändert.
+- Der Status bleibt daher unverändert **NOT RELEASE READY**; die Entscheidung zwischen vertrauenswürdigem Zertifikat, ausdrücklicher Freigabe und Test auf einem Rechner ohne Smart App Control liegt beim Betreiber.
+
+Realer Produktdefekt gefunden und geschlossen: cp1252-Dekodierung der Windows-Subprozessausgabe
+
+- Beim vollständigen Testlauf fiel eine `PytestUnhandledThreadExceptionWarning` auf: `UnicodeDecodeError: 'charmap' codec can't decode byte 0x81` im `_readerthread` von `subprocess`.
+- Ursache: Windows-CLI-Prozesse schreiben in die OEM-Konsolencodepage (cp850 auf diesem System, 0x81 = "ü"), `text=True` dekodiert jedoch mit der ANSI-Locale-Codepage cp1252, in der 0x81 undefiniert ist. Der Reader-Thread stirbt, `stdout`/`stderr` kommen leer zurück.
+- Betroffen war produktiv die Brenner-Erkennung: `retrodisc_launcher.py:detect_burners` und `retrodisc_portable.py:detect_burners` lasen ihre PowerShell-Ausgabe mit `text=True` ohne explizites Encoding. Sobald PowerShell einen Umlaut ausgibt — Laufwerksname oder deutsche Fehlermeldung — lieferte die Erkennung leere Ausgabe statt Laufwerken.
+- Real reproduziert und gegenübergestellt: Eine PowerShell-Ausgabe mit "ü" ergibt auf dem alten Pfad `''` samt Reader-Thread-Traceback, auf dem neuen Pfad korrekt `U+00FC`.
+- Kleinster Fix: `src/utils/subprocesses.py` erhält `decode_console_output()` (versucht utf-8, cp850, cp1252, zuletzt `errors="replace"`; wirft nie) und `run_powershell_hidden()` (erzwingt `[Console]::OutputEncoding=UTF8`, liest Bytes, dekodiert lenient, reicht `TimeoutExpired` unverändert durch). Beide `detect_burners` nutzen jetzt diesen Helfer.
+- Zusätzlich gehärtet: acht strikte `.decode()`-Aufrufe auf Werkzeugausgabe in `src/core/disc.py`, `src/core/downloader.py`, `src/core/ffmpeg.py` und `src/services/upscaler.py` dekodieren jetzt mit `errors="replace"`. Auf Fehlerpfaden hätte ein `UnicodeDecodeError` sonst die echte dvdauthor-/FFprobe-/Merge-Fehlermeldung ersetzt.
+
+Wirkungslose Zusicherung im Installer-Test korrigiert
+
+- `tests/test_installer.py` las die Ausgabe des realen Uninstallers ebenfalls mit `text=True`. Genau dieser Test löste die Warnung aus: Die deutschen cmd-Meldungen zerlegten den Reader-Thread, `proc.stdout`/`proc.stderr` blieben leer.
+- Die bisher dokumentierte Aussage "Uninstaller-Elternprozess Exitcode 0 und stderr leer" stützte sich damit auf eine Erfassung, die selbst abgestürzt war, und die Fehlerdiagnose des Tests wäre im Fehlerfall leer geblieben.
+- Der Test liest jetzt Bytes, dekodiert über `decode_console_output()` und prüft die leere stderr-Ausgabe ausdrücklich per Assertion. Die Aussage ist damit erstmals wirklich abgesichert und grün.
+
+Neue Regressionstests
+
+- `decode_console_output()` für cp850-/utf-8-Umlaute, `None`, bereits dekodierten Text und kaputte Bytes.
+- `run_powershell_hidden()`: kein `text=`, `capture_output`, Timeout-Durchreichung, `CREATE_NO_WINDOW`, erzwungenes UTF-8 im Kommando, korrekt dekodierte cp850-Ausgabe.
+- Statisch: beide Launcher-`detect_burners` ohne `text=True` und mit dem neuen Helfer; keine nackten `.decode()` mehr in den Hintergrundmodulen.
+
+Verifikation auf diesem Stand
+
+- `pytest -q`: **135 passed in 9.99s**, Exitcode 0 (vorher 123; die Warnung aus dem Reader-Thread ist verschwunden).
+- `compileall` über `src`, beide Launcher und `tests`: Exitcode 0.
+- `.hermes/verify_core.py`: Exitcode 0; echter FFmpeg-Job `done`, 100 %, MP3 403477 Bytes, Pipeline sauber gestoppt.
+- Produktiver UI→`RetroDiscApi`→`RetroDiscBridge`-Vergleich: 39 Proxy-Methoden, 41 Bridge-Methoden, 0 fehlende Proxys, 0 fehlende Bridge-Ziele, 0 Arity-Mismatches.
+- Aktuelles Inline-JavaScript aus `src/ui/app.html`: `node --check` Exitcode 0.
+- Vollständiger Real-Media-Smoke `build/e2e-smoke-20260901-154558`: Exitcode 0; Trim A/B, Merge, 2×-Upscale, 50-fps-Interpolation, Highlights, deutsche Faster-Whisper-SRT (199 Bytes, 2 Segmente) und DVD-ISO (2627584 Bytes) — Werte identisch zu den vorherigen grünen Läufen.
+- Echte Laufwerksabfrage über den neuen Helfer liefert auf diesem Rechner weiterhin beide optischen Laufwerke (`hp DVD A DH16ACSHR` / `E:`, `PIONEER BD-RW BDR-209M` / `D:`).
+
+Folge für die Artefakte
+
+- Die am 2026-09-01 14:48–15:03 gebauten Artefakt-Hashes gelten **nicht** mehr für diesen Source. EXE, Portable-ZIP und Installer müssen nach dem nächsten Freeze neu gebaut werden.
+
+Nächster Gate: diesen Stand einfrieren, danach ausschließlich aus dem neuen Commit bauen. Der Runtime-Gate auf diesem Rechner bleibt bis zu einer Entscheidung über Smart App Control bzw. ein vertrauenswürdiges Zertifikat blockiert.

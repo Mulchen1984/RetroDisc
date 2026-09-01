@@ -265,3 +265,72 @@ def test_portable_module_imports_subprocess_for_timeout_guard():
         "detect_burners",
     )
     assert "subprocess.TimeoutExpired" in detect_src
+
+
+# ── Encoding-Härtung: OEM-Ausgabe darf nie den Reader-Thread töten ──
+
+def test_decode_console_output_reads_oem_umlauts():
+    """cp850-Byte 0x81 ("ü") ist in cp1252 undefiniert und lieferte früher
+    einen UnicodeDecodeError statt Text."""
+    assert sp.decode_console_output("Laufwerk ü".encode("cp850")) == "Laufwerk ü"
+    assert sp.decode_console_output("Laufwerk ü".encode("utf-8")) == "Laufwerk ü"
+    assert sp.decode_console_output(None) == ""
+    assert sp.decode_console_output("schon Text") == "schon Text"
+
+
+def test_decode_console_output_never_raises_on_broken_bytes():
+    result = sp.decode_console_output(b"\xff\xfe\x00broken")
+    assert isinstance(result, str)
+
+
+def test_run_powershell_hidden_decodes_bytes_and_forces_utf8():
+    seen: dict = {}
+
+    def fake_run(*args, **kwargs):
+        seen["cmd"] = args[0]
+        seen["kwargs"] = kwargs
+        return subprocess.CompletedProcess(
+            args[0], 0, "Laufwerk ü".encode("cp850"), b""
+        )
+
+    with patch.object(sp.os, "name", "nt"), \
+         patch.object(sp.subprocess, "run", fake_run):
+        out = sp.run_powershell_hidden("Get-CimInstance Win32_CDROMDrive", timeout=15)
+
+    assert "text" not in seen["kwargs"], "text=True würde wieder mit cp1252 dekodieren"
+    assert seen["kwargs"]["capture_output"] is True
+    assert seen["kwargs"]["timeout"] == 15
+    assert seen["kwargs"]["creationflags"] & NO_WINDOW
+    assert seen["cmd"][:3] == ["powershell", "-NoProfile", "-Command"]
+    assert "[Console]::OutputEncoding=[Text.Encoding]::UTF8;" in seen["cmd"][3]
+    assert seen["cmd"][3].endswith("Get-CimInstance Win32_CDROMDrive")
+    assert out.stdout == "Laufwerk ü"
+    assert out.stderr == ""
+
+
+def test_run_powershell_hidden_propagates_timeout_expired():
+    def fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs.get("timeout"))
+
+    with patch.object(sp.subprocess, "run", fake_run):
+        with pytest.raises(subprocess.TimeoutExpired):
+            sp.run_powershell_hidden("Get-Date", timeout=1)
+
+
+@pytest.mark.parametrize("rel_path", ("retrodisc_portable.py", "retrodisc_launcher.py"))
+def test_launchers_do_not_decode_powershell_with_locale_encoding(rel_path):
+    """`text=True` ohne explizites Encoding brach die Brenner-Erkennung auf
+    deutschem Windows ab."""
+    source = (PROJECT_ROOT / rel_path).read_text(encoding="utf-8")
+    detect_src = _function_source(source, "detect_burners")
+
+    assert "run_powershell_hidden(" in detect_src
+    assert "text=True" not in detect_src
+
+
+@pytest.mark.parametrize("rel_path", BACKGROUND_MODULES)
+def test_background_modules_decode_tool_output_leniently(rel_path):
+    """Ein striktes `.decode()` auf Werkzeugausgabe ersetzt die echte
+    Fehlermeldung durch einen UnicodeDecodeError."""
+    source = (PROJECT_ROOT / rel_path).read_text(encoding="utf-8")
+    assert ".decode()" not in source

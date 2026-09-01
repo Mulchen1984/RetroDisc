@@ -387,7 +387,7 @@ class VideoUpscaler:
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await proc.communicate()
-        fps_str = stdout.decode().strip()
+        fps_str = stdout.decode("utf-8", errors="replace").strip()
 
         try:
             if "/" in fps_str:

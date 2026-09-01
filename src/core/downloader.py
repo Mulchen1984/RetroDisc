@@ -123,7 +123,7 @@ class Downloader:
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout, _ = await proc.communicate()
-            version = stdout.decode().strip()
+            version = stdout.decode("utf-8", errors="replace").strip()
             log.info("yt-dlp gefunden", version=version)
             return version
         except FileNotFoundError:
@@ -260,7 +260,7 @@ class Downloader:
         stdout, _ = await proc.communicate()
 
         results = []
-        for line in stdout.decode().strip().split("\n"):
+        for line in stdout.decode("utf-8", errors="replace").strip().split("\n"):
             if not line:
                 continue
             try:

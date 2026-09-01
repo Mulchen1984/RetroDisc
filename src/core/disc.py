@@ -125,7 +125,7 @@ class DiscTools:
             job._process = None
 
         if proc.returncode != 0:
-            raise DiscError(f"dvdauthor Fehler: {stderr.decode()}")
+            raise DiscError(f"dvdauthor Fehler: {stderr.decode('utf-8', errors='replace')}")
 
         # VIDEO_TS Ordner prüfen
         video_ts = dvd_dir / "VIDEO_TS"

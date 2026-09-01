@@ -67,7 +67,7 @@ class FFmpeg:
                     stderr=asyncio.subprocess.PIPE,
                 )
                 stdout, _ = await proc.communicate()
-                first_line = stdout.decode().split("\n")[0]
+                first_line = stdout.decode("utf-8", errors="replace").split("\n")[0]
                 match = re.search(r"version\s+(\S+)", first_line)
                 versions[name] = match.group(1) if match else "unknown"
                 log.info(f"{name} gefunden", version=versions[name], path=path)
@@ -111,9 +111,9 @@ class FFmpeg:
         stdout, stderr = await proc.communicate()
 
         if proc.returncode != 0:
-            raise FFmpegError(f"FFprobe Fehler: {stderr.decode()}")
+            raise FFmpegError(f"FFprobe Fehler: {stderr.decode('utf-8', errors='replace')}")
 
-        data = json.loads(stdout.decode())
+        data = json.loads(stdout.decode("utf-8", errors="replace"))
         return self._parse_probe_data(input_path, data)
 
     def _parse_probe_data(self, path: Path, data: dict) -> MediaFile:
@@ -419,7 +419,7 @@ class FFmpeg:
                 job.update_progress(95, "Zusammenfügen abgeschlossen")
 
             if proc.returncode != 0:
-                raise FFmpegError(f"Merge Fehler: {stderr.decode()[-500:]}")
+                raise FFmpegError(f"Merge Fehler: {stderr.decode('utf-8', errors='replace')[-500:]}")
 
             return output_path
         finally:

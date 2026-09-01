@@ -451,7 +451,7 @@ class RetroDiscBridge:
         eines LEEREN Rohlings braucht tiefe SCSI-Befehle und wird hier
         NICHT vorgetaeuscht."""
         import platform, shutil
-        from src.utils.subprocesses import run_hidden
+        from src.utils.subprocesses import run_powershell_hidden
         try:
             if platform.system() != "Windows":
                 return json.dumps({"drives": [], "platform": platform.system(),
@@ -464,10 +464,7 @@ class RetroDiscBridge:
                 "MediaLoaded=$_.MediaLoaded; MediaType=$_.MediaType } } | "
                 "ConvertTo-Json -Compress"
             )
-            out = run_hidden(
-                ["powershell", "-NoProfile", "-Command", ps],
-                capture_output=True, text=True, timeout=15
-            )
+            out = run_powershell_hidden(ps, timeout=15)
             raw = (out.stdout or "").strip()
             if not raw:
                 return json.dumps({"drives": [],
