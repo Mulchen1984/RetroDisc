@@ -1,12 +1,12 @@
 # RetroDisc Release-Audit-Status
 
-Letzte Aktualisierung: 2026-09-01 15:55 CEST
+Letzte Aktualisierung: 2026-09-01 16:45 CEST
 
 ## Verbindlicher Abschlussstatus
 
 NOT RELEASE READY
 
-Begründung: Source-, Medien-, UI-, Installer- und Deinstallationslogik sind vollständig grün; der korrigierte Installer wurde final neu gebaut und deinstalliert sauber. Die finalen App-/Portable-Bytes können auf diesem Zielrechner jedoch nicht ausgeführt werden: Windows Code Integrity blockiert die unsignierte EXE mit Events 3033/3077 wegen des nicht erfüllten Enterprise-Signaturniveaus. Auf dem Host ist kein geeignetes Code-Signing-Zertifikat konfiguriert. Ohne vertrauenswürdige Signatur oder ausdrückliche Administratorfreigabe und anschließenden erneuten Artefaktlauf ist der verpflichtende finale Runtime-Gate nicht erfüllbar.
+Begründung: Source-, Medien-, UI-, Installer- und Deinstallationslogik sind vollständig grün. Für die Artefakte des Commits `a9b5853` ist der verpflichtende finale Runtime-Gate erstmals bestanden: EXE startet, Hauptfenster und Oberfläche erscheinen, gebündelte Werkzeuge arbeiten real, Installation und Deinstallation laufen sauber. Offen bleibt allein der Distributionsblocker: Die Artefakte sind **nicht signiert**. Auf dem Host ist kein Code-Signing-Zertifikat konfiguriert; Smart App Control blockiert unsignierte Artefakte dateiabhängig — der unmittelbar vorherige Build `80b4f3c` wird auf demselben System weiterhin abgewiesen. Ohne vertrauenswürdige Signatur ist keine verlässliche Weitergabe an Dritte möglich, deshalb bleibt der verbindliche Status NOT RELEASE READY.
 
 ## Aktueller Checkpoint
 
@@ -297,3 +297,53 @@ Folge für die Artefakte
 - Die am 2026-09-01 14:48–15:03 gebauten Artefakt-Hashes gelten **nicht** mehr für diesen Source. EXE, Portable-ZIP und Installer müssen nach dem nächsten Freeze neu gebaut werden.
 
 Nächster Gate: diesen Stand einfrieren, danach ausschließlich aus dem neuen Commit bauen. Der Runtime-Gate auf diesem Rechner bleibt bis zu einer Entscheidung über Smart App Control bzw. ein vertrauenswürdiges Zertifikat blockiert.
+
+### 2026-09-01 16:00–16:45 CEST — Neuer Build, bestandener Runtime-Gate und Korrektur des Startblockers
+
+Freeze und Build
+
+- Source-Freeze: `a9b5853` (`RELEASE: decode Windows subprocess output safely`), Arbeitsbaum bis auf die weiterhin nicht versionierte `AGENTS.md` sauber.
+- Clean-Build aus diesem Commit mit `python build.py --clean`, Exitcode 0. Die Signierpipeline meldete erwartungsgemäß, dass kein Zertifikat konfiguriert ist.
+- Neue Artefakte:
+  - `dist/RetroDisc.exe`: 537273841 Bytes, SHA-256 `F08E8325FFE12653F66878A0BC332C72B7B52F9A0A86408600C6C7183117C87E`.
+  - `Output/RetroDisc_1.0.0_Portable.zip`: 534905178 Bytes, SHA-256 `FFF312D87439088FE27BCD4309CA33EB6115024FE841092629F3E840AEB56471`.
+  - `Output/RetroDisc_Setup_1.0.0.exe`: 542283016 Bytes, SHA-256 `2FAF67BD54AC82054E41C91B32D3D1BF429D173180F590199F027E75177BF6BD`.
+- `Get-AuthenticodeSignature` meldet für App und Installer weiterhin `NotSigned`.
+- ZIP-Integrität PASS: Inhalt sind genau `RetroDisc/RetroDisc.exe`, `README.md` und `START_WINDOWS.txt`; die enthaltene EXE ist byteidentisch zur `dist`-EXE.
+
+Startblocker: frühere Bewertung korrigiert
+
+- Der Startversuch der **neuen** `dist/RetroDisc.exe` war erfolgreich: Prozess läuft, keine CodeIntegrity-Ereignisse 3033/3077.
+- Gegenprobe auf demselben System, im selben Zustand: Die **alte** EXE des Vorgängerbuilds (`80b4f3c`, SHA-256 `3422A2CD…`, noch unter `%LOCALAPPDATA%\Programs\RetroDisc-Portable-QA-80b4f3c` vorhanden) wird weiterhin abgewiesen — `Eine Anwendungssteuerungsrichtlinie hat diese Datei blockiert`, begleitet von frischen Events 3033 und 3077.
+- Eine zwischenzeitlich erwogene Erklärung wurde ausdrücklich **widerlegt**: Es liegt nicht am startenden Elternprozess. Der Start aus derselben Codex-Runtime-`pwsh.exe`, die in den alten Ereignissen als ladender Prozess auftaucht, gelingt mit der neuen EXE ebenfalls ohne Ereignis. Beide PowerShell-Binaries sind gültig signiert.
+- Smart App Control ist unverändert erzwingend aktiv (`VerifiedAndReputablePolicyState = 1`). Die Entscheidung fällt also **je Datei**, nicht pauschal. Warum genau der alte Hash abgewiesen und der neue zugelassen wird, ist aus read-only-Evidenz nicht bestimmbar; hier wird bewusst keine Ursache behauptet.
+- Praktische Folge: Der bestandene Start ist ein echter Beleg für genau diese Bytes auf genau diesem Rechner. Er ist **keine** Zusage für andere Rechner oder künftige Builds — verlässlich wird das erst mit einer vertrauenswürdigen Signatur.
+- Es wurde keine Policy, ACL, Signatur oder Systemeinstellung verändert oder umgangen.
+
+Runtime-Gate auf den neuen Artefakten
+
+- Kaltstart bis Hauptfenster `RetroDisc 1.0`: 13,4 s; Folgestart 14,9 s. Die Zeit geht auf das Entpacken des 512-MB-Onefile-Bundles.
+- Oberfläche real gerendert und per Screenshot belegt: Kopfzeile `RetroDisc 1.0 — All-in-One Media Suite`, Menü Datei/Extras/Hilfe, die vier Hauptaktionen Konvertieren/Brennen/Rippen/Download mit korrekt gezeichnetem Doppel-Disc-Symbol sowie die Zusatzaktionen Suche, Bearbeiten, AI Tools, Bibliothek, Job Queue, Einstellungen. Screenshot: `C:\Users\marco\Pictures\Screenshots\RetroDisc-main-a9b5853.png`.
+- Während Start und Betrieb entstanden **0 zusätzliche Konsolen-/Shell-Prozesse** (Zählung vorher/nachher identisch).
+- Gebündelte Werkzeuge aus dem entpackten Bundle real ausgeführt: FFmpeg und FFprobe `N-125048-gcd199a7d69-20260615`, yt-dlp `2026.07.04`.
+- Echte Medienarbeit aus dem Artefakt: MP3-Konvertierung des Testvideos ergab 403477 Bytes, von FFprobe als `mp3` mit 320000 bit/s bestätigt — identisch zum Source-Ergebnis.
+- Echter YouTube-Download mit **genau den produktiven Formatmustern** von `src/core/downloader.py`: `bestvideo[height<=480]+bestaudio/best[height<=480]` lieferte 474481 Bytes; `bestaudio/best` mit MP3-Extraktion lieferte 762285 Bytes.
+
+Beobachtung zu YouTube-Format 18
+
+- Das progressive Kombiformat 18 liefert derzeit reproduzierbar `HTTP Error 403: Forbidden` — bei mehreren Videos und unabhängig vom Zielpfad.
+- RetroDisc ist davon **nicht** betroffen: Alle produktiven Formatmuster fordern getrennte Video-/Audiostreams (`bestvideo…+bestaudio/…`) beziehungsweise `bestaudio/best` an, und genau diese Pfade sind wie oben belegt grün.
+- Das ist damit kein Produktdefekt, sondern eine YouTube-/Formatbeobachtung. Sie wird notiert, weil eine frühere Nutzermeldung „YouTube-Download geht nicht" in dieselbe Richtung zeigte; ein konkreter Fehlerfall des Nutzers liegt weiterhin nicht vor.
+
+Installation und Deinstallation auf den neuen Bytes
+
+- Stille Installation in den isolierten Pfad `%LOCALAPPDATA%\Programs\RetroDisc-QA-a9b5853`: Exitcode 0, stderr leer, installierte EXE byteidentisch zur `dist`-EXE.
+- Deinstallation über den mitgelieferten `Uninstall RetroDisc.cmd`: Exitcode 0, stderr leer, Installationsordner vollständig entfernt, keine Reste.
+
+Ausdrücklich nicht abgedeckt in diesem Block
+
+- Kein erneuter vollständiger Klickdurchlauf durch die Oberfläche. `src/ui/app.html`, `src/ui/splash.html` und `assets/` sind seit dem visuell geprüften Build `6bd0e38` unverändert; belegt ist hier der reale Start samt gerenderter Hauptansicht.
+- Keine physischen Brenn- oder Rip-Tests; die bleiben hardware- und medienabhängig und separat auszuweisen.
+- Keine Signatur, damit keine Aussage über das Verhalten auf fremden Rechnern mit aktivem Smart App Control.
+
+Verbleibender Gate: Code-Signing-Zertifikat bereitstellen und `python build.py --clean --sign` ausführen; die dann entstehenden signierten Hashes erneut durch Start-, Installations- und Medien-Gate führen. Für einen zusätzlichen unabhängigen Lauffähigkeitsbeleg steht `RUNTIME_GATE_ZWEITRECHNER.md` bereit.
