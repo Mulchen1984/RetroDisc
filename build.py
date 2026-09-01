@@ -20,6 +20,10 @@ import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+
+from tools import codesign  # noqa: E402  (benoetigt HERE im Suchpfad)
+
 DIST_DIR = HERE / "dist"
 BUILD_DIR = HERE / "build"
 OUTPUT_DIR = HERE / "Output"
@@ -126,6 +130,38 @@ def build_portable_exe() -> None:
     print(f"OK: {APP_EXE} ({APP_EXE.stat().st_size / 1024 / 1024:.1f} MB)")
 
 
+def sign_artifact(target: Path, require: bool) -> bool:
+    """Signiert ein Artefakt, sofern konfiguriert.
+
+    Rueckgabe: True, wenn signiert wurde. Ist ``require`` gesetzt und keine
+    Konfiguration vorhanden, bricht der Build ab -- ein stillschweigend
+    unsigniertes Release waere genau der Fehler, den --sign verhindern soll.
+    """
+    config = codesign.load_config()
+    if not config.configured:
+        if require:
+            raise SystemExit(
+                "FEHLER: --sign angefordert, aber kein Zertifikat konfiguriert.\n"
+                f"        Setze {codesign.ENV_PFX} (+ {codesign.ENV_PASSWORD}) "
+                f"oder {codesign.ENV_THUMBPRINT}."
+            )
+        print(f"Signierung uebersprungen (nicht konfiguriert): {target.name}")
+        return False
+
+    print(f"\n=== Signiere {target.name} ({config.describe}) ===")
+    try:
+        codesign.sign_file(target, config)
+    except codesign.SigningError as exc:
+        raise SystemExit(f"FEHLER: {exc}")
+    status = codesign.verify_signature(target)
+    print(f"Authenticode-Status: {status}")
+    if status != "Valid":
+        raise SystemExit(
+            f"FEHLER: {target.name} ist nach dem Signieren nicht gueltig signiert ({status})."
+        )
+    return True
+
+
 def build_portable_zip() -> None:
     print("\n=== Portable ZIP erstellen ===")
     OUTPUT_DIR.mkdir(exist_ok=True)
@@ -178,6 +214,11 @@ def main() -> int:
     parser.add_argument("--skip-tests", action="store_true", help="Tests ueberspringen")
     parser.add_argument("--skip-installer", action="store_true", help="Nur portable EXE/ZIP bauen")
     parser.add_argument("--skip-zip", action="store_true", help="Portable ZIP nicht erstellen")
+    parser.add_argument(
+        "--sign",
+        action="store_true",
+        help="Artefakte signieren; bricht ab, wenn kein Zertifikat konfiguriert ist",
+    )
     args = parser.parse_args()
 
     print("RetroDisc Windows Build")
@@ -193,10 +234,15 @@ def main() -> int:
     prepare_vendor()
     run_tests(args.skip_tests)
     build_portable_exe()
+    # Zuerst die App-EXE signieren: ZIP und Installer betten sie danach ein und
+    # tragen die Signatur dadurch weiter.
+    signed = sign_artifact(APP_EXE, require=args.sign)
     if not args.skip_zip:
         build_portable_zip()
     if not args.skip_installer:
         build_setup_exe()
+        # Der Installer ist die Datei, die Smart App Control bisher blockiert hat.
+        signed = sign_artifact(SETUP_EXE, require=args.sign) or signed
 
     print("\nFERTIG")
     print(f"Portable EXE: {APP_EXE}")
@@ -204,6 +250,13 @@ def main() -> int:
         print(f"Portable ZIP: {PORTABLE_ZIP}")
     if SETUP_EXE.exists():
         print(f"Installer:    {SETUP_EXE}")
+    if not signed:
+        print(
+            "\nHINWEIS: Die Artefakte sind NICHT signiert. Bei aktivem Smart App\n"
+            "         Control blockiert Windows insbesondere den Installer\n"
+            "         (CodeIntegrity-Event 3033/3077). Zertifikat konfigurieren\n"
+            "         und mit --sign bauen."
+        )
     return 0
 
 

@@ -1,12 +1,12 @@
 # RetroDisc Release-Audit-Status
 
-Letzte Aktualisierung: 2026-09-01 05:36 CEST
+Letzte Aktualisierung: 2026-09-01 14:47 CEST
 
 ## Verbindlicher Abschlussstatus
 
 NOT RELEASE READY
 
-Begründung: Der aktuelle Source einschließlich Doppel-Disc-UI und unsichtbarer Windows-Hilfsprozesse besteht alle Gates und die unabhängige QA. Da diese Änderungen nach dem zuletzt gebauten Freeze entstanden, sind erneuter Source-Freeze, sauberer Neubau und reale Tests der neuen Artefakte noch ausstehend. Vorhandene Dateien in `dist/` und `Output/` gelten für diesen Stand nicht als Releasebeleg.
+Begründung: Produkt-, Portable- und visuelle Artefakt-QA sind grün. Die reale Installer-QA fand anschließend einen Deinstallationsfehler (Exitcode 32/leerer Restordner), der im aktuellen Source behoben und regressiongetestet ist. Erneuter Freeze, Installer-Neubau und reale Wiederholung der Deinstallation stehen noch aus. Zusätzlich fehlt auf dem Host ein öffentlich vertrauenswürdiges Code-Signing-Zertifikat; die funktionierende Signierpipeline kann deshalb noch keine gültig signierten öffentlichen Artefakte erzeugen.
 
 ## Aktueller Checkpoint
 
@@ -215,3 +215,21 @@ Nächster Gate: neuen Source Freeze aus dem Splash-Fix erstellen; anschließend 
 - Damit bleibt die ursprüngliche Dependency-Klassifikation bestätigt: **A — fehlende Release-Dependency `requests`**, nicht nur lokale `.venv` und kein Vendor-/FFmpeg-Problem. Der aktuelle Whisper-Import und reale SRT-Workflow sind grün.
 
 Nächster Gate: neuen Source-Freeze aus diesem vollständig verifizierten Stand erstellen; danach EXE, Portable-ZIP und Installer sauber neu bauen und ausschließlich diese neuen Artefakte testen.
+
+### 2026-09-01 14:20–14:47 CEST — Reale Artefakt-QA und letzter Installer-Blocker
+
+- Source-Freeze `6bd0e38` wurde sauber gebaut. Erste frische Artefakte: EXE SHA-256 `52CA7750E89D24A67894DFAE6584DB740C66EEE1F66C20DDBC9AD11A5489B9D5`, Portable-ZIP `911367B1EFE17D39917780B7EB7B7CE3044BE7A3D2ADEE5ABFE7CE12FC6D13B5`, Installer `AD6B06F7B5EDEE812A03C11913A862FBD9787B7DD1B91E68D4BD4CC7805DF865`.
+- Portable-ZIP vollständig gelesen und separat entpackt; enthaltene EXE ist byteidentisch zur `dist`-EXE. Start, Hauptfenster `RetroDisc 1.0`, pywebview-API und Fehlerkanal (0 Bytes) sind grün.
+- Echte Artefakt-Runtime: gebündelte FFmpeg-/FFprobe-/yt-dlp-Versionen gestartet; reales MP4 erzeugt, MP3 konvertiert und geprobt; yt-dlp-Simulation und echter öffentlicher YouTube-Download (`jNQXAC9IVRw`, 498491 Bytes) erfolgreich.
+- Produkt-Progress und Cancel real geprüft: Fortschrittsereignisse vorhanden, laufender nativer Prozess wurde abgebrochen, Endzustand `cancelled`, keine Restdatei. Während Konvertierung, Download, Brennererkennung und Cancel entstanden **0 neue sichtbare Konsolenfenster**.
+- Trump-Startbild aus dem tatsächlichen Bundle erschien **2,402 Sekunden** und damit im gewünschten 2–3-Sekunden-Fenster. Screenshots: `C:\Users\marco\Pictures\Screenshots\RetroDisc-splash-6bd0e38-visual-agent.png` und `C:\Users\marco\Pictures\Screenshots\RetroDisc-main-6bd0e38-visual-agent.png`.
+- Visuelle QA: keine abgeschnittenen/überlappenden Elemente, kein Overflow; beide Disc-Rohlinge vollständig mit 4,82 px sichtbarem Abstand. Alle vier Hauptaktionen und sechs Zusatzaktionen wurden real angeklickt und öffneten die richtigen Ansichten; 0 deaktiviert, 0 offscreen, stderr 0.
+- Reale Installation in einen isolierten QA-Pfad: installierte EXE ist byteidentisch zur `dist`-EXE und startete mit Hauptfenster `RetroDisc 1.0`.
+- Reproduzierter letzter Blocker: Der gebündelte Uninstaller entfernte zwar Dateien, endete aber mit Exitcode 32 und ließ den leeren Installationsordner zurück. Ursache war der synchrone Selbstlösch-/CWD-Trick im noch laufenden Batchprozess.
+- Kleinster Fix: Nach Shortcut-Bereinigung und Benutzermeldung wechselt der Elternprozess nach `%TEMP%`, startet einen versteckten PowerShell-Helper, der mit `-LiteralPath` begrenzt wiederholt löscht, und beendet sich mit Exitcode 0. Ein echter isolierter Windows-Test mit Leerzeichen und `&` im Zielpfad beweist die vollständige Selbstlöschung.
+- Die von Hermes ergänzte Authenticode-Pipeline signiert bei vorhandener PFX-/Thumbprint-Konfiguration zuerst die App-EXE, anschließend ZIP/Installer und verifiziert den Status. `--sign` bricht ohne Zertifikat hart ab; ein normaler Build warnt ausdrücklich vor unsignierten Artefakten. Passwort bleibt ausschließlich in der Prozessumgebung.
+- Fokussierte Installer-/Signiergates: **23 passed**. Vollständige Suite nach dem Fix: **123 passed in 11.46s**.
+- Enger Claude-Code-Sonnet/high-Review von Uninstaller-Quoting, asynchroner Selbstlöschung und Signierintegration: **PASS**, kein Codeblocker.
+- Externer Distributionsblocker: `Get-AuthenticodeSignature` meldet für App und Installer `NotSigned`; auf dem Host sind weder Signierumgebungsvariablen noch ein Code-Signing-Zertifikat vorhanden. Windows Application Control blockiert die identische Portable-EXE aus `%TEMP%`, während sie aus dem freigegebenen Projektpfad vollständig funktioniert.
+
+Nächster Gate: korrigierten Installer-/Signierstand einfrieren, final neu bauen, reale Install-/Deinstallations-QA wiederholen und danach Status ausschließlich anhand der neuen Hashes setzen. Eine öffentliche `RELEASE READY`-Freigabe bleibt ohne vertrauenswürdige Signatur ausgeschlossen.

@@ -69,17 +69,39 @@ $Shortcut.Save()
 
 def write_uninstaller(install_dir: Path) -> None:
     uninstaller = install_dir / "Uninstall RetroDisc.cmd"
-    script = f"""@echo off
+    # Drei Fallstricke, die hier bewusst geloest sind:
+    #
+    # 1. Der Startmenue-Ordner gehoert ausschliesslich dieser App und enthaelt
+    #    neben RetroDisc.lnk auch die Deinstallations-Verknuepfung. Ein
+    #    einfaches rmdir scheitert an dem nicht leeren Ordner und liesse ihn mit
+    #    einer toten Verknuepfung zurueck; deshalb rekursiv entfernen.
+    #
+    # 2. Dieses Skript liegt selbst im Installationsordner. Der laufende
+    #    cmd.exe-Prozess haelt die Batch-Datei und ggf. den Ordner noch offen.
+    #    Ein synchrones rmdir entfernt dann zwar die Dateien, endet aber mit
+    #    ERROR_SHARING_VIOLATION (32) und laesst den leeren Ordner zurueck.
+    #    Deshalb uebernimmt ein versteckter PowerShell-Helper das Loeschen erst
+    #    nach dem Ende dieses Batchprozesses und versucht es begrenzt erneut.
+    #
+    # 3. Vor dem Helper-Start wird nach %TEMP% gewechselt, damit auch dessen
+    #    Arbeitsverzeichnis keinen Handle auf den Installationsordner haelt.
+    #    Prozentzeichen werden fuer die Batch-Zuweisung escaped; andere
+    #    erlaubte Pfad-Metazeichen bleiben innerhalb von set "NAME=Wert"
+    #    literal und PowerShell verwendet anschliessend -LiteralPath.
+    target = str(install_dir).replace("%", "%%")
+    script = rf"""@echo off
 setlocal
 cd /d "%~dp0"
 echo RetroDisc wird deinstalliert...
-del "%APPDATA%\Microsoft\Windows\Start Menu\Programs\RetroDisc\RetroDisc.lnk" 2>nul
-rmdir "%APPDATA%\Microsoft\Windows\Start Menu\Programs\RetroDisc" 2>nul
+rmdir /s /q "%APPDATA%\Microsoft\Windows\Start Menu\Programs\RetroDisc" 2>nul
 del "%USERPROFILE%\Desktop\RetroDisc.lnk" 2>nul
-cd /d "%TEMP%"
-rmdir /s /q "{install_dir}" 2>nul
 echo Fertig.
 pause
+set "RD_TARGET={target}"
+cd /d "%TEMP%"
+start "" /b powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "$t=$env:RD_TARGET; for($i=0; $i -lt 100 -and (Test-Path -LiteralPath $t); $i++){{ Remove-Item -LiteralPath $t -Recurse -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 200 }}"
+endlocal
+exit /b 0
 """
     uninstaller.write_text(script, encoding="utf-8")
 
