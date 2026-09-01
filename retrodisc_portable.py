@@ -17,6 +17,7 @@ import logging
 import threading
 import asyncio
 import json
+import subprocess
 import struct
 import wave
 import math
@@ -449,7 +450,8 @@ class RetroDiscBridge:
         beschriebenen Mediums ueber das Dateisystem. Hersteller/ATIP
         eines LEEREN Rohlings braucht tiefe SCSI-Befehle und wird hier
         NICHT vorgetaeuscht."""
-        import subprocess, platform, shutil
+        import platform, shutil
+        from src.utils.subprocesses import run_hidden
         try:
             if platform.system() != "Windows":
                 return json.dumps({"drives": [], "platform": platform.system(),
@@ -462,7 +464,7 @@ class RetroDiscBridge:
                 "MediaLoaded=$_.MediaLoaded; MediaType=$_.MediaType } } | "
                 "ConvertTo-Json -Compress"
             )
-            out = subprocess.run(
+            out = run_hidden(
                 ["powershell", "-NoProfile", "-Command", ps],
                 capture_output=True, text=True, timeout=15
             )

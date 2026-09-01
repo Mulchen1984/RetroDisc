@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.models.media import Job
+from src.utils.subprocesses import create_hidden_subprocess
 
 log = structlog.get_logger()
 
@@ -86,7 +87,7 @@ class VideoUpscaler:
             "-c:v", "libx264", "-preset", "medium", "-crf", "18",
             "-pix_fmt", "yuv420p", "-c:a", "copy", str(output_path),
         ]
-        proc = await asyncio.create_subprocess_exec(
+        proc = await create_hidden_subprocess(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         if job:
             job._process = proc
@@ -158,7 +159,7 @@ class VideoUpscaler:
 
             fps = await self._get_fps(input_path)
 
-            proc = await asyncio.create_subprocess_exec(
+            proc = await create_hidden_subprocess(
                 self.ffmpeg, "-y", "-i", str(input_path),
                 "-qscale:v", "1", "-qmin", "1", "-qmax", "1",
                 str(frames_in / "frame_%08d.png"),
@@ -189,7 +190,7 @@ class VideoUpscaler:
             if tile_size > 0:
                 cmd.extend(["-t", str(tile_size)])
 
-            proc = await asyncio.create_subprocess_exec(
+            proc = await create_hidden_subprocess(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -220,7 +221,7 @@ class VideoUpscaler:
                 job.update_progress(85, "Video wird zusammengesetzt...")
 
             temp_video = temp_dir / "upscaled_noaudio.mp4"
-            proc = await asyncio.create_subprocess_exec(
+            proc = await create_hidden_subprocess(
                 self.ffmpeg, "-y",
                 "-framerate", str(fps),
                 "-i", str(frames_out / "frame_%08d.png"),
@@ -307,7 +308,7 @@ class VideoUpscaler:
                 job.update_progress(5, "Frames werden extrahiert...")
 
             # Frames extrahieren
-            proc = await asyncio.create_subprocess_exec(
+            proc = await create_hidden_subprocess(
                 self.ffmpeg, "-y", "-i", str(input_path),
                 "-qscale:v", "1",
                 str(frames_in / "frame_%08d.png"),
@@ -329,7 +330,7 @@ class VideoUpscaler:
                 "-j", "1:2:2",  # Thread-Konfiguration
             ]
 
-            proc = await asyncio.create_subprocess_exec(
+            proc = await create_hidden_subprocess(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -343,7 +344,7 @@ class VideoUpscaler:
                 job.update_progress(80, "Video wird zusammengesetzt...")
 
             # Zusammensetzen mit Ziel-FPS + Original-Audio
-            proc = await asyncio.create_subprocess_exec(
+            proc = await create_hidden_subprocess(
                 self.ffmpeg, "-y",
                 "-framerate", str(target_fps),
                 "-i", str(frames_out / "%08d.png"),
@@ -376,7 +377,7 @@ class VideoUpscaler:
 
     async def _get_fps(self, video_path: Path) -> float:
         """Ermittelt die Framerate eines Videos."""
-        proc = await asyncio.create_subprocess_exec(
+        proc = await create_hidden_subprocess(
             self.ffmpeg.replace("ffmpeg", "ffprobe"),
             "-v", "0", "-select_streams", "v:0",
             "-show_entries", "stream=r_frame_rate",

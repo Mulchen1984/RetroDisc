@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.models.media import DiscType, Job
+from src.utils.subprocesses import create_hidden_subprocess
 
 log = structlog.get_logger()
 
@@ -112,7 +113,7 @@ class DiscTools:
             job.update_progress(10, "DVD-Struktur wird erstellt...")
 
         cmd = [self.dvdauthor, "-x", str(xml_path)]
-        proc = await asyncio.create_subprocess_exec(
+        proc = await create_hidden_subprocess(
             *cmd, env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -181,7 +182,7 @@ class DiscTools:
 
         cmd.append(str(source_dir))
 
-        proc = await asyncio.create_subprocess_exec(
+        proc = await create_hidden_subprocess(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -256,7 +257,7 @@ class DiscTools:
                 cmd.extend([f"speed={speed}"])
             cmd.append(str(iso_path))
 
-        proc = await asyncio.create_subprocess_exec(
+        proc = await create_hidden_subprocess(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -346,7 +347,7 @@ class DiscTools:
         import os
         if os.name == "nt" and shutil.which(self.mediainfo):
             try:
-                proc = await asyncio.create_subprocess_exec(
+                proc = await create_hidden_subprocess(
                     self.mediainfo, device,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -388,7 +389,7 @@ class DiscTools:
         if not isoinfo:
             return info
         try:
-            proc = await asyncio.create_subprocess_exec(
+            proc = await create_hidden_subprocess(
                 isoinfo, "-d", "-i", device,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,

@@ -23,6 +23,7 @@ from src.services.library import MediaLibrary
 from src.services.dvd_workflow import DVDWorkflow, DVDProject
 from src.services.ripper import DiscRipper
 from src.utils.sound import play_completion_sound
+from src.utils.subprocesses import create_hidden_subprocess
 
 log = structlog.get_logger()
 
@@ -393,7 +394,7 @@ class RetroDiscAPI:
 
     async def _query_drive_names(self) -> dict:
         try:
-            proc = await asyncio.create_subprocess_exec(
+            proc = await create_hidden_subprocess(
                 "powershell", "-NoProfile", "-Command",
                 "Get-CimInstance Win32_CDROMDrive | "
                 "Select-Object Drive,Caption | ConvertTo-Json -Compress",
@@ -728,4 +729,3 @@ class RetroDiscAPI:
             if result and result[0]:
                 return json.dumps({"folder": result[0]})
         return json.dumps({"error": "Abgebrochen"})
-

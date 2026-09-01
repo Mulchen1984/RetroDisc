@@ -78,6 +78,34 @@ def test_ui_download_controls_are_addressable_and_url_is_editable():
     assert "a.download_url(u,quality,audioOnly,subtitles)" in html
 
 
+def test_convert_icon_shows_two_complete_non_overlapping_discs():
+    html = UI_FILE.read_text(encoding="utf-8")
+    convert_button = re.search(
+        r'<div class="cbtn" onclick="openFlow\(\'convert\'\)">(.*?)</svg>',
+        html,
+        re.DOTALL,
+    )
+    assert convert_button, "Konvertieren-Button fehlt"
+
+    groups = re.findall(
+        r'<g transform="translate\(([\d.]+),([\d.]+)\)">\s*'
+        r'<ellipse cx="0" cy="0" rx="([\d.]+)" ry="([\d.]+)"',
+        convert_button.group(1),
+    )
+    assert len(groups) == 2
+    discs = [tuple(map(float, group)) for group in groups]
+    stroke_half = 0.75
+
+    for x, y, rx, ry in discs:
+        assert x - rx - stroke_half >= 0
+        assert x + rx + stroke_half <= 92
+        assert y - ry - stroke_half >= 0
+        assert y + ry + stroke_half <= 80
+
+    left, right = sorted(discs)
+    assert left[0] + left[2] + stroke_half < right[0] - right[2] - stroke_half
+
+
 def test_ui_preset_values_exist_in_backend():
     html = UI_FILE.read_text(encoding="utf-8")
     select = re.search(r'<select id="presetSel".*?</select>', html, re.DOTALL)

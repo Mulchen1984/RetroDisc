@@ -12,6 +12,7 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from src.models.media import Job, SearchResult
+from src.utils.subprocesses import create_hidden_subprocess
 
 log = structlog.get_logger()
 
@@ -116,7 +117,7 @@ class Downloader:
     async def validate(self) -> str:
         """Prüft ob yt-dlp verfügbar ist und gibt die Version zurück."""
         try:
-            proc = await asyncio.create_subprocess_exec(
+            proc = await create_hidden_subprocess(
                 self.ytdlp_path, "--version",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -178,7 +179,7 @@ class Downloader:
 
         log.info("Download gestartet", url=url, format=format)
 
-        proc = await asyncio.create_subprocess_exec(
+        proc = await create_hidden_subprocess(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
@@ -251,7 +252,7 @@ class Downloader:
             "--no-warnings",
         ]
 
-        proc = await asyncio.create_subprocess_exec(
+        proc = await create_hidden_subprocess(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

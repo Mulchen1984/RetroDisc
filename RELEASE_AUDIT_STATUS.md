@@ -1,12 +1,12 @@
 # RetroDisc Release-Audit-Status
 
-Letzte Aktualisierung: 2026-08-31 18:25 CEST
+Letzte Aktualisierung: 2026-09-01 05:36 CEST
 
 ## Verbindlicher Abschlussstatus
 
 NOT RELEASE READY
 
-Begründung: Source-Audit und unabhängige QA sind geschlossen; Source-Freeze, Neubau und reale Artefakttests sind noch nicht abgeschlossen. Vorhandene Dateien in `dist/` und `Output/` sind Altartefakte und gelten nicht als validiert.
+Begründung: Der aktuelle Source einschließlich Doppel-Disc-UI und unsichtbarer Windows-Hilfsprozesse besteht alle Gates und die unabhängige QA. Da diese Änderungen nach dem zuletzt gebauten Freeze entstanden, sind erneuter Source-Freeze, sauberer Neubau und reale Tests der neuen Artefakte noch ausstehend. Vorhandene Dateien in `dist/` und `Output/` gelten für diesen Stand nicht als Releasebeleg.
 
 ## Aktueller Checkpoint
 
@@ -199,3 +199,19 @@ Nächster Gate: Source Freeze erstellen, danach ausschließlich aus diesem Commi
 - Ein einzelner enger, read-only Claude-Sonnet/high-Review des Splash-Fixes und Regressionstests: **PASS, kein Release-Blocker**. Keine Parallelaufträge und keine Claude-Änderungen.
 
 Nächster Gate: neuen Source Freeze aus dem Splash-Fix erstellen; anschließend alle drei Artefakte erneut sauber bauen und ausschließlich den neuen Build testen.
+
+### 2026-09-01 05:05–05:36 CEST — Doppel-Disc-UI, YouTube-Evidenz und unsichtbare Windows-Hilfsprozesse
+
+- Das Konvertieren-Symbol zeigt jetzt zwei vollständige, innerhalb des 92×80-SVG liegende und nicht überlappende Disc-Rohlinge. Ein Geometrie-Regressionstest verhindert erneutes Abschneiden oder Überlappen.
+- Der gemeldete YouTube-Fehler war mit der historischen yt-dlp-Test-ID reproduzierbar, weil dieses konkrete Video nicht mehr verfügbar ist. Der gebündelte yt-dlp-Simulationslauf mit `jNQXAC9IVRw` sowie ein realer Download durch `src.core.downloader.Downloader` waren erfolgreich; die UI-/Bridge-Signatur ist korrekt. Ein URL-/Fehlertext des konkreten fehlgeschlagenen Nutzerdownloads liegt nicht vor, daher wurde keine unbelegte Spezialursache behauptet.
+- Sämtliche produktiven FFmpeg-, FFprobe-, yt-dlp-, DVD-, Upscale- und PowerShell-Hilfsprozesse laufen auf Windows nun zentral mit `CREATE_NO_WINDOW`. Sichtbare Benutzeraktionen zum Öffnen von Explorer/Finder/Dateien bleiben unverändert sichtbar.
+- Zentraler Wrapper: `src/utils/subprocesses.py`; synchrone und asynchrone Aufrufe erhalten den Flag nur auf Windows und bewahren vorhandene `creationflags` per bitweisem OR.
+- Der vollständige Produkt-Scan enthält außerhalb dieses Wrappers keinen direkten `subprocess.run`- oder `asyncio.create_subprocess_exec`-Aufruf. Der Regressionstest verbietet zusätzlich neue direkte `subprocess.call`/`check_call`/`check_output`, `asyncio.create_subprocess_shell` und nicht explizit freigegebene `Popen`-Aufrufe.
+- Ein erster unabhängiger Claude-Code-Sonnet/high-Review fand einen realen Randfehler in `retrodisc_portable.py`: `subprocess.TimeoutExpired` war nach dem Umbau ohne gebundenen Modulnamen. Der Modulimport wurde ergänzt und ein echter Timeout-Degradierungstest hinzugefügt.
+- Der anschließende Claude-Code-Sonnet/high-Re-Review bewertet den korrigierten Produktfix mit **PASS**; keine verbleibenden Release-Blocker.
+- Fokussierte Tests nach Härtung: **20 passed**. Die offene Hermes-Sitzung ergänzte anschließend `tests/test_subprocess_hardening.py`; der zusätzliche Lauf bestand **26/26** und deckt insbesondere sichtbare Explorer/Finder-Benutzeraktionen sowie beide PowerShell-Timeoutpfade ab.
+- Vollständige aktuelle Suite nach Übernahme dieses späten Tests: `pytest -q` **100 passed in 9.45s**. Die übrigen Gates bleiben grün: `compileall` Exitcode 0; `.hermes/verify_core.py` Exitcode 0 mit realem MP3-Job; aktuelles Inline-JavaScript syntaktisch gültig; UI/API-Signaturtest grün.
+- Vollständiger Real-Media-Smoke `build/e2e-smoke-20260901-053407`: Exitcode 0; Trim A/B, Merge, 2×-Upscale, 50-fps-Interpolation, Highlights, deutsche Faster-Whisper-SRT mit zwei Segmenten und DVD-ISO vollständig erfolgreich. ISO-Größe 2627584 Bytes, SRT 199 Bytes.
+- Damit bleibt die ursprüngliche Dependency-Klassifikation bestätigt: **A — fehlende Release-Dependency `requests`**, nicht nur lokale `.venv` und kein Vendor-/FFmpeg-Problem. Der aktuelle Whisper-Import und reale SRT-Workflow sind grün.
+
+Nächster Gate: neuen Source-Freeze aus diesem vollständig verifizierten Stand erstellen; danach EXE, Portable-ZIP und Installer sauber neu bauen und ausschließlich diese neuen Artefakte testen.

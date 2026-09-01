@@ -21,6 +21,7 @@ from typing import Optional
 from src.core.ffmpeg import FFmpeg
 from src.core.disc import DiscTools, DiscError
 from src.models.media import DiscType, Job, JobType
+from src.utils.subprocesses import create_hidden_subprocess
 
 log = structlog.get_logger()
 
@@ -213,13 +214,13 @@ class DVDWorkflow:
                 ps = ("$s=New-Object -ComObject Shell.Application; "
                       f"$i=$s.Namespace(17).ParseName('{device[:2]}'); "
                       "if($i){$i.InvokeVerb('Eject')}else{exit 2}")
-                proc = await asyncio.create_subprocess_exec(
+                proc = await create_hidden_subprocess(
                     "powershell.exe", "-NoProfile", "-Command", ps,
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.PIPE,
                 )
             else:
-                proc = await asyncio.create_subprocess_exec(
+                proc = await create_hidden_subprocess(
                     "eject", device,
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.PIPE,
@@ -362,7 +363,7 @@ class AudioCDWorkflow:
             cmd.append(f"speed={speed}")
         cmd.extend([str(f) for f in wav_files])
 
-        proc = await asyncio.create_subprocess_exec(
+        proc = await create_hidden_subprocess(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

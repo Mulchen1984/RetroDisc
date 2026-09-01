@@ -13,6 +13,7 @@ from typing import Optional
 from src.models.media import (
     AudioStream, MediaFile, MediaType, SubtitleStream, VideoStream, Job
 )
+from src.utils.subprocesses import create_hidden_subprocess
 
 log = structlog.get_logger()
 
@@ -60,7 +61,7 @@ class FFmpeg:
 
         for name, path in [("ffmpeg", self.ffmpeg_path), ("ffprobe", self.ffprobe_path)]:
             try:
-                proc = await asyncio.create_subprocess_exec(
+                proc = await create_hidden_subprocess(
                     path, "-version",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -102,7 +103,7 @@ class FFmpeg:
             str(input_path),
         ]
 
-        proc = await asyncio.create_subprocess_exec(
+        proc = await create_hidden_subprocess(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -276,7 +277,7 @@ class FFmpeg:
             except Exception:
                 pass
 
-        proc = await asyncio.create_subprocess_exec(
+        proc = await create_hidden_subprocess(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -404,7 +405,7 @@ class FFmpeg:
                 str(output_path),
             ]
 
-            proc = await asyncio.create_subprocess_exec(
+            proc = await create_hidden_subprocess(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -444,7 +445,7 @@ class FFmpeg:
             str(output_path),
         ]
 
-        proc = await asyncio.create_subprocess_exec(
+        proc = await create_hidden_subprocess(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

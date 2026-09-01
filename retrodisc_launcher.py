@@ -621,11 +621,12 @@ class RetroDiscBridge:
 
     def detect_burners(self) -> str:
         try:
-            import subprocess, json as _json, platform
+            import json as _json, platform
+            from src.utils.subprocesses import run_hidden
             if platform.system() != "Windows":
                 return json.dumps({"drives": [], "note": "Laufwerks-Erkennung läuft aktuell nur unter Windows."})
             ps = "Get-CimInstance Win32_CDROMDrive | ForEach-Object { [PSCustomObject]@{ Name=$_.Name; Drive=$_.Drive; MediaLoaded=$_.MediaLoaded; MediaType=$_.MediaType; DeviceID=$_.DeviceID; PNPDeviceID=$_.PNPDeviceID } } | ConvertTo-Json -Compress"
-            out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=15)
+            out = run_hidden(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=15)
             if out.returncode != 0:
                 return json.dumps({"drives": [], "error": (out.stderr or "PowerShell-Laufwerkserkennung fehlgeschlagen").strip()})
             raw = (out.stdout or "").strip()

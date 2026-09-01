@@ -24,6 +24,8 @@ from typing import Optional
 import urllib.request
 import urllib.error
 
+from src.utils.subprocesses import run_hidden
+
 log = logging.getLogger("retrodisc.bootstrap")
 
 # ── Tool-Definitionen ─────────────────────────────────────────────────
@@ -241,7 +243,7 @@ class ToolBootstrap:
             exe = Path(system)
 
         try:
-            result = subprocess.run(
+            result = run_hidden(
                 [str(exe)] + info["test_args"],
                 capture_output=True,
                 timeout=10,
