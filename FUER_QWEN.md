@@ -1,5 +1,13 @@
 # RetroDisc — Portable App bauen mit Qwen
 
+> **VERALTET — nicht mehr befolgen.** Diese Anleitung beschreibt einen
+> Bauweg, den es so nicht mehr gibt: Sie baut aus `retrodisc_portable.py`
+> statt aus dem produktiven `retrodisc_final.spec`, nennt Abhängigkeiten, die
+> ersetzt wurden, bündelt weder die DVD-Werkzeuge noch das Whisper-Modell und
+> verspricht ein macOS-Artefakt, das nicht gebaut wird. Der gültige Bauweg
+> steht in `README.md` und `CLAUDE.md`: `python build.py --clean`.
+> Die Datei bleibt nur als historischer Beleg erhalten.
+
 ## Für Qwen: Das ist dein Auftrag
 
 Baue aus diesem Python-Quellcode eine portable Standalone-App:

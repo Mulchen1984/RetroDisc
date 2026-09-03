@@ -1,6 +1,13 @@
 # RetroDisc — All-in-One Media Suite
 
-RetroDisc ist eine portable Windows-/macOS-Media-App zum Konvertieren, Downloaden, Brennen und Bearbeiten von Medien.
+RetroDisc ist eine portable **Windows**-Media-App zum Konvertieren, Downloaden,
+Brennen und Bearbeiten von Medien.
+
+> **Plattform:** RetroDisc wird ausschließlich für Windows gebaut, getestet und
+> ausgeliefert. `build.py`, `prepare_vendor.py` und die CI erzeugen nur
+> Windows-Artefakte. Im Repository liegen noch macOS-Reste (`BUILD_MACOS.sh`,
+> `create_dmg.py`, `retrodisc.spec`, `FUER_QWEN.md`); sie sind an keinem Gate
+> belegt und werden nicht unterstützt.
 
 ## Windows 11 bauen
 
@@ -92,4 +99,12 @@ darauf hin, dass die Artefakte unsigniert sind.
 
 ## GitHub Actions
 
-Nach einem Push zu GitHub baut `.github/workflows/build.yml` Windows- und macOS-Artefakte automatisch.
+Nach einem Push zu GitHub baut `.github/workflows/build.yml` die
+Windows-Artefakte automatisch: portable EXE, Portable-ZIP und Installer über
+`python build.py --clean`. Vor dem Bauen laufen dieselben Source-Gates wie
+lokal. Ein Push auf ein Tag `v*.*.*` erzeugt zusätzlich ein Release und
+verlangt dafür zwingend die Signaturgeheimnisse
+`RETRODISC_SIGN_PFX_BASE64` und `RETRODISC_SIGN_PASSWORD` — ohne sie bricht der
+Tag-Build ab, damit kein unsigniertes Release entsteht.
+
+macOS-Artefakte werden nicht gebaut.

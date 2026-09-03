@@ -1,20 +1,100 @@
-# CLAUDE.md — RetroDisc Build-Anweisungen
+# CLAUDE.md — Arbeitsanweisungen für RetroDisc
 
-## Auftrag
-Baue eine fertige portable App:
-- Windows: dist/RetroDisc.exe
-- macOS:   dist/RetroDisc.dmg
+Diese Datei beschreibt, wie in diesem Repository gearbeitet wird. Sie ersetzt
+eine ältere Fassung, die eine von Hand gepflegte PyInstaller-Kommandozeile
+enthielt. Diese Kommandozeile war nicht mehr der Bauweg: sie baute aus
+`retrodisc_portable.py` statt aus dem produktiven Einstieg, nannte das längst
+ersetzte `openai-whisper` und bündelte weder die DVD-Werkzeuge noch das
+Whisper-Modell.
 
-## Schritt 1: Dependencies
-pip install pyinstaller pywebview pydantic structlog rich click httpx yt-dlp sounddevice soundfile certifi openai-whisper scenedetect librosa
+## Zuerst lesen
 
-## Schritt 2: FFmpeg laden
-python prepare_vendor.py
+`RELEASE_AUDIT_STATUS.md` ist das verbindliche Status- und Journaldokument.
+Vor jeder Arbeit lesen, Arbeitsblöcke hinten anhängen, den Status nur mit
+echten Belegen ändern. Unbelegte Aussagen gehören dort nicht hinein: eine
+Aussage über ein Artefakt gilt immer nur für den konkreten SHA-256, an dem sie
+gemessen wurde.
 
-## Schritt 3A: Windows EXE
-python -m PyInstaller --onefile --windowed --name "RetroDisc" --icon "assets/retrodisc.ico" --version-file "version_info.txt" --manifest "retrodisc.manifest" --add-data "src/ui/app.html;src/ui" --add-data "src/ui/splash.html;src/ui" --add-data "assets;assets" --add-data "vendor/ffmpeg.exe;vendor" --add-data "vendor/ffprobe.exe;vendor" --collect-data "pydantic" --collect-data "certifi" --collect-data "yt_dlp" --collect-submodules "yt_dlp" --hidden-import "src.core.ffmpeg" --hidden-import "src.core.pipeline" --hidden-import "src.core.downloader" --hidden-import "src.core.disc" --hidden-import "src.services.converter" --hidden-import "src.services.search" --hidden-import "src.services.library" --hidden-import "src.services.dvd_workflow" --hidden-import "src.services.smart_edit" --hidden-import "src.services.subtitle" --hidden-import "src.services.upscaler" --hidden-import "src.services.assistant" --hidden-import "src.services.watch_folder" --hidden-import "src.config.settings" --hidden-import "src.config.presets" --hidden-import "src.models.media" --hidden-import "src.utils.sound" --hidden-import "src.bootstrap" --hidden-import "webview.platforms.winforms" --hidden-import "webview.platforms.edgechromium" --hidden-import "pydantic_core" --hidden-import "sqlite3" --noconfirm retrodisc_portable.py
+## Runtime: nicht die `.venv`-EXE benutzen
 
-## Schritt 3B: macOS DMG
-python3 -m PyInstaller --onefile --windowed --name "RetroDisc" --icon "assets/retrodisc.icns" --add-data "src/ui/app.html:src/ui" --add-data "src/ui/splash.html:src/ui" --add-data "assets:assets" --add-data "vendor/ffmpeg:vendor" --add-data "vendor/ffprobe:vendor" --collect-data "pydantic" --collect-data "certifi" --collect-data "yt_dlp" --collect-submodules "yt_dlp" --hidden-import "src.core.ffmpeg" --hidden-import "src.core.pipeline" --hidden-import "src.core.downloader" --hidden-import "src.services.converter" --hidden-import "src.services.search" --hidden-import "src.services.library" --hidden-import "src.services.smart_edit" --hidden-import "src.services.subtitle" --hidden-import "src.services.upscaler" --hidden-import "src.services.assistant" --hidden-import "src.config.settings" --hidden-import "src.config.presets" --hidden-import "src.models.media" --hidden-import "src.bootstrap" --hidden-import "webview.platforms.cocoa" --hidden-import "pydantic_core" --hidden-import "sqlite3" --noconfirm retrodisc_portable.py
-pip install dmgbuild
-python3 create_dmg.py
+Smart App Control ist auf dem Entwicklungsrechner erzwingend aktiv und
+blockiert die kopierte `.venv\Scripts\python.exe`. Alle Läufe deshalb mit der
+freigegebenen Python-3.11-Runtime und der venv als Pfad:
+
+```bat
+set PYTHONPATH=.venv\Lib\site-packages
+C:\Users\marco\.local\bin\python3.11.exe -m pytest -q
+```
+
+Dasselbe Muster gilt für `build.py`, `prepare_vendor.py`, die Skripte unter
+`scripts/` und `.hermes/verify_core.py`.
+
+## Aufbau
+
+- `retrodisc_launcher.py` — produktiver Einstieg der gepackten EXE. Enthält
+  `RetroDiscBridge` (Implementierung) und `RetroDiscApi` (schlanker Proxy, den
+  PyWebView tatsächlich bekommt). **Nicht** `src/ui/desktop.py` prüfen: das
+  verwendet die gepackte EXE nicht.
+- `src/ui/app.html` — die gesamte Oberfläche samt Inline-JavaScript.
+- `src/core`, `src/services`, `src/config`, `src/models` — Medienpipeline,
+  Werkzeuge und Einstellungen.
+- `src/utils/subprocesses.py` — jeder Hintergrundprozess läuft über diese
+  Helfer: verstecktes Fenster, lenientes Dekodieren der Konsolenausgabe,
+  begrenztes Streamen, Prozessbaum-Abbruch und atomare Ausgabedateien.
+- `prepare_vendor.py` — erzeugt `vendor/` vollständig und auf feste Versionen
+  und SHA-256 gepinnt: FFmpeg, FFprobe, yt-dlp, `dvdtools/` und
+  `whisper-base/`.
+- `build.py` — der Bauweg. Baut über `retrodisc_final.spec`.
+
+## Gates
+
+Alle fünf müssen grün sein, bevor ein Stand eingefroren wird:
+
+```bat
+C:\Users\marco\.local\bin\python3.11.exe -m pytest -q
+C:\Users\marco\.local\bin\python3.11.exe -m compileall -q src tests retrodisc_launcher.py retrodisc_portable.py
+C:\Users\marco\.local\bin\python3.11.exe .hermes\verify_core.py
+C:\Users\marco\.local\bin\python3.11.exe scripts\verify_ui_bridge.py
+C:\Users\marco\.local\bin\python3.11.exe scripts\release_smoke.py
+node --check build\ui-audit\inline.js
+```
+
+`verify_ui_bridge.py` prüft die Kette UI → `RetroDiscApi` → `RetroDiscBridge`
+auf fehlende Proxys, fehlende Bridge-Ziele und Arity-Mismatches und legt
+nebenbei das extrahierte Inline-JavaScript für `node --check` ab.
+`release_smoke.py` fährt echte Medienarbeit: Trim, Merge, 2×-Upscale,
+50-fps-Interpolation, Highlights, deutsche Faster-Whisper-SRT und eine
+DVD-ISO.
+
+## Bauen und Artefakte prüfen
+
+Immer aus einem eingefrorenen Commit bauen, nie aus einem schmutzigen
+Arbeitsbaum:
+
+```bat
+C:\Users\marco\.local\bin\python3.11.exe build.py --clean
+C:\Users\marco\.local\bin\python3.11.exe scripts\verify_release_artifacts.py
+```
+
+Ergebnis sind `dist\RetroDisc.exe`, `Output\RetroDisc_1.0.0_Portable.zip` und
+`Output\RetroDisc_Setup_1.0.0.exe`. `verify_release_artifacts.py` hasht die
+drei Artefakte, prüft die ZIP-Integrität gegen die `dist`-EXE, liest den
+Authenticode-Status und fährt Installation und Deinstallation real in einer
+Sandbox, in der `USERPROFILE`, `APPDATA` und `LOCALAPPDATA` umgelenkt sind.
+Die gemessenen Hashes gehören anschließend ins Journal.
+
+## Plattform
+
+RetroDisc ist ein **Windows**-Produkt. `build.py` baut für Windows,
+`prepare_vendor.py` vendort Windows-Binärdateien, und die CI baut ausschließlich
+Windows-Artefakte. Es gibt weiterhin macOS-Reste im Repository
+(`BUILD_MACOS.sh`, `create_dmg.py`, `retrodisc.spec`); sie sind an keinem Gate
+belegt und dürfen nicht als unterstützter Pfad dargestellt werden.
+
+## Signierung
+
+Ohne vertrauenswürdiges Code-Signing-Zertifikat bleiben die Artefakte
+unsigniert und damit nicht verlässlich weitergebbar. Details und die
+Umgebungsvariablen stehen in `README.md`. Ein selbst ausgestelltes Zertifikat
+löst das **nicht** — Smart App Control prüft nicht den lokalen
+Zertifikatspeicher. Die Richtlinie wird nie umgangen oder verändert.
