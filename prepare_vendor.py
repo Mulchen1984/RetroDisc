@@ -33,12 +33,17 @@ FFMPEG_URL = (
 FFMPEG_SHA256 = "b4da332540eaebc6939181b59e267f163dd57407ef6596f7f3452845921d1d91"
 FFMPEG_SOURCE_MARKER = VENDOR_DIR / "ffmpeg-source.json"
 
-YTDLP_VERSION = "2026.07.04"
+# yt-dlp muss mit YouTube Schritt halten: 2026.07.04 lieferte fuer die
+# produktiven Formatmuster reproduzierbar "HTTP Error 403: Forbidden",
+# 2026.08.19 laedt dieselbe URL mit demselben Muster fehlerfrei. Der Pin ist
+# Absicht (nachvollziehbare Builds), muss aber regelmaessig angehoben und der
+# Download danach real geprueft werden.
+YTDLP_VERSION = "2026.08.19"
 YTDLP_URL = (
     f"https://github.com/yt-dlp/yt-dlp/releases/download/{YTDLP_VERSION}/"
     "yt-dlp.exe"
 )
-YTDLP_SHA256 = "52fe3c26dcf71fbdc85b528589020bb0b8e383155cfa81b64dd447bbe35e24b8"
+YTDLP_SHA256 = "66674953fe251b89f4d08c5f0e35e0728679bd67ab3d7d05c0562af101dd3e7a"
 
 DVDSTYLER_VERSION = "3.2.1"
 DVDSTYLER_URL = (

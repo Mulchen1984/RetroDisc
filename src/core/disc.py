@@ -18,6 +18,15 @@ class DiscError(Exception):
     pass
 
 
+class _MediaInfoInconclusive(Exception):
+    """dvd+rw-mediainfo lieferte keinen belastbaren Medienbefund.
+
+    Interner Kontrollfluss von :meth:`DiscTools.get_disc_info`: weder "Medium
+    vorhanden" noch "kein Medium" ist damit belegt, es entscheidet der
+    Dateisystem-Fallback.
+    """
+
+
 class DiscTools:
     """
     DVD/Blu-ray Authoring, ISO-Erstellung und Disc-Brennen.
@@ -334,6 +343,62 @@ class DiscTools:
         log.info("Disc verifiziert", iso=str(source), device=device, sha256=iso_hash)
         return True
 
+    @staticmethod
+    def _windows_volume_info(device: str, info: dict) -> dict:
+        """Ermittelt den Medienzustand eines Windows-Laufwerks am Dateisystem.
+
+        Liefert ``present``/``readable`` nur, wenn das Wurzelverzeichnis
+        tatsaechlich gelesen werden kann. Ein nicht vorhandener Buchstabe und
+        ein leeres Laufwerk fallen damit beide korrekt auf "kein Medium"
+        zurueck, ohne dass eine lokalisierte Fehlermeldung geraten werden muss.
+        """
+        import ctypes
+        import os
+
+        letter = device.strip().rstrip("\\/")
+        if len(letter) == 1:
+            letter = f"{letter}:"
+        root = Path(f"{letter}\\")
+        try:
+            entries = list(os.scandir(root))
+        except OSError:
+            return info
+
+        info["present"] = True
+        info["readable"] = True
+        if (root / "VIDEO_TS").is_dir():
+            info["type"] = "DVD-Video"
+        elif (root / "BDMV").is_dir():
+            info["type"] = "Blu-ray"
+        elif entries:
+            info["type"] = "data"
+        else:
+            # Lesbar, aber leer: das ist ein beschreibbarer Rohling.
+            info["blank"] = True
+            info["readable"] = False
+            info["type"] = "blank"
+        info["tracks"] = len(entries)
+
+        label = ctypes.create_unicode_buffer(261)
+        filesystem = ctypes.create_unicode_buffer(261)
+        try:
+            if ctypes.windll.kernel32.GetVolumeInformationW(
+                ctypes.c_wchar_p(str(root)), label, 261,
+                None, None, None, filesystem, 261,
+            ):
+                info["label"] = label.value
+                info["filesystem"] = filesystem.value
+        except OSError as exc:  # pragma: no cover - hostabhaengig
+            log.debug("GetVolumeInformationW fehlgeschlagen", device=device, error=str(exc))
+
+        try:
+            usage = shutil.disk_usage(root)
+            info["capacity_bytes"] = usage.total
+            info["capacity_gb"] = round(usage.total / (1024 ** 3), 2)
+        except OSError:
+            pass
+        return info
+
     async def get_disc_info(self, device: str = "/dev/sr0") -> dict:
         """Liest Medienprofil und Kapazität eines optischen Laufwerks."""
         info = {
@@ -358,13 +423,43 @@ class DiscTools:
                 if ("no media mounted" in lower_output
                         or "unable to test unit ready" in lower_output
                         or "medium not present" in lower_output):
-                    return info
-                info["present"] = True
+                    # Auch "kein Medium" ist unter Windows kein Endergebnis:
+                    # bei einem virtuell eingebundenen Abbild meldet das
+                    # Werkzeug "unable to TEST UNIT READY", obwohl VIDEO_TS
+                    # lesbar ist und das Rippen funktioniert. Ein wirklich
+                    # leeres Laufwerk faellt im Dateisystem-Fallback ohnehin
+                    # korrekt auf present=False zurueck.
+                    raise _MediaInfoInconclusive(output)
 
                 import re
-                mounted = re.search(r"Mounted Media:\s+.*?\"([^\"]+)\"", output, re.I)
+
+                # "present" darf nur aus einem Positivbeleg folgen. Vorher galt
+                # jede Ausgabe als Medium, sofern sie keines von drei englischen
+                # Fehlermustern enthielt. Auf einem deutschen Windows meldet das
+                # Werkzeug fuer einen nicht existierenden Buchstaben aber
+                # "Z:: unable to open: Ein oder mehrere Argumente sind
+                # ungueltig." -- und RetroDisc behauptete daraufhin ein Medium in
+                # einem Laufwerk, das es gar nicht gibt. Fehlt der Positivbeleg,
+                # entscheidet stattdessen der Dateisystem-Fallback weiter unten.
+                if not re.search(r"(Mounted Media|Disc status|READ CAPACITY)\s*:", output, re.I):
+                    log.debug(
+                        "dvd+rw-mediainfo ohne Medienbeleg", device=device, output=output[-400:]
+                    )
+                    raise _MediaInfoInconclusive(output)
+                info["present"] = True
+
+                # dvd+rw-mediainfo schreibt das Profil unquotiert hinter den
+                # Hex-Code, etwa: `Mounted Media:  11h, DVD-R Sequential`.
+                # Die fruehere Regex verlangte Anfuehrungszeichen und konnte
+                # deshalb nie greifen -- profile, type und rewritable blieben
+                # fuer jede echte Disc leer. Beide Formen werden akzeptiert.
+                mounted = re.search(
+                    r"Mounted Media:\s*(?:\"([^\"]+)\"|(?:[0-9A-Fa-f]{1,4}h\s*,\s*)?([^\r\n]+))",
+                    output,
+                    re.I,
+                )
                 if mounted:
-                    profile = mounted.group(1).strip()
+                    profile = (mounted.group(1) or mounted.group(2) or "").strip().strip('"')
                     info["profile"] = profile
                     info["type"] = profile
                     upper = profile.upper()
@@ -381,8 +476,18 @@ class DiscTools:
                     info["capacity_gb"] = round(size_bytes / (1024 ** 3), 2)
                 info["raw"] = output[-4000:]
                 return info
+            except _MediaInfoInconclusive:
+                pass
             except Exception as exc:
                 log.warning("dvd+rw-mediainfo Fehler", error=str(exc), device=device)
+
+        # Windows-Dateisystem-Fallback. dvd+rw-mediainfo spricht das Laufwerk
+        # direkt an und kann deshalb schweigen, wo das Medium trotzdem
+        # einwandfrei lesbar ist -- etwa bei einem virtuell eingebundenen
+        # Abbild. Ohne diesen Zweig meldete RetroDisc dann "kein Medium",
+        # obwohl VIDEO_TS lesbar war und das Rippen funktionierte.
+        if os.name == "nt":
+            return self._windows_volume_info(device, info)
 
         # Portable ISO9660-Fallback für bereits beschriebene Medien.
         isoinfo = shutil.which("isoinfo")
