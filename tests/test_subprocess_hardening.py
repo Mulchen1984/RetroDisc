@@ -215,6 +215,9 @@ def test_launchers_keep_startfile_and_webbrowser_untouched(rel_path):
     # Bewusste Öffnen-Aktionen für den Benutzer bleiben sichtbar/unverändert.
     assert "os.startfile(" in source
     assert "webbrowser.open(" in source
+    # Die Launcher starten Hintergrundprozesse ausschließlich über die
+    # Helfer in src/utils/subprocesses.py. Ein eigener, lokal definierter
+    # create_hidden_subprocess wäre ein Rückfall hinter diese Bündelung.
     assert "create_hidden_subprocess" not in source
 
 
@@ -251,7 +254,7 @@ def test_launcher_detect_burners_survives_powershell_timeout():
 
     payload = json.loads(raw)
     assert payload["drives"] == []
-    assert payload["error"]
+    assert "Zeit" in payload["error"]
 
 
 def test_portable_module_imports_subprocess_for_timeout_guard():
@@ -330,7 +333,25 @@ def test_launchers_do_not_decode_powershell_with_locale_encoding(rel_path):
 
 @pytest.mark.parametrize("rel_path", BACKGROUND_MODULES)
 def test_background_modules_decode_tool_output_leniently(rel_path):
-    """Ein striktes `.decode()` auf Werkzeugausgabe ersetzt die echte
-    Fehlermeldung durch einen UnicodeDecodeError."""
+    """Jeder direkte Decode von Werkzeugausgabe muss Fehler tolerieren.
+
+    Ein reiner Textvergleich auf ``.decode()`` übersah bisher beispielsweise
+    ``.decode("utf-8")``. Der zentrale Decoder in ``utils/subprocesses.py`` ist
+    bewusst nicht Teil dieser Modulliste: Dort gehören die zunächst strikten
+    Decode-Versuche zur Codepage-Fallback-Kaskade.
+    """
     source = (PROJECT_ROOT / rel_path).read_text(encoding="utf-8")
-    assert ".decode()" not in source
+    tree = ast.parse(source, filename=rel_path)
+
+    offenders: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if not isinstance(node.func, ast.Attribute) or node.func.attr != "decode":
+            continue
+        if not any(keyword.arg == "errors" for keyword in node.keywords):
+            offenders.append(f"{rel_path}:{node.lineno}")
+
+    assert not offenders, (
+        "Werkzeugausgabe wird ohne errors= dekodiert: " + ", ".join(offenders)
+    )

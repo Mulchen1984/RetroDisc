@@ -12,7 +12,12 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from src.models.media import Job, SearchResult
-from src.utils.subprocesses import create_hidden_subprocess
+from src.utils.subprocesses import (
+    create_hidden_subprocess,
+    decode_console_output,
+    iter_stream_records,
+    terminate_process,
+)
 
 log = structlog.get_logger()
 
@@ -85,6 +90,7 @@ class Downloader:
             self.ytdlp_path,
             "--no-warnings",
             "--newline",
+            "--progress",
             "--windows-filenames",
             "--print", "after_move:__RETRODISC_FILE__:%(filepath)s",
             "-o", str(output_path),
@@ -163,7 +169,7 @@ class Downloader:
         url = self.validate_url(url)
         before = {
             path.resolve(): (path.stat().st_mtime_ns, path.stat().st_size)
-            for path in self.output_dir.iterdir()
+            for path in self.output_dir.rglob("*")
             if path.is_file()
         }
         cmd = self._build_download_command(
@@ -189,54 +195,64 @@ class Downloader:
 
         final_path = None
         output_lines: list[str] = []
-        while True:
-            line = await proc.stdout.readline()
-            if not line:
-                break
-            line_str = line.decode("utf-8", errors="replace").strip()
-            output_lines.append(line_str)
-            if len(output_lines) > 100:
-                output_lines.pop(0)
+        try:
+            async for record in iter_stream_records(proc.stdout):
+                line_str = decode_console_output(record).strip()
+                output_lines.append(line_str)
+                if len(output_lines) > 100:
+                    output_lines.pop(0)
 
-            # Progress parsen
-            if job:
-                progress_match = re.search(r"(\d+\.?\d*)%", line_str)
-                if progress_match:
-                    progress = float(progress_match.group(1))
-                    speed_match = re.search(r"at\s+(\S+)", line_str)
-                    speed = speed_match.group(1) if speed_match else ""
-                    job.update_progress(progress, f"Download: {speed}")
+                # Progress parsen
+                if job:
+                    progress_match = re.search(r"(\d+\.?\d*)%", line_str)
+                    if progress_match:
+                        progress = float(progress_match.group(1))
+                        speed_match = re.search(r"at\s+(\S+)", line_str)
+                        speed = speed_match.group(1) if speed_match else ""
+                        job.update_progress(progress, f"Download: {speed}")
 
-            # Von --print after_move ausgegebener endgültiger Dateiname.
-            if line_str.startswith("__RETRODISC_FILE__:"):
-                final_path = Path(line_str.split(":", 1)[1].strip())
+                # Von --print after_move ausgegebener endgültiger Dateiname.
+                if line_str.startswith("__RETRODISC_FILE__:"):
+                    final_path = Path(line_str.split(":", 1)[1].strip())
 
-        await proc.wait()
-        if job:
-            job._process = None
+            await proc.wait()
+            if proc.returncode != 0:
+                details = "\n".join(output_lines)[-1200:]
+                raise DownloadError(f"Download fehlgeschlagen: {details}")
 
-        if proc.returncode != 0:
-            details = "\n".join(output_lines)[-1200:]
-            raise DownloadError(f"Download fehlgeschlagen: {details}")
+            # Wenn wir den finalen Pfad nicht aus dem Output bekommen haben,
+            # suche die neueste Datei im Output-Ordner
+            if final_path is None or not final_path.exists():
+                files = []
+                for path in self.output_dir.iterdir():
+                    if not path.is_file() or path.suffix.lower() in {".part", ".ytdl", ".tmp"}:
+                        continue
+                    signature = (path.stat().st_mtime_ns, path.stat().st_size)
+                    if before.get(path.resolve()) != signature:
+                        files.append(path)
+                files.sort(key=lambda f: f.stat().st_mtime_ns, reverse=True)
+                if files:
+                    final_path = files[0]
+                else:
+                    raise DownloadError("Download-Datei nicht gefunden")
 
-        # Wenn wir den finalen Pfad nicht aus dem Output bekommen haben,
-        # suche die neueste Datei im Output-Ordner
-        if final_path is None or not final_path.exists():
-            files = []
-            for path in self.output_dir.iterdir():
-                if not path.is_file() or path.suffix.lower() in {".part", ".ytdl", ".tmp"}:
+            log.info("Download abgeschlossen", path=str(final_path))
+            return final_path
+        except BaseException:
+            await terminate_process(proc)
+            for path in self.output_dir.rglob("*"):
+                if not path.is_file() or path.resolve() in before:
                     continue
-                signature = (path.stat().st_mtime_ns, path.stat().st_size)
-                if before.get(path.resolve()) != signature:
-                    files.append(path)
-            files.sort(key=lambda f: f.stat().st_mtime_ns, reverse=True)
-            if files:
-                final_path = files[0]
-            else:
-                raise DownloadError("Download-Datei nicht gefunden")
-
-        log.info("Download abgeschlossen", path=str(final_path))
-        return final_path
+                lower_name = path.name.lower()
+                if (
+                    path.suffix.lower() in {".part", ".ytdl", ".tmp", ".temp", ".frag"}
+                    or ".part-frag" in lower_name
+                ):
+                    path.unlink(missing_ok=True)
+            raise
+        finally:
+            if job and getattr(job, "_process", None) is proc:
+                job._process = None
 
     async def search_youtube(
         self,

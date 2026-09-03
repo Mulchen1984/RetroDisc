@@ -67,6 +67,65 @@ class TestPipeline:
         assert job.id in failures
 
     @pytest.mark.asyncio
+    async def test_completion_observer_cannot_turn_done_job_into_failure(self):
+        pipeline = Pipeline(play_sound=False)
+
+        async def successful_handler(job):
+            job.update_progress(50, "arbeitet")
+
+        def broken_observer(_job):
+            raise RuntimeError("UI ist bereits geschlossen")
+
+        pipeline.register_handler(JobType.CONVERT.value, successful_handler)
+        pipeline.on_job_complete = broken_observer
+        job = Job(job_type=JobType.CONVERT)
+
+        await pipeline._execute_job(job)
+
+        assert job.state == JobState.DONE
+        assert job.error_message is None
+        assert job in pipeline.completed_jobs
+
+    @pytest.mark.asyncio
+    async def test_job_completion_observer_cannot_turn_done_job_into_failure(self):
+        pipeline = Pipeline(play_sound=False)
+
+        async def successful_handler(job):
+            job.update_progress(50, "arbeitet")
+
+        def broken_job_observer(_job):
+            raise RuntimeError("Job-Observer ist bereits geschlossen")
+
+        pipeline.register_handler(JobType.CONVERT.value, successful_handler)
+        job = Job(job_type=JobType.CONVERT, on_complete=broken_job_observer)
+
+        await pipeline._execute_job(job)
+
+        assert job.state == JobState.DONE
+        assert job.error_message is None
+        assert job in pipeline.completed_jobs
+
+    @pytest.mark.asyncio
+    async def test_failure_observer_cannot_escape_or_replace_original_failure(self):
+        pipeline = Pipeline(play_sound=False)
+
+        async def failing_handler(_job):
+            raise ValueError("ursprünglicher Fehler")
+
+        def broken_observer(_job):
+            raise RuntimeError("UI ist bereits geschlossen")
+
+        pipeline.register_handler(JobType.CONVERT.value, failing_handler)
+        pipeline.on_job_failed = broken_observer
+        job = Job(job_type=JobType.CONVERT)
+
+        await pipeline._execute_job(job)
+
+        assert job.state == JobState.FAILED
+        assert job.error_message == "ursprünglicher Fehler"
+        assert job in pipeline.completed_jobs
+
+    @pytest.mark.asyncio
     async def test_cancel_queued_job(self):
         pipeline = Pipeline(play_sound=False)
         job = Job(job_type=JobType.CONVERT)
@@ -217,6 +276,17 @@ class TestJob:
         job.on_progress = lambda p, t: updates.append((p, t))
         job.update_progress(50.0, "Halbzeit")
         assert updates == [(50.0, "Halbzeit")]
+
+    def test_progress_observer_failure_does_not_escape(self):
+        job = Job()
+        job.on_progress = lambda *_args: (_ for _ in ()).throw(
+            RuntimeError("UI geschlossen")
+        )
+
+        job.update_progress(50.0, "Halbzeit")
+
+        assert job.progress == 50.0
+        assert job.progress_text == "Halbzeit"
 
     def test_progress_capped_at_100(self):
         job = Job()

@@ -163,6 +163,21 @@ def test_whisper_runtime_dependency_is_declared_packaged_and_importable():
     requirements = (PROJECT_ROOT / "requirements.txt").read_text(encoding="utf-8")
     assert re.search(r"^requests(?:[<>=!~].*)?(?:\s+#.*)?$", requirements, re.MULTILINE)
 
+    setup_tree = ast.parse((PROJECT_ROOT / "setup.py").read_text(encoding="utf-8"))
+    setup_call = next(
+        node.value
+        for node in setup_tree.body
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and getattr(node.value.func, "id", None) == "setup"
+    )
+    install_requires = ast.literal_eval(next(
+        keyword.value for keyword in setup_call.keywords
+        if keyword.arg == "install_requires"
+    ))
+    assert any(dependency.startswith("faster-whisper") for dependency in install_requires)
+    assert any(dependency.startswith("requests") for dependency in install_requires)
+
     build_tree = ast.parse((PROJECT_ROOT / "build.py").read_text(encoding="utf-8"))
     runtime_deps = next(
         ast.literal_eval(node.value)

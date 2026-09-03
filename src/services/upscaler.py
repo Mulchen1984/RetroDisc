@@ -10,7 +10,15 @@ from pathlib import Path
 from typing import Optional
 
 from src.models.media import Job
-from src.utils.subprocesses import create_hidden_subprocess
+from src.utils.subprocesses import (
+    communicate_with_job,
+    commit_staged_output,
+    create_hidden_subprocess,
+    decode_console_output,
+    iter_stream_records,
+    staging_output_path,
+    terminate_process,
+)
 
 log = structlog.get_logger()
 
@@ -79,25 +87,27 @@ class VideoUpscaler:
                              video_filter: str, job: Optional[Job],
                              status: str) -> Path:
         """Zuverlässiger CPU-Fallback, wenn die optionalen Vulkan-KI-Tools fehlen."""
+        staging_path = staging_output_path(output_path)
         if job:
             job.update_progress(5, status)
         cmd = [
             self.ffmpeg, "-y", "-i", str(input_path),
             "-vf", video_filter,
             "-c:v", "libx264", "-preset", "medium", "-crf", "18",
-            "-pix_fmt", "yuv420p", "-c:a", "copy", str(output_path),
+            "-pix_fmt", "yuv420p", "-c:a", "copy", str(staging_path),
         ]
         proc = await create_hidden_subprocess(
             *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        if job:
-            job._process = proc
-        _, stderr = await proc.communicate()
-        if job:
-            job._process = None
-        if proc.returncode != 0:
-            raise UpscalerError(stderr.decode("utf-8", errors="replace")[-1000:])
-        if not output_path.is_file() or output_path.stat().st_size == 0:
-            raise UpscalerError(f"Ausgabedatei wurde nicht erstellt: {output_path}")
+        try:
+            _, stderr = await communicate_with_job(proc, job)
+            if proc.returncode != 0:
+                raise UpscalerError(decode_console_output(stderr)[-1000:])
+            if not staging_path.is_file() or staging_path.stat().st_size == 0:
+                raise UpscalerError(f"Ausgabedatei wurde nicht erstellt: {output_path}")
+            commit_staged_output(staging_path, output_path)
+        except BaseException:
+            staging_path.unlink(missing_ok=True)
+            raise
         if job:
             job.update_progress(98, "Verarbeitung abgeschlossen")
         return output_path
@@ -134,9 +144,12 @@ class VideoUpscaler:
         output_path = Path(output_path)
         if not input_path.is_file():
             raise UpscalerError(f"Datei nicht gefunden: {input_path}")
+        if input_path.resolve() == output_path.resolve():
+            raise UpscalerError("Quell- und Zieldatei dürfen nicht identisch sein.")
         if scale not in (2, 4):
             raise UpscalerError("Skalierungsfaktor muss 2 oder 4 sein.")
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        staging_path = staging_output_path(output_path)
 
         if shutil.which(self.realesrgan) is None:
             log.info("Real-ESRGAN fehlt; verwende FFmpeg-Lanczos-Fallback", scale=scale)
@@ -166,7 +179,11 @@ class VideoUpscaler:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            await proc.communicate()
+            _, stderr = await communicate_with_job(proc, job)
+            if proc.returncode != 0:
+                raise UpscalerError(
+                    f"Frame-Extraktion fehlgeschlagen: {decode_console_output(stderr)[-1000:]}"
+                )
 
             frame_count = len(list(frames_in.glob("*.png")))
             log.info("Frames extrahiert", count=frame_count)
@@ -192,29 +209,41 @@ class VideoUpscaler:
 
             proc = await create_hidden_subprocess(
                 *cmd,
-                stdout=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
             )
 
-            # Progress aus stderr lesen
-            while True:
-                line = await proc.stderr.readline()
-                if not line:
-                    break
-                line_str = line.decode("utf-8", errors="replace")
+            stderr_tail = bytearray()
+            if job:
+                job._process = proc
+            try:
+                async for record in iter_stream_records(proc.stderr):
+                    stderr_tail.extend(record)
+                    stderr_tail.extend(b"\n")
+                    if len(stderr_tail) > 8192:
+                        del stderr_tail[:-8192]
+                    line_str = decode_console_output(record)
 
-                if job:
-                    match = re.search(r"(\d+)/(\d+)", line_str)
-                    if match:
-                        current = int(match.group(1))
-                        total = int(match.group(2))
-                        progress = 20 + (current / total) * 60
-                        job.update_progress(progress, f"Frame {current}/{total}")
+                    if job:
+                        match = re.search(r"(\d+)/(\d+)", line_str)
+                        if match:
+                            current = int(match.group(1))
+                            total = int(match.group(2))
+                            if total > 0:
+                                progress = 20 + (current / total) * 60
+                                job.update_progress(progress, f"Frame {current}/{total}")
 
-            await proc.wait()
+                await proc.wait()
+            except BaseException:
+                await terminate_process(proc)
+                raise
+            finally:
+                if job and getattr(job, "_process", None) is proc:
+                    job._process = None
 
             if proc.returncode != 0:
-                raise UpscalerError("Real-ESRGAN Upscaling fehlgeschlagen")
+                details = decode_console_output(bytes(stderr_tail))[-1000:]
+                raise UpscalerError(f"Real-ESRGAN Upscaling fehlgeschlagen: {details}")
 
             # 3. Frames zu Video zusammensetzen + Original-Audio
             if job:
@@ -230,14 +259,19 @@ class VideoUpscaler:
                 "-c:v", "libx264", "-preset", "slow", "-crf", "18",
                 "-c:a", "copy",
                 "-pix_fmt", "yuv420p",
-                str(output_path),
+                str(staging_path),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            await proc.communicate()
+            _, stderr = await communicate_with_job(proc, job)
+            if proc.returncode != 0:
+                raise UpscalerError(
+                    f"Video-Zusammensetzung fehlgeschlagen: {decode_console_output(stderr)[-1000:]}"
+                )
 
-            if not output_path.exists():
+            if not staging_path.is_file() or staging_path.stat().st_size == 0:
                 raise UpscalerError("Output-Video wurde nicht erstellt")
+            commit_staged_output(staging_path, output_path)
 
             if job:
                 job.update_progress(98, "Upscaling abgeschlossen!")
@@ -250,6 +284,9 @@ class VideoUpscaler:
 
             return output_path
 
+        except BaseException:
+            staging_path.unlink(missing_ok=True)
+            raise
         finally:
             # Temp aufräumen
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -276,9 +313,12 @@ class VideoUpscaler:
         output_path = Path(output_path)
         if not input_path.is_file():
             raise UpscalerError(f"Datei nicht gefunden: {input_path}")
+        if input_path.resolve() == output_path.resolve():
+            raise UpscalerError("Quell- und Zieldatei dürfen nicht identisch sein.")
         if target_fps <= 0 or target_fps > 240:
             raise UpscalerError("Ziel-Framerate muss zwischen 1 und 240 liegen.")
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        staging_path = staging_output_path(output_path)
 
         if shutil.which(self.rife) is None:
             log.info("RIFE fehlt; verwende FFmpeg Motion-Interpolation", fps=target_fps)
@@ -315,7 +355,11 @@ class VideoUpscaler:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            await proc.communicate()
+            _, stderr = await communicate_with_job(proc, job)
+            if proc.returncode != 0:
+                raise UpscalerError(
+                    f"Frame-Extraktion fehlgeschlagen: {decode_console_output(stderr)[-1000:]}"
+                )
 
             if job:
                 job.update_progress(20, f"Frame Interpolation ({source_fps}->{target_fps}fps)...")
@@ -335,10 +379,12 @@ class VideoUpscaler:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            await proc.communicate()
+            _, stderr = await communicate_with_job(proc, job)
 
             if proc.returncode != 0:
-                raise UpscalerError("RIFE Interpolation fehlgeschlagen")
+                raise UpscalerError(
+                    f"RIFE Interpolation fehlgeschlagen: {decode_console_output(stderr)[-1000:]}"
+                )
 
             if job:
                 job.update_progress(80, "Video wird zusammengesetzt...")
@@ -353,14 +399,19 @@ class VideoUpscaler:
                 "-c:v", "libx264", "-preset", "medium", "-crf", "20",
                 "-c:a", "copy",
                 "-pix_fmt", "yuv420p",
-                str(output_path),
+                str(staging_path),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            await proc.communicate()
+            _, stderr = await communicate_with_job(proc, job)
+            if proc.returncode != 0:
+                raise UpscalerError(
+                    f"Video-Zusammensetzung fehlgeschlagen: {decode_console_output(stderr)[-1000:]}"
+                )
 
-            if not output_path.exists():
+            if not staging_path.is_file() or staging_path.stat().st_size == 0:
                 raise UpscalerError("Interpoliertes Video wurde nicht erstellt")
+            commit_staged_output(staging_path, output_path)
 
             if job:
                 job.update_progress(98, "Frame Interpolation abgeschlossen!")
@@ -372,6 +423,9 @@ class VideoUpscaler:
 
             return output_path
 
+        except BaseException:
+            staging_path.unlink(missing_ok=True)
+            raise
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

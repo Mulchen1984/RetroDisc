@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
+import os
+import platform
+import tempfile
 from pathlib import Path
+
 from pydantic import BaseModel, Field
+
+
+def _default_burn_device() -> str:
+    """Return the platform-appropriate default optical drive."""
+    return "D:" if platform.system() == "Windows" else "/dev/sr0"
 
 
 class ToolPaths(BaseModel):
@@ -54,7 +63,7 @@ class AISettings(BaseModel):
 
 class BurnSettings(BaseModel):
     """Brenn-Einstellungen."""
-    default_device: str = "/dev/sr0"  # Linux/Mac, Windows: "D:"
+    default_device: str = Field(default_factory=_default_burn_device)
     default_speed: int | None = None  # None = Auto
     verify_after_burn: bool = True
     eject_after_burn: bool = True
@@ -82,20 +91,42 @@ class AppSettings(BaseModel):
         """Speichert Einstellungen als JSON."""
         path = path or self._default_config_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self.model_dump_json(indent=2))
+        temp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                newline="\n",
+                dir=path.parent,
+                prefix=f".{path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as temp_file:
+                temp_path = Path(temp_file.name)
+                temp_file.write(self.model_dump_json(indent=2))
+                temp_file.flush()
+                os.fsync(temp_file.fileno())
+            os.replace(temp_path, path)
+        except Exception:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+            raise
 
     @classmethod
     def load(cls, path: Path | None = None) -> "AppSettings":
         """Lädt Einstellungen aus JSON."""
         path = path or cls._default_config_path()
         if path.exists():
-            return cls.model_validate_json(path.read_text())
+            try:
+                return cls.model_validate_json(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                # Keep the invalid file for diagnosis, but do not prevent startup.
+                return cls()
         return cls()
 
     @staticmethod
     def _default_config_path() -> Path:
         """Standard-Pfad für die Konfigurationsdatei."""
-        import platform
         if platform.system() == "Windows":
             base = Path.home() / "AppData" / "Local" / "RetroDisc"
         else:

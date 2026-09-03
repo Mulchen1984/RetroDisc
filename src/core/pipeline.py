@@ -9,6 +9,7 @@ from typing import Callable, Optional
 
 from src.models.media import Job, JobState
 from src.utils.sound import play_completion_sound
+from src.utils.subprocesses import terminate_process
 
 log = structlog.get_logger()
 
@@ -134,13 +135,7 @@ class Pipeline:
                     job.mark_cancelled()
                     process = getattr(job, "_process", None)
                     if process is not None and getattr(process, "returncode", None) is None:
-                        try:
-                            process.terminate()
-                            await asyncio.wait_for(process.wait(), timeout=3)
-                        except asyncio.TimeoutError:
-                            process.kill()
-                        except ProcessLookupError:
-                            pass
+                        await terminate_process(process)
                     task = self._tasks.get(job_id)
                     if task is not None and task is not asyncio.current_task():
                         task.cancel()
@@ -172,7 +167,14 @@ class Pipeline:
                     play_completion_sound()
 
                 if self.on_job_complete:
-                    self.on_job_complete(job)
+                    try:
+                        self.on_job_complete(job)
+                    except Exception as observer_error:
+                        log.error(
+                            "Completion-Observer fehlgeschlagen",
+                            job_id=job.id,
+                            error=str(observer_error),
+                        )
 
         except Exception as e:
             if job.state == JobState.CANCELLED:
@@ -182,7 +184,14 @@ class Pipeline:
                 log.error("Job fehlgeschlagen", job_id=job.id, error=str(e))
 
                 if self.on_job_failed:
-                    self.on_job_failed(job)
+                    try:
+                        self.on_job_failed(job)
+                    except Exception as observer_error:
+                        log.error(
+                            "Failure-Observer fehlgeschlagen",
+                            job_id=job.id,
+                            error=str(observer_error),
+                        )
 
         finally:
             self._job_handlers.pop(job.id, None)

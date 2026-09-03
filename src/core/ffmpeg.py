@@ -13,7 +13,15 @@ from typing import Optional
 from src.models.media import (
     AudioStream, MediaFile, MediaType, SubtitleStream, VideoStream, Job
 )
-from src.utils.subprocesses import create_hidden_subprocess
+from src.utils.subprocesses import (
+    communicate_with_job,
+    commit_staged_output,
+    create_hidden_subprocess,
+    decode_console_output,
+    iter_stream_records,
+    staging_output_path,
+    terminate_process,
+)
 
 log = structlog.get_logger()
 
@@ -232,7 +240,8 @@ class FFmpeg:
             raise FFmpegError(f"Zieldatei existiert bereits: {output_path}")
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        cmd = [self.ffmpeg_path, "-y" if overwrite else "-n"]
+        staging_path = staging_output_path(output_path)
+        cmd = [self.ffmpeg_path, "-y"]
 
         # Hardware-Beschleunigung
         if hwaccel:
@@ -264,7 +273,7 @@ class FFmpeg:
             cmd.extend(extra_args)
 
         # Output
-        cmd.append(str(output_path))
+        cmd.append(str(staging_path))
 
         log.info("FFmpeg Konvertierung gestartet", input=str(input_path), output=str(output_path))
 
@@ -277,43 +286,52 @@ class FFmpeg:
             except Exception:
                 pass
 
-        proc = await create_hidden_subprocess(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        if job:
-            job._process = proc
+        # Progress aus CR- oder LF-getrenntem stderr parsen. Nur das Ende wird
+        # für eine mögliche Fehlermeldung behalten.
+        stderr_tail = bytearray()
+        proc = None
+        try:
+            proc = await create_hidden_subprocess(
+                *cmd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            if job:
+                job._process = proc
 
-        # Progress aus stderr parsen
-        stderr_data = b""
-        while True:
-            line = await proc.stderr.readline()
-            if not line:
-                break
-            stderr_data += line
-            line_str = line.decode("utf-8", errors="replace")
+            async for record in iter_stream_records(proc.stderr):
+                stderr_tail.extend(record)
+                stderr_tail.extend(b"\n")
+                if len(stderr_tail) > 8192:
+                    del stderr_tail[:-8192]
+                line_str = decode_console_output(record)
 
-            if job and duration > 0:
-                time_match = re.search(r"time=(\d+):(\d+):(\d+)\.(\d+)", line_str)
-                if time_match:
-                    h, m, s, ms = time_match.groups()
-                    current = int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 100
-                    progress = min((current / duration) * 100, 99.9)
-                    speed_match = re.search(r"speed=\s*([\d.]+)x", line_str)
-                    speed = speed_match.group(1) if speed_match else "?"
-                    job.update_progress(progress, f"{speed}x Geschwindigkeit")
+                if job and duration > 0:
+                    time_match = re.search(r"time=(\d+):(\d+):(\d+)\.(\d+)", line_str)
+                    if time_match:
+                        h, m, s, ms = time_match.groups()
+                        current = int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 100
+                        progress = min((current / duration) * 100, 99.9)
+                        speed_match = re.search(r"speed=\s*([\d.]+)x", line_str)
+                        speed = speed_match.group(1) if speed_match else "?"
+                        job.update_progress(progress, f"{speed}x Geschwindigkeit")
 
-        await proc.wait()
-        if job:
-            job._process = None
+            await proc.wait()
+            if proc.returncode != 0:
+                error = decode_console_output(bytes(stderr_tail))[-500:]
+                raise FFmpegError(f"FFmpeg Fehler (Code {proc.returncode}): {error}")
 
-        if proc.returncode != 0:
-            error = stderr_data.decode("utf-8", errors="replace")[-500:]
-            raise FFmpegError(f"FFmpeg Fehler (Code {proc.returncode}): {error}")
-
-        if not output_path.exists():
-            raise FFmpegError(f"Output-Datei wurde nicht erstellt: {output_path}")
+            if not staging_path.is_file() or staging_path.stat().st_size == 0:
+                raise FFmpegError(f"Output-Datei wurde nicht erstellt: {output_path}")
+            commit_staged_output(staging_path, output_path)
+        except BaseException:
+            if proc is not None:
+                await terminate_process(proc)
+            staging_path.unlink(missing_ok=True)
+            raise
+        finally:
+            if proc is not None and job and getattr(job, "_process", None) is proc:
+                job._process = None
 
         log.info("FFmpeg Konvertierung abgeschlossen", output=str(output_path))
         return output_path
@@ -389,6 +407,7 @@ class FFmpeg:
         """Fügt mehrere Videos zusammen (concat)."""
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        staging_path = staging_output_path(output_path)
 
         # Concat-Datei erstellen
         concat_file = output_path.parent / f"_concat_{output_path.stem}.txt"
@@ -402,7 +421,7 @@ class FFmpeg:
                 "-f", "concat", "-safe", "0",
                 "-i", str(concat_file),
                 "-c", "copy",
-                str(output_path),
+                str(staging_path),
             ]
 
             proc = await create_hidden_subprocess(
@@ -411,18 +430,22 @@ class FFmpeg:
                 stderr=asyncio.subprocess.PIPE,
             )
             if job:
-                job._process = proc
                 job.update_progress(20, "Dateien werden zusammengefügt...")
-            _, stderr = await proc.communicate()
+            _, stderr = await communicate_with_job(proc, job)
             if job:
-                job._process = None
                 job.update_progress(95, "Zusammenfügen abgeschlossen")
 
             if proc.returncode != 0:
-                raise FFmpegError(f"Merge Fehler: {stderr.decode('utf-8', errors='replace')[-500:]}")
+                raise FFmpegError(
+                    f"Merge Fehler: {decode_console_output(stderr)[-500:]}"
+                )
+            if not staging_path.is_file() or staging_path.stat().st_size == 0:
+                raise FFmpegError(f"Merge-Ausgabe wurde nicht erstellt: {output_path}")
+            commit_staged_output(staging_path, output_path)
 
             return output_path
         finally:
+            staging_path.unlink(missing_ok=True)
             concat_file.unlink(missing_ok=True)
 
     async def generate_thumbnail(
@@ -435,6 +458,7 @@ class FFmpeg:
         """Erzeugt ein Thumbnail aus einem Video."""
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        staging_path = staging_output_path(output_path)
 
         cmd = [
             self.ffmpeg_path, "-y",
@@ -442,7 +466,7 @@ class FFmpeg:
             "-i", str(input_path),
             "-vframes", "1",
             "-vf", f"scale={width}:-1",
-            str(output_path),
+            str(staging_path),
         ]
 
         proc = await create_hidden_subprocess(
@@ -450,9 +474,16 @@ class FFmpeg:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        await proc.communicate()
-
-        if not output_path.exists():
-            raise FFmpegError(f"Thumbnail konnte nicht erstellt werden: {output_path}")
+        try:
+            _, stderr = await communicate_with_job(proc)
+            if proc.returncode != 0:
+                raise FFmpegError(
+                    f"Thumbnail fehlgeschlagen: {decode_console_output(stderr)[-500:]}"
+                )
+            if not staging_path.is_file() or staging_path.stat().st_size == 0:
+                raise FFmpegError(f"Thumbnail konnte nicht erstellt werden: {output_path}")
+            commit_staged_output(staging_path, output_path)
+        finally:
+            staging_path.unlink(missing_ok=True)
 
         return output_path

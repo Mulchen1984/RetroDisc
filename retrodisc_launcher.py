@@ -21,6 +21,7 @@ import struct
 import wave
 import math
 import asyncio
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -299,8 +300,15 @@ class RetroDiscBridge:
 
     def _emit(self, event: str, data: dict):
         if self.window:
-            payload = json.dumps({"event": event, "data": data})
-            self.window.evaluate_js(f"window.onPythonEvent && window.onPythonEvent({payload})")
+            try:
+                payload = json.dumps({"event": event, "data": data})
+                self.window.evaluate_js(
+                    f"window.onPythonEvent && window.onPythonEvent({payload})"
+                )
+            except Exception as exc:
+                # The UI is an observer. A closed/reloading WebView must never
+                # turn an otherwise successful backend operation into a failure.
+                log.warning("UI-Ereignis %s konnte nicht zugestellt werden: %s", event, exc)
 
     def _on_complete(self, job):
         self._emit("job_done", {
@@ -652,6 +660,11 @@ class RetroDiscBridge:
                     "media_type": d.get("MediaType"), "caps": caps, "media": media,
                 })
             return json.dumps({"drives": drives})
+        except subprocess.TimeoutExpired:
+            return json.dumps({
+                "drives": [],
+                "error": "Zeitüberschreitung bei der Laufwerkserkennung.",
+            })
         except Exception as e:
             return json.dumps({"drives": [], "error": str(e)})
 
@@ -1094,7 +1107,7 @@ class RetroDiscBridge:
             if self.pipeline._is_running or self.pipeline._running or self.pipeline._queue:
                 self._async(self.pipeline.shutdown()).result(timeout=5)
         except Exception as e:
-            log.warning("Backend-Cleanup unvollständig", error=str(e))
+            log.warning("Backend-Cleanup unvollständig: %s", e)
         try:
             self.library.close()
         finally:
@@ -1117,7 +1130,7 @@ class RetroDiscBridge:
                         # the injected JS API.
                         self.window.load_html(html_content)
                 except Exception as exc:
-                    log.error("Haupt-UI konnte nicht geladen werden", error=str(exc))
+                    log.error("Haupt-UI konnte nicht geladen werden: %s", exc)
 
             # Return the API response before replacing the splash document.
             # Otherwise pywebview tries to resolve the JS promise after its

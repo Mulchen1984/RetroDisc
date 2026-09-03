@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sqlite3
 import structlog
 from datetime import datetime
@@ -297,13 +298,24 @@ class MediaLibrary:
 
     def search(self, query: str, limit: int = 50) -> list[dict]:
         """Volltextsuche in Dateinamen, Titeln, Artists."""
+        # FTS5 MATCH has its own query language.  Passing user input through
+        # verbatim lets quotes, operators and parentheses change (or break)
+        # the query.  Search only for literal Unicode word tokens instead and
+        # quote every token before adding the desired prefix match.
+        tokens = re.findall(r"\w+", query or "", flags=re.UNICODE)
+        if not tokens:
+            return []
+        fts_query = " AND ".join(
+            '"' + token.replace('"', '""') + '"*'
+            for token in tokens
+        )
         rows = self._conn.execute("""
             SELECT m.* FROM media_files m
             JOIN media_fts f ON m.id = f.rowid
             WHERE media_fts MATCH ?
             ORDER BY rank
             LIMIT ?
-        """, (query + "*", limit)).fetchall()
+        """, (fts_query, limit)).fetchall()
         return [dict(r) for r in rows]
 
     def get_stats(self) -> dict:

@@ -9,6 +9,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+import structlog
+
+
+log = structlog.get_logger()
 
 # ─── Enums ───────────────────────────────────────────────────────────
 
@@ -191,7 +195,14 @@ class Job:
         self.progress = min(progress, 100.0)
         self.progress_text = text
         if self.on_progress:
-            self.on_progress(self.progress, self.progress_text)
+            try:
+                self.on_progress(self.progress, self.progress_text)
+            except Exception as observer_error:
+                log.error(
+                    "Progress-Observer fehlgeschlagen",
+                    job_id=self.id,
+                    error=str(observer_error),
+                )
 
     def mark_running(self) -> None:
         self.state = JobState.RUNNING
@@ -202,7 +213,14 @@ class Job:
         self.progress = 100.0
         self.finished_at = datetime.now()
         if self.on_complete:
-            self.on_complete(self)
+            try:
+                self.on_complete(self)
+            except Exception as observer_error:
+                log.error(
+                    "Job-Completion-Observer fehlgeschlagen",
+                    job_id=self.id,
+                    error=str(observer_error),
+                )
 
     def mark_failed(self, error: str) -> None:
         self.state = JobState.FAILED

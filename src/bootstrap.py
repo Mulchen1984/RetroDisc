@@ -91,13 +91,13 @@ class ToolBootstrap:
 
             # Im tools/-Ordner vorhanden?
             if exe_path.exists():
-                log.info(f"Tool gefunden: {name}", path=str(exe_path))
+                log.info("Tool gefunden: %s (%s)", name, exe_path)
                 continue
 
             # Im System-PATH vorhanden?
             system_path = shutil.which(info["exe"].replace(".exe", ""))
             if system_path:
-                log.info(f"Tool im PATH: {name}", path=system_path)
+                log.info("Tool im PATH: %s (%s)", name, system_path)
                 continue
 
             log.info(f"Tool fehlt: {name}")
@@ -158,7 +158,7 @@ class ToolBootstrap:
         url = info["url_win64"]
         zip_path = self.tools_dir / "ffmpeg_bundle.zip"
 
-        log.info("Lade FFmpeg-Bundle herunter...", url=url)
+        log.info("Lade FFmpeg-Bundle herunter: %s", url)
 
         try:
             self._download_file(url, zip_path, "FFmpeg-Bundle", on_progress)
@@ -173,7 +173,7 @@ class ToolBootstrap:
                     if zip_member in zf.namelist():
                         with zf.open(zip_member) as src, open(target, "wb") as dst:
                             shutil.copyfileobj(src, dst)
-                        log.info(f"{tool_name}.exe extrahiert", path=str(target))
+                        log.info("%s.exe extrahiert: %s", tool_name, target)
                     else:
                         log.warning(f"{zip_member} nicht im ZIP gefunden")
 
@@ -185,9 +185,9 @@ class ToolBootstrap:
         url = info["url_win64"]
         target = self.tools_dir / info["exe"]
 
-        log.info(f"Lade {name} herunter...", url=url)
+        log.info("Lade %s herunter: %s", name, url)
         self._download_file(url, target, info["description"], on_progress)
-        log.info(f"{name} heruntergeladen", path=str(target))
+        log.info("%s heruntergeladen: %s", name, target)
 
     def _download_file(
         self,

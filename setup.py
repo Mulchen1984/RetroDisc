@@ -22,12 +22,14 @@ setup(
         "click>=8.1.0",
         "yt-dlp>=2024.1.0",
         "httpx>=0.27.0",
+        "faster-whisper>=1.2.0",
+        "requests>=2.31.0",
+        "numpy>=1.26.0",
         "sounddevice>=0.4.6",
         "soundfile>=0.12.1",
     ],
     extras_require={
         "ai": [
-            "openai-whisper>=20231117",
             "scenedetect[opencv]>=0.6",
             "librosa>=0.10.0",
             "mediapipe>=0.10.0",

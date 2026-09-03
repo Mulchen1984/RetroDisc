@@ -43,6 +43,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.utils.subprocesses import decode_console_output
+
 ENV_PFX = "RETRODISC_SIGN_PFX"
 ENV_PASSWORD = "RETRODISC_SIGN_PASSWORD"
 ENV_THUMBPRINT = "RETRODISC_SIGN_THUMBPRINT"
@@ -152,20 +154,26 @@ def sign_file(target: Path, config: SigningConfig, runner=subprocess.run) -> Non
         env[ENV_PASSWORD] = config.password
 
     script = build_powershell_script(target, config)
-    handle = tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False, encoding="utf-8")
+    # Windows PowerShell 5.1 interprets a BOM-less UTF-8 script passed via
+    # ``-File`` as the active ANSI codepage.  A BOM keeps non-ASCII paths intact.
+    handle = tempfile.NamedTemporaryFile(
+        "w", suffix=".ps1", delete=False, encoding="utf-8-sig"
+    )
     try:
         handle.write(script)
         handle.close()
         result = runner(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", handle.name],
             capture_output=True,
-            text=True,
             env=env,
         )
+        stdout = decode_console_output(result.stdout)
+        stderr = decode_console_output(result.stderr)
         if result.returncode != 0:
+            details = stderr.strip() or stdout.strip()
             raise SigningError(
                 f"Signierung von {target.name} fehlgeschlagen "
-                f"(Exitcode {result.returncode}): {(result.stderr or '').strip()}"
+                f"(Exitcode {result.returncode}): {details}"
             )
     finally:
         try:
@@ -182,6 +190,5 @@ def verify_signature(target: Path, runner=subprocess.run) -> str:
     result = runner(
         ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
         capture_output=True,
-        text=True,
     )
-    return (result.stdout or "").strip() or "Unknown"
+    return decode_console_output(result.stdout).strip() or "Unknown"

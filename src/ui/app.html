@@ -1665,7 +1665,8 @@ async function doSearch(){
           <div style="font-size:9px;color:#666;">${fmtDuration(r.duration||r.duration_seconds)||''} · ${r.quality||''} · ${(r.source||'').toUpperCase()}</div>
         </div>
         <button class="btn98" style="font-size:9px;padding:2px 6px;min-width:0;"
-          onclick="dlResult(event,'${escAttr(r.url)}','${escAttr(r.title)}')">⬇ DL</button>
+          data-url="${escAttr(r.url)}" data-title="${escAttr(r.title)}"
+          onclick="dlResultFromButton(event,this)">⬇ DL</button>
       </div>`).join('');
     updateSearchSelButtons();
   } else {
@@ -1699,6 +1700,10 @@ async function dlResult(e, url, title){
   } else {
     alert('Backend noch nicht bereit — Download nicht möglich.');
   }
+}
+
+function dlResultFromButton(e, button){
+  return dlResult(e, button.dataset.url, button.dataset.title);
 }
 
 async function downloadSelectedResults(){
@@ -1764,7 +1769,7 @@ async function openOutputFolderDialog(){
 }
 // Hilfsfunktionen
 function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function escAttr(s){ return s.replace(/'/g,"\\'").replace(/"/g,'\\"'); }
+function escAttr(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 function animBurnDone(){
   document.querySelectorAll('.bstep').forEach(el=>{
@@ -2305,7 +2310,7 @@ function renderLibrary(items) {
     const res = (f.width && f.height) ? `${f.width}×${f.height}` : '';
     const codec = f.video_codec || f.audio_codec || '';
     const icon = f.media_type === 'audio' ? '🎵' : '🎬';
-    return `<div class="frow" style="padding:4px 8px;" onclick="showMediaInfo('${escAttr(f.path||f.filename)}')">
+    return `<div class="frow" style="padding:4px 8px;" data-path="${escAttr(f.path||f.filename)}" onclick="showMediaInfo(this.dataset.path)">
       <span style="font-size:16px;flex-shrink:0;">${icon}</span>
       <div style="flex:1;min-width:0;">
         <div style="font-weight:bold;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
@@ -2315,7 +2320,7 @@ function renderLibrary(items) {
           ${dur} · ${size} ${res ? '· '+res : ''} ${codec ? '· '+codec : ''}
         </div>
       </div>
-      <button class="btn98" style="font-size:9px;padding:2px 5px;min-width:0;" onclick="addLibFileToQueue(event,'${escAttr(f.path||f.filename)}')">+</button>
+      <button class="btn98" style="font-size:9px;padding:2px 5px;min-width:0;" data-path="${escAttr(f.path||f.filename)}" onclick="addLibFileToQueue(event,this)">+</button>
     </div>`;
   }).join('');
 }
@@ -2361,15 +2366,15 @@ async function showMediaInfo(path) {
         ${info.artist ? `<tr style="background:#f5f5f5;"><td style="padding:2px 8px;font-weight:bold;">Artist</td><td>${escHtml(info.artist)}</td></tr>` : ''}
       </table>
       <div style="margin-top:8px;display:flex;gap:5px;">
-        <button class="btn98" onclick="addLibFileToQueueDirect('${escAttr(path)}')">+ Zur Konvertierung</button>
+        <button class="btn98" data-path="${escAttr(path)}" onclick="addLibFileToQueueDirect(this.dataset.path)">+ Zur Konvertierung</button>
         <button class="btn98" onclick="document.getElementById('mediainfoPanel').style.display='none'">Schließen</button>
       </div>`;
   } catch(e) { content.innerHTML = 'Fehler: ' + e; }
 }
 
-async function addLibFileToQueue(e, path) {
+async function addLibFileToQueue(e, button) {
   e.stopPropagation();
-  addLibFileToQueueDirect(path);
+  addLibFileToQueueDirect(button.dataset.path);
 }
 
 function addLibFileToQueueDirect(path) {

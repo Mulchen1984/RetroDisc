@@ -9,6 +9,7 @@ Kommandozeile landet.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -19,6 +20,33 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from tools import codesign  # noqa: E402
+
+
+def _windows_powershell_major() -> int | None:
+    """Major version of the ``powershell`` on PATH, or ``None`` if unavailable.
+
+    The round-trip test below needs Windows PowerShell 5.1 specifically, because
+    that is the interpreter whose script-file encoding behaviour it pins down.
+    Probing here keeps a host without 5.1 -- or without ``powershell`` at all --
+    a skip instead of a hard failure.
+    """
+    if sys.platform != "win32":
+        return None
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", "$PSVersionTable.PSVersion.Major"],
+            capture_output=True,
+            timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    major = result.stdout.decode("utf-8", errors="replace").strip()
+    return int(major) if major.isdigit() else None
+
+
+WINDOWS_POWERSHELL_MAJOR = _windows_powershell_major()
 
 
 # ── Konfiguration ───────────────────────────────────────────────────
@@ -133,7 +161,7 @@ def test_sign_file_passes_password_through_environment_not_argv(tmp_path):
     def fake_runner(cmd, **kwargs):
         seen["cmd"] = cmd
         seen["env"] = kwargs.get("env") or {}
-        seen["script"] = Path(cmd[-1]).read_text(encoding="utf-8")
+        seen["script"] = Path(cmd[-1]).read_text(encoding="utf-8-sig")
         return Result()
 
     codesign.sign_file(target, config, runner=fake_runner)
@@ -143,6 +171,62 @@ def test_sign_file_passes_password_through_environment_not_argv(tmp_path):
     assert seen["env"][codesign.ENV_PASSWORD] == "geheim123"
 
 
+def test_sign_file_writes_ps51_compatible_utf8_bom_for_non_ascii_paths(tmp_path):
+    pfx = tmp_path / "Zertifikat Grüße_日本.pfx"
+    pfx.write_bytes(b"pfx")
+    target = tmp_path / "RetroDisc Grüße_日本.exe"
+    target.write_bytes(b"MZ")
+    config = codesign.load_config(env={codesign.ENV_PFX: str(pfx)})
+    captured: dict = {}
+
+    class Result:
+        returncode = 0
+        stdout = b"Valid\r\n"
+        stderr = b""
+
+    def fake_runner(cmd, **kwargs):
+        captured["raw_script"] = Path(cmd[-1]).read_bytes()
+        captured["kwargs"] = kwargs
+        return Result()
+
+    codesign.sign_file(target, config, runner=fake_runner)
+
+    raw_script = captured["raw_script"]
+    assert raw_script.startswith(b"\xef\xbb\xbf")
+    script = raw_script.decode("utf-8-sig")
+    assert str(target) in script
+    assert str(pfx) in script
+    assert captured["kwargs"]["capture_output"] is True
+    assert "text" not in captured["kwargs"]
+    assert "encoding" not in captured["kwargs"]
+
+
+@pytest.mark.skipif(
+    WINDOWS_POWERSHELL_MAJOR != 5,
+    reason=f"requires Windows PowerShell 5.1 (found major version {WINDOWS_POWERSHELL_MAJOR})",
+)
+def test_sign_file_round_trips_non_ascii_path_through_windows_powershell_51(
+    monkeypatch, tmp_path
+):
+    """Exercise sign_file's real temporary-script and powershell -File path.
+
+    The signing cmdlets are intentionally replaced by a harmless existence
+    check, so the encoding regression is covered without a certificate.
+    """
+    target = tmp_path / "RetroDisc Grüße_日本.exe"
+    target.write_bytes(b"MZ")
+    config = codesign.load_config(env={codesign.ENV_THUMBPRINT: "ABCDEF"})
+    target_literal = codesign._ps_single_quote(str(target))
+    script = (
+        "$ErrorActionPreference = 'Stop'\n"
+        "if ($PSVersionTable.PSVersion.Major -ne 5) { exit 24 }\n"
+        f"if (-not (Test-Path -LiteralPath {target_literal})) {{ exit 23 }}\n"
+    )
+    monkeypatch.setattr(codesign, "build_powershell_script", lambda *_: script)
+
+    codesign.sign_file(target, config)
+
+
 def test_sign_file_reports_failure(tmp_path):
     target = tmp_path / "RetroDisc.exe"
     target.write_bytes(b"MZ")
@@ -150,10 +234,10 @@ def test_sign_file_reports_failure(tmp_path):
 
     class Result:
         returncode = 1
-        stdout = ""
-        stderr = "Zertifikat nicht gefunden."
+        stdout = b""
+        stderr = "Zertifikat für 東京 nicht gefunden.".encode("utf-8")
 
-    with pytest.raises(codesign.SigningError, match="Zertifikat nicht gefunden"):
+    with pytest.raises(codesign.SigningError, match="für 東京"):
         codesign.sign_file(target, config, runner=lambda cmd, **kw: Result())
 
 
@@ -174,6 +258,25 @@ def test_sign_file_removes_the_temporary_script(tmp_path):
 
     codesign.sign_file(target, config, runner=fake_runner)
     assert not captured["script_path"].exists()
+
+
+def test_verify_signature_captures_bytes_without_locale_text_mode(tmp_path):
+    target = tmp_path / "RetroDisc Grüße_日本.exe"
+    target.write_bytes(b"MZ")
+    captured: dict = {}
+
+    class Result:
+        stdout = b"Valid\r\n"
+        stderr = b""
+
+    def fake_runner(cmd, **kwargs):
+        captured["kwargs"] = kwargs
+        return Result()
+
+    assert codesign.verify_signature(target, runner=fake_runner) == "Valid"
+    assert captured["kwargs"]["capture_output"] is True
+    assert "text" not in captured["kwargs"]
+    assert "encoding" not in captured["kwargs"]
 
 
 # ── Build-Anbindung ─────────────────────────────────────────────────
