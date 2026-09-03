@@ -1,19 +1,25 @@
 # RetroDisc Release-Audit-Status
 
-Letzte Aktualisierung: 2026-09-01 16:45 CEST
+Letzte Aktualisierung: 2026-09-04 00:30 CEST
 
 ## Verbindlicher Abschlussstatus
 
-NOT RELEASE READY
+**SOFTWARE COMPLETE — NOT SIGNED, DAHER NICHT ZUR WEITERGABE FREIGEGEBEN**
 
-Begründung: Source-, Medien-, UI-, Installer- und Deinstallationslogik sind vollständig grün. Für die Artefakte des Commits `a9b5853` ist der verpflichtende finale Runtime-Gate erstmals bestanden: EXE startet, Hauptfenster und Oberfläche erscheinen, gebündelte Werkzeuge arbeiten real, Installation und Deinstallation laufen sauber. Offen bleibt allein der Distributionsblocker: Die Artefakte sind **nicht signiert**. Auf dem Host ist kein Code-Signing-Zertifikat konfiguriert; Smart App Control blockiert unsignierte Artefakte dateiabhängig — der unmittelbar vorherige Build `80b4f3c` wird auf demselben System weiterhin abgewiesen. Ohne vertrauenswürdige Signatur ist keine verlässliche Weitergabe an Dritte möglich, deshalb bleibt der verbindliche Status NOT RELEASE READY.
+Begründung: Auf dem Freeze-Stand `1c486cc` sind alle automatisierbaren Gates grün und real belegt — Source-Gates (193 Tests), vollständiger Real-Media-Smoke, UI/Bridge-Vergleich, Artefakt-Gate, Installation, **Start aus der Installation**, Deinstallation, Laufwerkserkennung, `default_device`, Disc-Erkennung, Rip-Workflow und YouTube-Download. Der Runtime-Gate auf den finalen Artefakten ist bestanden, ohne ein einziges CodeIntegrity-Ereignis.
+
+Der Releaseblocker ist unverändert und ausschließlich extern: Die Artefakte sind **nicht signiert**, auf dem Host existiert kein vertrauenswürdiges Code-Signing-Zertifikat. Ohne Signatur ist keine verlässliche Weitergabe an Dritte möglich — Smart App Control entscheidet je Datei, ein hier bestandener Start sagt nichts über einen fremden Rechner. Für die Weitergabe fehlt daher genau ein Schritt: Zertifikat bereitstellen, `python build.py --clean --sign` ausführen und die Gates auf den dann entstehenden signierten Hashes wiederholen.
+
+Zusätzlich offen als **ausstehende Hardware-Validierung** (kein Softwaremangel, kein Blocker für den Codestand): der reale physische Brennvorgang auf einen Rohling samt Rückleseprobe. Es stand kein Medium zur Verfügung; alles softwareseitig Prüfbare ist über ein virtuell eingebundenes DVD-Abbild belegt.
 
 ## Aktueller Checkpoint
 
 - Branch: `main`
-- Letzter Freeze-Commit: `80b4f3ccfc231880ff0745025e0b5b06c06177a4` (`RELEASE: harden uninstall and signing pipeline`)
+- Letzter Freeze-Commit: `1c486cc` (`DOCS: state the Windows-only scope and the real build path`)
+- Tag des Abschlussstands: `v1.0.0-rc1`
 - Baseline-Commit: `e29f41d` (`BASELINE: preserve initial RetroDisc source state`)
-- Aktueller Arbeitsbaum: Encoding-Härtung der Windows-Subprozessausgabe (siehe Journal 2026-09-01 15:40–15:55); alle Source-Gates auf diesem Stand grün, neuer Freeze steht aus
+- Aktueller Arbeitsbaum: sauber; alle Build-Ausgaben sind ignoriert
+- Plattform: **Windows-only** (Entscheidung vom 2026-09-03, siehe Journal)
 - Baseline-Manifest: `BASELINE_SHA256_MANIFEST.json`
 - Manifestumfang: 147 Einträge, 679158086 Bytes, Stand `e29f41d`
 - Live-Verifikation gegen Manifest: 0 fehlende Einträge; 20 Einträge weichen ab. Das ist erwartet und kein Defekt: Es sind genau die Dateien, die seit `e29f41d` in den dokumentierten Arbeitsblöcken bewusst geändert wurden. Das Manifest ist der historische Ausgangsbeleg, kein Gate für den jeweils aktuellen Commit.
@@ -347,3 +353,152 @@ Ausdrücklich nicht abgedeckt in diesem Block
 - Keine Signatur, damit keine Aussage über das Verhalten auf fremden Rechnern mit aktivem Smart App Control.
 
 Verbleibender Gate: Code-Signing-Zertifikat bereitstellen und `python build.py --clean --sign` ausführen; die dann entstehenden signierten Hashes erneut durch Start-, Installations- und Medien-Gate führen. Für einen zusätzlichen unabhängigen Lauffähigkeitsbeleg steht `RUNTIME_GATE_ZWEITRECHNER.md` bereit.
+
+### 2026-09-03 22:50–00:30 CEST — Undokumentierten Arbeitsblock auditiert, drei reale Fehler behoben, Abschluss
+
+#### Ausgangslage
+
+Der Arbeitsbaum enthielt einen **nie committeten und nie dokumentierten Arbeitsblock vom 2026-09-02/03**: 20 geänderte Dateien mit 1257 Einfügungen und 538 Löschungen sowie sieben neue Testdateien mit 833 Zeilen. Das Statusdokument endete zu diesem Zeitpunkt am 2026-09-01 16:45. Kein Commit, kein Kommentar und keine Notiz erklärte diesen Block. Er wurde deshalb zuerst vollständig auditiert, dann nachgebessert, dann eingefroren — nicht ungeprüft übernommen.
+
+#### Inhalt des Arbeitsblocks (auditiert)
+
+- `prepare_vendor.py` ist erstmals ein versionierter, hash-geprüfter Erzeuger des `vendor/`-Baums: FFmpeg, yt-dlp, die DVD-Werkzeuge aus einer still installierten DVDStyler-Version und das Faster-Whisper-Basismodell sind auf feste Versionen und SHA-256 gepinnt; `_replace_files`/`_replace_directory` ersetzen transaktional mit Rücksicherung. `retrodisc_final.spec` verlangte `vendor/dvdtools` und `vendor/whisper-base` bereits seit `f706f7b`, ohne dass ein versioniertes Skript sie erzeugte — diese Lücke ist damit geschlossen.
+- `src/utils/subprocesses.py`: `iter_stream_records` (CR-/LF-begrenztes Lesen statt `readline` mit 64-KB-Grenze und verlorenem CR-Fortschritt), `terminate_process` (Windows-Prozessbaum über `taskkill /T` ohne Konsolenfenster) und `communicate_with_job` (speicherbegrenztes Draining, das den Abbruchweg offen lässt). `ffmpeg.py`, `downloader.py` und `upscaler.py` nutzen diese Helfer.
+- Atomare Ausgaben: `staging_output_path`/`commit_staged_output` schreiben in eine eindeutige Nachbardatei und benennen erst nach Erfolg um; ein Abbruch hinterlässt damit keine abgeschnittene Zieldatei mehr. `settings.save` nutzt dasselbe Muster, `settings.load` fällt bei defekter Datei auf die Vorgaben zurück statt den Start abzubrechen.
+- Beobachterisolierung in `models/media.py`, `core/pipeline.py` und `RetroDiscBridge._emit`: ein Fehler im Callback bricht den Backendjob nicht mehr ab.
+- `app.html`: `escAttr` escaped jetzt HTML-Entities, und die betroffenen Aufrufstellen übergeben Werte über `data-`-Attribute statt in einen Inline-JS-String. Das schließt einen echten Attributausbruch über Anführungszeichen in Suchergebnis-Titeln und Bibliotheksnamen.
+- `library.search` tokenisiert und quotet die FTS5-Anfrage, statt Benutzereingabe direkt als MATCH-Ausdruck zu übergeben.
+- `tools/codesign.py` schreibt das temporäre PS1-Skript als `utf-8-sig` und liest die Ausgabe als Bytes; `build.yml` baut über `build.py`, erzwingt auf Tags die Signaturgeheimnisse und fährt die Source-Gates erstmals in CI.
+
+#### Im Audit widerlegte Verdachtsmomente
+
+Zwei Auffälligkeiten wurden geprüft und **nicht** als Fehler bestätigt; sie sind hier festgehalten, damit sie nicht erneut untersucht werden:
+
+- Die Umstellung der Logaufrufe in `src/bootstrap.py` und `retrodisc_launcher.py` auf `%s`-Positionsargumente ist unbedenklich: structlog 26.1.0 interpoliert sie. Real geprüft — `log.info("Tool fehlt: %s", "ffmpeg.exe")` ergibt `Tool fehlt: ffmpeg.exe`.
+- Das unbedingte `staging_path.unlink(missing_ok=True)` in den `finally`-Blöcken von `ffmpeg.py` ist nach erfolgreichem Commit wirkungslos, weil die Quelldatei durch das Umbenennen bereits verschwunden ist.
+
+#### Nachbesserungen an den mitgelieferten Tests
+
+Der Block brachte 45 neue Tests mit. Vier Stellen trugen weniger, als sie versprachen:
+
+- `test_ui_escaping` prüfte `escAttr` nur per Substringvergleich auf dem Quelltext. Eine umsortierte `replace`-Kette hätte jede geprüfte Zeichenkette bestehen lassen und trotzdem doppelt kodiert. Der Test führt das ausgelieferte `escAttr` jetzt mit Node aus und vergleicht echte Ausgaben. Negativkontrolle real gefahren: mit `&` zuletzt liefert `<` das doppelt kodierte `&amp;lt;` statt `&lt;` — der neue Test fällt darauf, der alte nicht.
+- `test_codesign` übersprang den Nicht-ASCII-Rundlauf nur nach Plattform, verlangte im Skript aber PowerShell 5.1 und wäre auf einem Windows ohne 5.1 **hart fehlgeschlagen statt zu skippen**. Die Hauptversion wird jetzt vorab ermittelt.
+- `test_subprocess_hardening`: die im Block entfernte Zusicherung, dass die Launcher kein eigenes `create_hidden_subprocess` definieren, ist wieder da. Sie galt weiterhin (0 Vorkommen), war aber ersatzlos gestrichen.
+- `test_settings` prüfte die UTF-8-Datei mit einem wirkungslosen `decode()`-Aufruf ohne Zusicherung; jetzt mit echter Prüfung.
+
+#### Gates erstmals reproduzierbar gemacht
+
+Zwei Gates liefen bisher ad hoc und ließen sich aus dem Repository nicht wiederholen — der UI/Bridge-Vergleich stammte aus einem `.audit_tmp/compare.py`, das nicht mehr existiert. Beide sind jetzt committete Skripte, die bei jedem Befund mit Exitcode 1 enden:
+
+- `scripts/verify_ui_bridge.py` — extrahiert das Inline-JavaScript nach `build/ui-audit/inline.js`, sammelt die tatsächlichen Brückenaufrufe samt Argumentzahl und prüft gegen den produktiven Einstieg `retrodisc_launcher.py`.
+- `scripts/verify_release_artifacts.py` — hasht die drei Artefakte, prüft die ZIP-Integrität gegen die `dist`-EXE, liest den Authenticode-Status und fährt Installation und Deinstallation real in einer Sandbox mit umgelenktem `USERPROFILE`, `APPDATA` und `LOCALAPPDATA`.
+- `scripts/verify_disc_workflow.py` — neu, siehe Disc-Abschnitt weiter unten.
+
+#### Drei reale Fehler gefunden und behoben
+
+**1. YouTube-Download war kaputt.** Der Pin `yt-dlp 2026.07.04` lieferte für **die produktiven Formatmuster** reproduzierbar `HTTP Error 403: Forbidden` — nicht nur für das progressive Format 18, wie am 2026-09-01 noch angenommen. Damit war die Download-Funktion des Produkts unbrauchbar. Mit `2026.08.19` lädt dieselbe URL mit demselben Muster fehlerfrei. Pin angehoben (SHA-256 `66674953…`) und real über den produktiven `Downloader` nachgeprüft: Video 480p ergab 36260966 Bytes, die MP3-Extraktion 26388823 Bytes.
+
+**2. `get_disc_info` meldete ein Medium in einem Laufwerk, das es nicht gibt.** `present` folgte aus der *Abwesenheit* dreier englischer Fehlermuster. Auf diesem deutschen Windows meldet `dvd+rw-mediainfo` für einen nicht vorhandenen Buchstaben aber `Z:: unable to open: Ein oder mehrere Argumente sind ungültig.` — RetroDisc behauptete daraufhin ein eingelegtes Medium. Jetzt zählt ausschließlich ein Positivbeleg (`Mounted Media`, `Disc status` oder `READ CAPACITY`).
+
+**3. `get_disc_info` übersah ein lesbares Medium.** Für ein virtuell eingebundenes DVD-Abbild meldet dasselbe Werkzeug `unable to TEST UNIT READY`; die Erkennung gab „kein Medium" zurück, obwohl `VIDEO_TS` lesbar war und das Rippen funktionierte. Neu entscheidet unter Windows ein Dateisystem-Fallback (`_windows_volume_info`): lesbares Wurzelverzeichnis heißt Medium vorhanden, mit Typ aus `VIDEO_TS`/`BDMV`, Label über `GetVolumeInformationW`, Kapazität über `disk_usage`. Ein wirklich leeres Laufwerk fällt korrekt auf `present=False` zurück, ein lesbares aber leeres Volume gilt als Rohling.
+
+**Nebenbefund im selben Pfad:** Die Profil-Regex verlangte Anführungszeichen (`Mounted Media: "…"`). `dvd+rw-mediainfo` schreibt das Profil unquotiert hinter den Hex-Code, die Regex konnte also nie greifen — `profile`, `type` und `rewritable` blieben für **jede** echte Disc leer. Beide Schreibweisen werden jetzt akzeptiert. Das ist mangels Rohling **nicht** an einer echten Disc geprüft und bleibt ausdrücklich Teil des offenen Hardware-Tests.
+
+Alle drei Fehler sind in `tests/test_disc_detection.py` und den erweiterten Downloadpfaden als Regression abgedeckt.
+
+#### Plattformentscheidung: Windows-only
+
+Der Arbeitsblock hatte den gesamten macOS-Zweig aus `.github/workflows/build.yml` ersatzlos gestrichen (Job `build-macos` für macos-14/macos-13, DMG-Erstellung, beide Release-Artefakte, die macOS-Zeilen der Release-Notes) — ohne jede Begründung. **Marco hat die Streichung am 2026-09-03 ausdrücklich als bewusst bestätigt.** Begründung: die CI baut über `build.py` („Build RetroDisc for Windows"), `prepare_vendor.py` vendort den Windows-DVDStyler-Installer, und der gesamte Release-Audit einschließlich Signatur, Installer und Runtime-Gate ist Windows-only; ein DMG wäre ein an keinem Gate belegtes Artefakt.
+
+Die Dokumentation wurde entsprechend korrigiert: README nennt RetroDisc jetzt ausdrücklich ein Windows-Produkt und benennt die verbliebenen macOS-Reste als nicht unterstützt; `CLAUDE.md` ersetzt eine **aktiv falsche** Bauanweisung (sie baute aus `retrodisc_portable.py` statt aus `retrodisc_final.spec`, nannte das ersetzte `openai-whisper` und bündelte weder DVD-Werkzeuge noch Whisper-Modell); `AGENTS.md` ist erstmals versioniert und verweist auf `CLAUDE.md`, statt unversioniert und veraltet im Baum zu liegen; `FUER_QWEN.md` trägt einen Veraltet-Hinweis. Die CI-Release-Notes waren bereits Windows-only und blieben unverändert.
+
+#### Disc-Gate ohne Rohling
+
+Ein physischer Rohling stand nicht zur Verfügung. `scripts/verify_disc_workflow.py` fährt deshalb alles, was ohne Medium prüfbar ist, gegen ein **real erzeugtes und als virtuelles Laufwerk eingebundenes** DVD-Abbild. Ergebnis **PASS**:
+
+- Gebündelte Werkzeuge: `dvdauthor`, `mkisofs`, `growisofs`, `dvd+rw-mediainfo` vorhanden.
+- Echte DVD-Erstellung über den produktiven `DVDWorkflow`: `RetroDisc_Disc_Gate.iso`, 2627584 Bytes.
+- Einbinden als virtuelles Laufwerk `H:`; die produktive Laufwerkserkennung meldet es als `Microsoft virtuelles DVD-ROM-Laufwerk` mit `MediaLoaded=True`, die beiden physischen Laufwerke (`hp DVD A DH16ACSHR` / `E:`, `PIONEER BD-RW BDR-209M` / `D:`) bleiben sichtbar.
+- `BurnSettings().default_device` = `D:`.
+- Disc-Erkennung auf `H:`: `present=True`, `type=DVD-Video`, `label='RETRODISC_DISC_GATE'`, `readable=True`.
+- Rip-Workflow vom virtuellen Laufwerk: nach ISO 2627584 Bytes, nach MKV/H.265 332249 Bytes; die gerippte Datei wurde per FFprobe als abspielbar bestätigt (720x576, 10,04 s).
+- Brennaufruf als Dry-Run mit realistischen Parametern: `growisofs.exe -dvd-compat -Z D:=<ISO> -speed 8` — der Befehl wurde geprüft, aber **nicht** ausgeführt.
+- Fehlerfälle: fehlendes Laufwerk `Z:` → `present=False` ohne Ausnahme; leeres Laufwerk `E:` → `present=False` ohne Ausnahme; eingebundenes Medium korrekt als nicht beschreibbar klassifiziert; Brennen mit fehlender ISO wird sauber als `DiscError` abgewiesen.
+
+Ausdrücklich **nicht** abgedeckt: der reale physische Brennvorgang auf einen Rohling und die Rückleseprobe davon. `cdrecord` wird bewusst nicht gebündelt — die Oberfläche bietet kein CD-Brennen an, der Pfad ist nur über `burn_iso(disc_type=DiscType.CD)` erreichbar.
+
+#### Freeze-Commits
+
+- `04f1084` — `RELEASE: pin vendor downloads, harden process I/O and UI escaping`
+- `bac7a34` — `AUDIT: make the UI/bridge and artifact gates reproducible`
+- `160c0fc` — `FIX: correct optical media detection and refresh the yt-dlp pin`
+- `1c486cc` — `DOCS: state the Windows-only scope and the real build path`
+
+Arbeitsbaum danach vollständig sauber; `dist/`, `Output/`, `build/`, `vendor/` und alle Caches sind ignoriert und gelangen nicht ins Repository.
+
+#### Source-Gates auf dem Freeze-Stand
+
+- `pytest -q`: **193 passed in 10,58 s**, Exitcode 0 (vorher 135 am 2026-09-01).
+- `compileall` über `src`, `tests`, `scripts`, beide Launcher und `prepare_vendor.py`: Exitcode 0.
+- `.hermes/verify_core.py`: Exitcode 0; echter FFmpeg-Job `done`, 100 %, MP3 403477 Bytes — wertidentisch zu allen vorherigen grünen Läufen.
+- `scripts/verify_ui_bridge.py`: **PASS, 0 Befunde** — 47 Aufrufstellen, 36 verschiedene UI-Methoden, 39 Proxy-Methoden, 41 Bridge-Methoden, keine fehlenden Proxys, keine fehlenden Bridge-Ziele, keine Arity-Mismatches.
+- `node --check` auf dem extrahierten Inline-JavaScript (Node v22.22.3): Exitcode 0.
+- `scripts/release_smoke.py`: Exitcode 0, Ausgabe `build/e2e-smoke-20260903-231139`. Alle acht Artefakte erzeugt und geprüft: Merge 20,72 s bei 1280x720/25 fps, Upscale 2560x1440, Interpolation 1280x720/50 fps, Highlights 6,013968 s, deutsche Faster-Whisper-SRT 199 Bytes, DVD-ISO 2627584 Bytes — wertidentisch zu den vorherigen grünen Läufen.
+- Echte Laufwerksabfrage über den produktiven Helfer: beide optischen Laufwerke werden gemeldet.
+
+#### Finaler Build aus `1c486cc`
+
+`python build.py --clean`, Exitcode 0. Die Signierpipeline meldete erwartungsgemäß, dass kein Zertifikat konfiguriert ist. `prepare_vendor.py` holte die gepinnte Vendor-Runtime neu und verifizierte jede Datei per SHA-256; FFmpeg ist jetzt der Autobuild `N-126342-gf88b741dbf-20260831`, yt-dlp `2026.08.19`. Innerhalb des Builds liefen die Tests erneut vollständig grün.
+
+Finale Artefakte:
+
+- `dist/RetroDisc.exe`: **502901640 Bytes**, SHA-256 `F02096E77C78C307F97F16219B35FCBF8CA35DC94A3F3465A58B4D6A59AE2883`
+- `Output/RetroDisc_1.0.0_Portable.zip`: **501463750 Bytes**, SHA-256 `B3B73C7621DE8BF33E83CADC871D5220534752D889632BFB4B11BB95D645B20D`
+- `Output/RetroDisc_Setup_1.0.0.exe`: **508841013 Bytes**, SHA-256 `EACD6D2E0CAD91E4FFD55AAA1F6C23CF999416705E6DC03F9C8EE6A53961132D`
+
+Die Artefakte stammen aus dem Baum von `1c486cc`. Der nachfolgende Commit dieses Journalblocks ändert ausschließlich `RELEASE_AUDIT_STATUS.md`, und diese Datei ist nicht Teil eines Artefakts — die Hashes bleiben damit gültig.
+
+#### Artefakt-Gate auf den finalen Bytes
+
+`scripts/verify_release_artifacts.py`: **PASS, 0 Befunde**.
+
+- ZIP-Integrität: enthalten sind genau `RetroDisc/RetroDisc.exe`, `RetroDisc/README.md` und `RetroDisc/START_WINDOWS.txt`; die enthaltene EXE ist byteidentisch zur `dist`-EXE.
+- `Get-AuthenticodeSignature` meldet für App und Installer weiterhin `NotSigned`.
+- Stille Installation in eine vollständig isolierte Sandbox (umgelenktes `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`): Exitcode 0, stderr leer, installierte EXE byteidentisch, isolierte Desktop- und Startmenü-Verknüpfungen angelegt.
+- Deinstallation: Exitcode 0, stderr leer, Installationsordner vollständig entfernt, beide isolierten Verknüpfungen weg.
+
+#### Runtime-Gate auf den finalen Bytes
+
+Zusätzlich zur Sandbox real gegen eine echte Installation gefahren:
+
+- Stille Installation nach `%LOCALAPPDATA%\Programs\RetroDisc-QA-1c486cc`: Exitcode 0; installierte EXE SHA-256 `F02096E7…`, byteidentisch zur `dist`-EXE.
+- **Start aus der Installation heraus**: Hauptfenster `RetroDisc 1.0` nach 36,5 s (Kaltstart einschließlich Entpacken des rund 480-MB-Onefile-Bundles). **0 neue CodeIntegrity-Ereignisse 3033/3077** — Smart App Control weist diesen Hash nicht ab.
+- Deinstallation über den mitgelieferten `Uninstall RetroDisc.cmd`: Exitcode 0, stderr leer, Installationsordner entfernt, Desktop- und Startmenüeintrag entfernt.
+- Ein separater Start der portablen `dist/RetroDisc.exe` (Vorgängerbuild `bac7a34`, SHA-256 `E9A086EF…`) wurde ebenfalls belegt: sichtbares Fenster `RetroDisc 1.0`, keine CodeIntegrity-Ereignisse; Screenshot `C:\Users\marco\Pictures\Screenshots\RetroDisc-main-bac7a34.png`.
+
+Wie schon am 2026-09-01 festgehalten: Smart App Control entscheidet **je Datei**. Ein bestandener Start belegt genau diese Bytes auf genau diesem Rechner und ist keine Zusage für andere Rechner oder künftige Builds.
+
+Am Rande beobachtet und nicht als Produktfehler gewertet: Beim Lauf des Installers in der Sandbox erschienen zwei CodeIntegrity-Ereignisse (3033/3077) für `_bz2.pyd` aus dem entpackten Installer-Bundle. Die Installation lief trotzdem vollständig und korrekt durch — das Modul ist für den Installer nicht erforderlich. Die App-EXE selbst erzeugte in keinem Lauf ein Ereignis.
+
+#### YouTube-Download real geprüft
+
+Über den produktiven `Downloader` mit genau den Formatmustern aus `src/core/downloader.py`:
+
+- `bestvideo[height<=480]+bestaudio/best[height<=480]` → 36260966 Bytes (MKV)
+- `bestaudio/best` mit MP3-Extraktion → 26388823 Bytes
+
+Mit dem vorherigen Pin schlugen **beide** Muster mit `HTTP Error 403: Forbidden` fehl. Die frühere Notiz vom 2026-09-01, wonach nur das progressive Format 18 betroffen sei und die produktiven Pfade grün seien, ist damit für den heutigen Stand von YouTube überholt.
+
+## Abschlussstatus dieses Durchlaufs
+
+**Softwareseitig abgeschlossen. Weitergabe an Dritte weiterhin blockiert.**
+
+Grün und belegt: alle Source-Gates, der vollständige Real-Media-Smoke, das UI/Bridge-Gate, das Artefakt-Gate, Installation, Start aus der Installation, Deinstallation, Laufwerkserkennung, `default_device`, Disc-Erkennung, der Rip-Workflow und der YouTube-Download.
+
+Offen bleiben genau zwei Punkte, beide extern und keiner davon durch Code lösbar:
+
+1. **Signaturblocker (unverändert der eigentliche Releaseblocker).** Die Artefakte sind unsigniert; auf dem Host existiert kein vertrauenswürdiges Code-Signing-Zertifikat. Im Zertifikatspeicher liegt lediglich ein abgelaufenes, selbstsigniertes `CN=RetroDisc Pipeline Selftest DO NOT TRUST` (Thumbprint `C439F45F…`, `NotAfter` 2026-09-02, `UntrustedRoot`) aus einem Pipelinetest — als Signaturzertifikat unbrauchbar, und ein selbst ausgestelltes Zertifikat löst das Problem bei Smart App Control ohnehin nicht. Erforderlich ist ein öffentlich vertrauenswürdiges Zertifikat, danach `python build.py --clean --sign` und ein erneuter Durchlauf der Gates auf den dann entstehenden signierten Hashes.
+2. **Physischer Brenn- und Rip-Test — ausstehende Hardware-Validierung.** Es stand kein Rohling zur Verfügung. Alles softwareseitig Prüfbare ist über ein virtuell eingebundenes DVD-Abbild belegt (siehe Disc-Gate oben); der reale Brennvorgang auf ein Medium und die Rückleseprobe davon sind nicht ersetzbar und bleiben offen. Ebenfalls offen: die Auswertung des Medienprofils an einer echten Disc, nachdem die zugehörige Regex korrigiert wurde.
+
+Für einen zusätzlichen unabhängigen Lauffähigkeitsbeleg auf fremder Hardware steht weiterhin `RUNTIME_GATE_ZWEITRECHNER.md` bereit.
+
