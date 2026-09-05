@@ -939,7 +939,7 @@ class RetroDiscBridge:
         safe_device = device.replace(":", "").replace("\\", "").replace("/", "") or "disc"
         output = self.settings.directories.output_dir / f"Disc_{safe_device}_Rip{extensions[output_format]}"
         job = Job(
-            JobType.RIP_DVD, output_path=output,
+            job_type=JobType.RIP_DVD, output_path=output,
             params={"device": device, "format": output_format,
                     "display_name": f"Disc {device} -> {output.name}"},
         )
@@ -959,7 +959,7 @@ class RetroDiscBridge:
         if not source.is_file():
             return json.dumps({"error": f"Datei nicht gefunden: {source}"})
         output = self.settings.directories.output_dir / f"{source.stem}_highlights.mp4"
-        job = Job(JobType.SMART_EDIT, input_files=[source], output_path=output,
+        job = Job(job_type=JobType.SMART_EDIT, input_files=[source], output_path=output,
                   params={"duration": max(10, int(duration_seconds)),
                           "display_name": f"Auto-Edit: {source.name}"})
 
@@ -982,7 +982,7 @@ class RetroDiscBridge:
         if fmt not in {"srt", "vtt", "ass", "txt", "tsv", "json"}:
             return json.dumps({"error": f"Nicht unterstütztes Untertitelformat: {fmt}"})
         output = self.settings.directories.output_dir / f"{source.stem}.{fmt}"
-        job = Job(JobType.SUBTITLE_GENERATE, input_files=[source], output_path=output,
+        job = Job(job_type=JobType.SUBTITLE_GENERATE, input_files=[source], output_path=output,
                   params={"model": model, "language": language or None, "format": fmt,
                           "display_name": f"Untertitel: {source.name}"})
 
@@ -1002,7 +1002,7 @@ class RetroDiscBridge:
             return json.dumps({"error": f"Datei nicht gefunden: {source}"})
         scale = 2 if int(scale) == 2 else 4
         output = self.settings.directories.output_dir / f"{source.stem}_{scale}x.mp4"
-        job = Job(JobType.UPSCALE, input_files=[source], output_path=output,
+        job = Job(job_type=JobType.UPSCALE, input_files=[source], output_path=output,
                   params={"scale": scale, "display_name": f"Upscale {scale}x: {source.name}"})
 
         async def _handler(j):
@@ -1020,7 +1020,7 @@ class RetroDiscBridge:
             return json.dumps({"error": f"Datei nicht gefunden: {source}"})
         fps = min(240.0, max(1.0, float(target_fps)))
         output = self.settings.directories.output_dir / f"{source.stem}_{int(fps)}fps.mp4"
-        job = Job(JobType.INTERPOLATE, input_files=[source], output_path=output,
+        job = Job(job_type=JobType.INTERPOLATE, input_files=[source], output_path=output,
                   params={"target_fps": fps,
                           "display_name": f"Interpolation {fps:g} fps: {source.name}"})
 
@@ -1096,7 +1096,7 @@ class RetroDiscBridge:
             self.settings.directories.output_dir / f"{source.stem}_trim{source.suffix}")
         if not output.is_absolute():
             output = self.settings.directories.output_dir / output
-        job = Job(JobType.TRIM, input_files=[source], output_path=output,
+        job = Job(job_type=JobType.TRIM, input_files=[source], output_path=output,
                   params={"start": start, "end": end,
                           "display_name": f"Trim: {source.name} [{start:g}-{end:g}s]"})
 
@@ -1143,7 +1143,7 @@ class RetroDiscBridge:
         output = Path(output_path) if output_path else Path("merged_output.mp4")
         if not output.is_absolute():
             output = self.settings.directories.output_dir / output
-        job = Job(JobType.MERGE, input_files=paths, output_path=output,
+        job = Job(job_type=JobType.MERGE, input_files=paths, output_path=output,
                   params={"display_name": f"Merge: {len(paths)} Dateien"})
 
         async def _handler(j):
@@ -1215,7 +1215,7 @@ class RetroDiscBridge:
                 from src.models.media import Job, JobType
                 if matched_rule.action == "burn_dvd":
                     job = Job(
-                        JobType.BURN_DVD, input_files=[file_path],
+                        job_type=JobType.BURN_DVD, input_files=[file_path],
                         params={"display_name": f"Auto-DVD: {file_path.name}"},
                     )
 
@@ -1236,7 +1236,7 @@ class RetroDiscBridge:
                     preset_name = "mp3_320k" if matched_rule.action == "extract_audio" else (matched_rule.preset or "mp4_h264_1080p")
                     selected_preset = get_preset(preset_name)
                     job = Job(
-                        JobType.CONVERT, input_files=[file_path], preset=selected_preset,
+                        job_type=JobType.CONVERT, input_files=[file_path], preset=selected_preset,
                         params={"display_name": f"Auto: {file_path.name} -> {selected_preset.display_name}",
                                 "overwrite": False},
                     )

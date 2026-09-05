@@ -128,3 +128,36 @@ def test_not_cp1252_encodable_finds_exactly_the_offending_characters():
     assert acceptance.not_cp1252_encodable("Voll normal, mit Umlaut ä") == ""
     assert acceptance.not_cp1252_encodable("Video \U0001F600") == "\U0001F600"
     assert acceptance.not_cp1252_encodable("강남스타일") == "강남스타일"
+
+
+def test_media_tools_case_is_registered_and_runs_the_bridge_methods():
+    """Der Fall deckt genau die Werkzeuge ab, die der Smoke direkt aufruft.
+
+    ``scripts/release_smoke.py`` benutzt ``FFmpeg`` und ``VideoUpscaler``
+    unmittelbar und laesst die Bridge dazwischen aus. Genau dort sassen die
+    sieben toten ``Job(JobType..., ...)``-Aufrufe.
+    """
+    assert "media_tools" in acceptance.CASES
+
+    source = (ROOT / "src" / "acceptance.py").read_text(encoding="utf-8")
+    case = source.split("def case_media_tools")[1].split("\n#: Reihenfolge")[0]
+    for method in ("trim_video", "merge_videos", "upscale_video", "interpolate_video"):
+        assert f"ctx.bridge.{method}(" in case, f"{method} wird nicht ueber die Bridge gefahren"
+
+
+def test_media_tools_reports_a_bridge_that_queues_nothing(tmp_path):
+    """Eine Bridge, die nur Fehler liefert, muss FAIL ergeben - nicht PASS."""
+
+    class RefusingBridge:
+        ffmpeg = None
+
+        def __getattr__(self, _name):
+            return lambda *args, **kwargs: '{"error": "abgelehnt"}'
+
+    context = acceptance.Context(RefusingBridge(), tmp_path)
+    context.make_test_video = lambda name, seconds=2: tmp_path / name
+
+    metrics, findings = acceptance.case_media_tools(context)
+
+    assert findings, f"kein Befund trotz verweigerter Bridge: {metrics}"
+    assert all("abgelehnt" in f for f in findings)

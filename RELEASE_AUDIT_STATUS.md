@@ -862,3 +862,143 @@ Eigene Verifikation nach der Ergaenzung, alle Exitcodes 0:
 Kein Release-Build und kein physischer Brenn-/Medienwechseltest. Die optischen
 Verhaltenstests simulieren Hardwareantworten; sie ersetzen keine physische
 Validierung. Die bestehenden Signatur- und Hardware-Release-Gates bleiben offen.
+
+
+### 2026-09-05 20:10–20:35 CEST — Sieben tote Bridge-Aktionen: `Job()` positional gebaut
+
+Ausgangslage: `git fetch origin`, lokaler HEAD und `origin/crossplatform-2026`
+identisch auf `888b867`, Arbeitsbaum sauber. Erst der Ist-Zustand gemessen:
+`pytest -q` 340 passed, `compileall` 0, `verify_ui_bridge` PASS/0 Befunde,
+`node --check` 0. Kein bestehender Fix wurde angefasst oder neu geschrieben.
+
+#### Der Befund
+
+`Job` ist eine Dataclass, deren **erstes** Feld `id` heisst, nicht `job_type`.
+Der Disc-Copy-Block vom selben Tag hatte genau diesen Fehler an einer Stelle
+korrigiert. Er stand jedoch an **neun** weiteren Stellen im produktiven
+Launcher und war dort nie aufgefallen.
+
+Ein positionales `Job(JobType.TRIM, ...)` legt den Enum in `id` ab und laesst
+`job_type` auf dem Vorgabewert `CONVERT` stehen. Die Folge ist kein
+Schoenheitsfehler:
+
+- `_submit_job` endet mit `json.dumps({"job_id": job.id, ...})`. Ein Enum ist
+  nicht JSON-serialisierbar, der Aufruf fliegt mit `TypeError: Object of type
+  JobType is not JSON serializable` aus der Bridge heraus.
+- `get_queue` haette an derselben Stelle die **gesamte** Queue-Ansicht
+  mitgerissen, sobald ein solcher Job darin gelandet waere.
+- Alle Jobs einer Art teilten sich eine ID. `Pipeline._tasks` und
+  `_job_handlers` sind ID-indiziert; zwei gleichzeitige Auto-Jobs des
+  Watch-Folders haetten sich gegenseitig den Handler ueberschrieben.
+- Queue-Beschriftung und Brennanimation lesen `job_type` und haetten
+  durchgehend `convert` gesehen.
+
+Betroffen waren sieben UI-Aktionen — **Rippen, Highlights, Untertitel,
+Upscale, Interpolation, Trim, Merge** — sowie beide Watch-Folder-Pfade.
+Alle sieben sind in `src/ui/app.html` verdrahtet und je genau einmal
+aufgerufen. Sechs davon haben **kein** `try/catch` um den Aufruf: das
+abgelehnte Promise beendet die JS-Funktion stillschweigend, der Nutzer sieht
+gar nichts, und der Statustext bleibt auf „Trim läuft…" bzw.
+„Video-Upscaling wird gestartet…" stehen. Nur `startRip` faengt und meldet.
+
+#### Warum kein Gate das gefunden hat
+
+Dieselbe strukturelle Luecke wie beim charmap-Blocker, eine Schicht tiefer:
+`scripts/release_smoke.py` ruft `FFmpeg` und `VideoUpscaler` **direkt** auf und
+laesst die Bridge aus. `verify_ui_bridge.py` vergleicht Namen und Aritaeten und
+ist deshalb korrekt gruen geblieben — die Signaturen stimmten ja. Der
+Acceptance-Harness fuhr die Bridge, aber nur fuer Konvertieren und Download.
+Zwischen „Dienst funktioniert" und „Schaltflaeche funktioniert" hat schlicht
+nichts gemessen.
+
+#### Reproduktion vor der Aenderung
+
+Ueber den echten Konstruktor `RetroDiscBridge()` mit laufendem Loop-Thread,
+isolierten Settings und ohne Fenster; alle sieben Aufrufe endeten mit
+`TypeError: Object of type JobType is not JSON serializable`. Nach dem Fix
+liefern alle sieben `{"job_id": "<8 Hex>", "status": "queued"}`.
+
+#### Fix
+
+Neun Zeilen in `retrodisc_launcher.py`, ausschliesslich `JobType.X` →
+`job_type=JobType.X`: `rip_disc`, `create_highlights`, `generate_subtitles`,
+`upscale_video`, `interpolate_video`, `trim_video`, `merge_videos` und die
+beiden Jobs in `set_watch_folder._submit_watched`. Keine Signatur, kein
+Verhalten und keine UI wurde sonst geaendert.
+
+#### Regressionsabsicherung, auf zwei Ebenen
+
+`tests/test_job_submission.py` (neu, 3 Tests):
+
+- Alle **elf** einreihenden Bridge-Methoden liefern eine echte String-Job-ID,
+  parken einen Job mit dem **erwarteten** `JobType`, und keine zwei IDs
+  kollidieren. Gefahren wird der Produktkonstruktor; die Pipeline wird als
+  „laufend" markiert, ohne einen Worker zu starten, damit die Jobs in der
+  Queue stehen bleiben und ohne FFmpeg/yt-dlp/Laufwerk pruefbar sind.
+- Zwei Trim-Jobs bekommen verschiedene IDs und **verschiedene** Handler-Objekte
+  in `Pipeline._job_handlers`.
+- Eine AST-Regel ueber `retrodisc_launcher.py` und ganz `src/`: kein `Job(...)`
+  darf ueberhaupt ein positionales Argument bekommen.
+
+`src/acceptance.py`: neuer Fall **`media_tools`**, der Trim A, Trim B, Merge,
+2×-Upscale und 30-fps-Interpolation ueber den Bridge-Pfad end-to-end faehrt.
+Bewertet wird nur der fachliche Endzustand: Job `done`, Datei vorhanden und
+nicht leer, FFprobe liest die Ausgabe wirklich, und die Upscale-Breite ist
+mindestens verdoppelt. Damit gilt derselbe Fall auch fuer die gepackte EXE.
+Zwei zusaetzliche Tests in `tests/test_acceptance_harness.py` sichern, dass der
+Fall registriert ist, wirklich ueber `ctx.bridge.*` laeuft und gegen eine
+Bridge, die nur Fehler liefert, FAIL meldet statt gruen zu werden.
+
+#### Negative Gegenprobe
+
+Mit zurueckgesetztem `retrodisc_launcher.py` und unveraendertem Testcode:
+
+- `pytest -q tests/test_job_submission.py`: **3 failed** — alle drei.
+- `run_acceptance.py --source-only --cases media_tools`: **FAIL**,
+  Exitcode 1, Befund `TypeError: Object of type JobType is not JSON
+  serializable`, `release: FAIL`.
+
+#### Gates auf dem finalen Source, alle Exitcode 0
+
+- `pytest -q`: **345 passed in 17,90 s** (vorher 340).
+- `compileall` ueber `src`, `tests` und beide Launcher: PASS.
+- `.hermes/verify_core.py`: PASS; echter MP3-Job `done`, 402328 Bytes, Codec `mp3`.
+- `scripts/verify_ui_bridge.py`: PASS, 0 Befunde; 49 Aufrufstellen,
+  38 UI-Methoden, 41 API-, 43 Bridge-Methoden.
+- `node --check build/ui-audit/inline.js`: PASS.
+- `scripts/release_smoke.py`: PASS; Upscale 2560x1440, Interpolation 50 fps,
+  Highlights 6,013968 s, deutsche SRT, DVD-ISO.
+- `scripts/run_acceptance.py --source-only`: **PASS, alle sechs Faelle** —
+  startup 2,00 s, settings 0,02 s, conversion 0,39 s, error_handling 0,14 s,
+  **media_tools 2,39 s**, unicode_download 14,08 s.
+- `scripts/verify_home_layout.py`: **PASS, 10/10 Messungen**, realer
+  pywebview-/WebView2-Lauf bei 100/125/150 %. Der HEAD-Commit `888b867` hatte
+  dieses Gate zwar ausgefuehrt, aber **keinen Journalblock hinterlassen**; das
+  Ergebnis ist hiermit auf dem aktuellen Stand nachgemessen und eingetragen.
+- `git diff --check`: PASS.
+
+#### Zusaetzlich geprueft, ohne Befund
+
+Alle uebrigen ueber `RetroDiscApi` erreichbaren Methoden wurden gegen eine
+echte Bridge aufgerufen (`get_presets`, `get_queue`, `get_settings`,
+`get_tool_status`, `check_tools`, `get_watch_folders`, `probe_file`,
+`clear_completed`, `cancel_job`, `save_settings`, `convert_batch`, `copy_disc`,
+`create_dvd`, `search_media`, `run_assistant`, `set_watch_folder`,
+Bibliotheksmethoden, Fehlereingaben): jede liefert gueltiges JSON, keine wirft.
+Ausserdem geprueft und **in Ordnung**: `WatchRule` und `DVDProject` werden
+positional bzw. per Keyword korrekt gebaut, `DiscTools.mediainfo` faellt nie
+auf `None` zurueck, und `DiscRipper`s `mkv_copy`-Verschiebezweig greift nur auf
+die eigene Temp-Datei, nie auf eine Datei der Quelldisc.
+
+#### Stand
+
+Der Fix ist auf Source-Ebene vollstaendig belegt. **Die Artefakt-Hashes des
+Blocks vom 2026-09-05 15:20–15:40 gelten fuer diesen Stand nicht mehr**: es
+wurde produktiver Code geaendert. Ein Build aus dem eingefrorenen Commit
+dieses Blocks und die Wiederholung von Artefakt-Gate und Packaged Acceptance
+auf den neuen Hashes stehen aus und folgen unmittelbar.
+
+Unveraendert offen und nicht durch Code loesbar: die fehlende
+vertrauenswuerdige Code-Signatur und der physische Brenn- und Rueckleseteset
+ohne verfuegbaren Rohling. Die optischen Verhaltenstests simulieren weiterhin
+Hardwareantworten.

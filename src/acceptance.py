@@ -346,12 +346,116 @@ def case_error_handling(ctx: Context) -> tuple[dict, list[str]]:
     return metrics, findings
 
 
+def case_media_tools(ctx: Context) -> tuple[dict, list[str]]:
+    """G - Trim, Merge, Upscale und Interpolation ueber den Bridge-Pfad.
+
+    Die Dienste dahinter sind laengst belegt, aber ``scripts/release_smoke.py``
+    ruft ``FFmpeg`` und ``VideoUpscaler`` **direkt** auf. Genau in der Schicht
+    dazwischen sass ein Fehler: die Bridge baute ihre Jobs mit einem
+    positionalen ``Job(JobType..., ...)``. Das erste Feld von ``Job`` ist aber
+    ``id``, nicht ``job_type`` - der Enum landete in der ID, die JSON-Antwort
+    war nicht serialisierbar, und sieben Schaltflaechen taten schlicht nichts.
+    Kein Gate konnte das sehen, weil keines die Bridge-Werkzeuge fuhr.
+
+    Der Fall bewertet nur den fachlichen Endzustand: Job ``done``, Datei da,
+    und FFprobe muss die Ausgabe wirklich lesen koennen.
+    """
+    from src.models.media import JobState
+
+    findings: list[str] = []
+    metrics: dict = {}
+    out_dir = ctx.work_dir / "tools"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    source = ctx.make_test_video("acceptance-tools.mp4", seconds=3)
+
+    def finish(label: str, answer_json: str, timeout_s: float) -> Optional[Path]:
+        """Wartet einen eingereihten Job ab und liefert seine Ausgabedatei."""
+        answer = json.loads(answer_json)
+        if answer.get("error"):
+            findings.append(f"{label} nicht gestartet: {answer['error']}")
+            return None
+        job_id = answer.get("job_id")
+        if not isinstance(job_id, str) or not job_id:
+            findings.append(f"{label} lieferte keine brauchbare Job-ID: {job_id!r}")
+            return None
+        job = ctx.await_job(job_id, timeout_s)
+        metrics[f"{label}_job_state"] = job.state.value
+        if job.state is not JobState.DONE:
+            findings.append(
+                f"{label} endete als {job.state.value}, erwartet done"
+                + (f": {job.error_message}" if job.error_message else "")
+            )
+            return None
+        if not job.output_path or not Path(job.output_path).is_file():
+            findings.append(f"{label}: Ausgabedatei fehlt")
+            return None
+        output = Path(job.output_path)
+        metrics[f"{label}_bytes"] = output.stat().st_size
+        if output.stat().st_size <= 0:
+            findings.append(f"{label}: Ausgabedatei ist leer")
+            return None
+        return output
+
+    def video_stream(label: str, output: Path) -> dict:
+        probed = json.loads(ctx.bridge.probe_file(str(output)))
+        if probed.get("error"):
+            findings.append(f"{label}: FFprobe kann die Ausgabe nicht lesen: {probed['error']}")
+            return {}
+        streams = probed.get("video") or []
+        if not streams:
+            findings.append(f"{label}: Ausgabe enthaelt keine Videospur")
+            return {}
+        return streams[0]
+
+    first = finish(
+        "trim_a",
+        ctx.bridge.trim_video(str(source), 0.0, 1.5, str(out_dir / "trim-a.mp4")),
+        180,
+    )
+    second = finish(
+        "trim_b",
+        ctx.bridge.trim_video(str(source), 1.5, 3.0, str(out_dir / "trim-b.mp4")),
+        180,
+    )
+
+    if first and second:
+        merged = finish(
+            "merge",
+            ctx.bridge.merge_videos(
+                json.dumps([str(first), str(second)]), str(out_dir / "merged.mp4")
+            ),
+            240,
+        )
+        if merged:
+            video_stream("merge", merged)
+
+    upscaled = finish("upscale", ctx.bridge.upscale_video(str(source), 2), 600)
+    if upscaled:
+        stream = video_stream("upscale", upscaled)
+        metrics["upscale_resolution"] = (stream.get("width"), stream.get("height"))
+        source_stream = video_stream("upscale_source", source)
+        if stream and source_stream and stream.get("width") and source_stream.get("width"):
+            if stream["width"] < source_stream["width"] * 2:
+                findings.append(
+                    f"Upscale lieferte {stream['width']}px statt mindestens "
+                    f"{source_stream['width'] * 2}px Breite"
+                )
+
+    interpolated = finish("interpolate", ctx.bridge.interpolate_video(str(source), 30.0), 600)
+    if interpolated:
+        stream = video_stream("interpolate", interpolated)
+        metrics["interpolate_fps"] = stream.get("fps")
+
+    return metrics, findings
+
+
 #: Reihenfolge ist bewusst: erst billig und grundlegend, dann teuer.
 CASES: dict[str, Callable[[Context], tuple[dict, list[str]]]] = {
     "startup": case_startup,
     "settings": case_settings,
     "conversion": case_conversion,
     "error_handling": case_error_handling,
+    "media_tools": case_media_tools,
     "unicode_download": case_unicode_download,
 }
 
