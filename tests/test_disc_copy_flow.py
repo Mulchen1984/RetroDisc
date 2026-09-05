@@ -141,19 +141,6 @@ def test_on_the_fly_refuses_the_same_drive_for_source_and_target(disc_bridge):
     assert "zwei verschiedene Laufwerke" in message
 
 
-def test_copying_over_an_image_accepts_a_single_drive(disc_bridge):
-    """Mit nur einem Laufwerk bleibt der Weg ueber ein Abbild zulaessig.
-
-    Geprueft wird die Regel, nicht das Einreihen: in dieser Testumgebung
-    laeuft keine Pipeline, ein Submit endet daher immer mit einem eigenen
-    Fehler. Entscheidend ist, dass die Laufwerkspruefung nicht abweist.
-    """
-    create, _ = disc_bridge
-    bridge = create(Path("."))
-    message = _error(bridge, "D:", "D:", "image")
-    assert "verschiedene Laufwerke" not in message
-    assert "Laufwerk ausgewählt" not in message
-
 
 def test_missing_drives_are_rejected_with_a_clear_message(disc_bridge):
     create, _ = disc_bridge
@@ -193,19 +180,6 @@ def test_the_filesystem_level_limitation_is_documented():
     assert "kein sektorweiser" in doc or "kein sektorweises" in doc
     # Auch der Nutzer muss es in der Oberflaeche sehen.
     assert "nicht Sektor fuer Sektor" in UI
-
-
-def test_copy_disc_composes_the_existing_rip_and_burn_paths():
-    """Kein zweiter Rip- oder Brennpfad - die vorhandenen werden benutzt."""
-    body = re.search(
-        r"def copy_disc\(self.*?return self\._submit_job\(job, _handler\)",
-        LAUNCHER,
-        re.DOTALL,
-    )
-    assert body, "copy_disc fehlt"
-    source = body.group(0)
-    assert "DiscRipper" in source, "Der vorhandene Ripper wird nicht benutzt"
-    assert "self.disc.burn_iso" in source, "Der vorhandene Brennpfad fehlt"
 
 
 # ── Kein Laufwerks-Scan beim Programmstart ────────────────────────────────
@@ -270,3 +244,196 @@ def test_no_periodic_background_drive_detection():
                 "periodische Laufwerkserkennung gefunden"
     assert "setInterval(loadBurners" not in UI
     assert "setInterval(() => loadBurners" not in UI
+
+
+# Execute real copy handlers through the pipeline; only physical I/O is replaced.
+import asyncio
+from types import SimpleNamespace
+import pytest
+from src.models.media import JobState, JobType
+from src.services.ripper import DiscRipper
+
+
+@pytest.fixture
+def copy_runtime(disc_bridge, monkeypatch):
+    create, _ = disc_bridge
+    bridge = create(Path("."))
+    submitted = []
+    calls = []
+    waiting = asyncio.Event()
+    completed = asyncio.Event()
+    info = {"present": True, "blank": True, "rewritable": False}
+
+    def submit(job, handler):
+        submitted.append((job, handler))
+        job.on_progress = lambda *_: waiting.set() if job.params.get("awaiting_copy_medium") else None
+        return json.dumps({"job_id": job.id})
+
+    async def rip(self, source, output, fmt, job=None):
+        calls.append(("rip", source, output))
+        output.write_bytes(b"copied filesystem")
+        return output
+
+    async def burn(image, device, job=None):
+        assert image.read_bytes() == b"copied filesystem"
+        calls.append(("burn", device, image))
+
+    async def probe(device):
+        calls.append(("probe", device))
+        return dict(info)
+
+    monkeypatch.setattr(bridge, "_submit_job", submit)
+    monkeypatch.setattr(DiscRipper, "rip", rip)
+    monkeypatch.setattr(bridge.disc, "burn_iso", burn)
+    monkeypatch.setattr(bridge.disc, "get_disc_info", probe)
+    bridge.pipeline.play_sound = False
+    bridge.pipeline.on_job_complete = lambda job: completed.set()
+    bridge.pipeline.on_job_failed = lambda job: completed.set()
+    return SimpleNamespace(bridge=bridge, submitted=submitted, calls=calls,
+                           waiting=waiting, completed=completed, info=info)
+
+
+async def start_copy(runtime, source="D:", target="E:"):
+    result = json.loads(runtime.bridge.copy_disc(source, target))
+    job, handler = runtime.submitted[-1]
+    assert result["job_id"] == job.id
+    assert job.job_type == JobType.RIP_DVD
+    await runtime.bridge.pipeline.submit(job, handler)
+    runner = asyncio.create_task(runtime.bridge.pipeline.start())
+    return job, runner
+
+
+async def stop_copy(runtime, runner):
+    await runtime.bridge.pipeline.shutdown()
+    await runner
+
+
+@pytest.mark.asyncio
+async def test_two_drives_rip_then_burn_without_media_confirmation(copy_runtime):
+    r = copy_runtime
+    job, runner = await start_copy(r)
+    try:
+        await asyncio.wait_for(r.completed.wait(), 2)
+        assert job.state == JobState.DONE
+        assert [c[0] for c in r.calls] == ["rip", "burn"]
+    finally:
+        await stop_copy(r, runner)
+
+
+@pytest.mark.asyncio
+async def test_single_drive_waits_until_confirmed_blank_medium(copy_runtime, monkeypatch):
+    r = copy_runtime
+    job, runner = await start_copy(r, "D:", "d:/")
+    try:
+        await asyncio.wait_for(r.waiting.wait(), 2)
+        assert [c[0] for c in r.calls] == ["rip"]
+        assert job.state == JobState.RUNNING
+        assert json.loads(r.bridge.get_queue())[0]["awaiting_copy_medium"] is True
+        for unsuitable in (
+            {"present": False, "blank": True},
+            {"present": True, "blank": False, "rewritable": False},
+            {"present": True, "blank": False, "rewritable": True},
+            {"error": "drive read failed", "present": True, "blank": True},
+        ):
+            r.info.clear()
+            r.info.update(unsuitable)
+            assert "error" in await r.bridge._confirm_copy_medium(job.id)
+            assert not any(c[0] == "burn" for c in r.calls)
+            assert job.params["awaiting_copy_medium"] is True
+        r.info.clear()
+        r.info.update(present=True, blank=True, rewritable=True)
+        from retrodisc_launcher import RetroDiscApi
+        loop = asyncio.get_running_loop()
+        monkeypatch.setattr(r.bridge, "_async", lambda coro: asyncio.run_coroutine_threadsafe(coro, loop))
+        response = await asyncio.to_thread(RetroDiscApi(r.bridge).confirm_copy_medium, job.id)
+        assert json.loads(response) == {"ok": True}
+        await asyncio.wait_for(r.completed.wait(), 2)
+        assert job.state == JobState.DONE
+        assert [c[0] for c in r.calls].count("burn") == 1
+        assert not job.params["awaiting_copy_medium"]
+        assert "error" in await r.bridge._confirm_copy_medium(job.id)
+    finally:
+        await stop_copy(r, runner)
+
+
+@pytest.mark.asyncio
+async def test_cancel_waiting_copy_preserves_image_without_burning(copy_runtime):
+    r = copy_runtime
+    job, runner = await start_copy(r, "D:", "D:")
+    try:
+        await asyncio.wait_for(r.waiting.wait(), 2)
+        assert await r.bridge.pipeline.cancel_job(job.id)
+        await r.bridge.pipeline.shutdown()
+        assert job.state == JobState.CANCELLED
+        assert not job.params["awaiting_copy_medium"]
+        assert job.output_path.read_bytes() == b"copied filesystem"
+        assert not any(c[0] == "burn" for c in r.calls)
+        assert "error" in await r.bridge._confirm_copy_medium(job.id)
+    finally:
+        await stop_copy(r, runner)
+
+
+@pytest.mark.asyncio
+async def test_copy_paths_are_unique_and_existing_files_survive(copy_runtime):
+    r = copy_runtime
+    for _ in range(2):
+        r.bridge.copy_disc("D:", "E:")
+    first, second = [item[0] for item in r.submitted]
+    assert first.id != second.id
+    assert first.output_path != second.output_path
+    assert first.id in first.output_path.name
+    assert second.id in second.output_path.name
+    existing = first.output_path
+    existing.parent.mkdir(parents=True, exist_ok=True)
+    existing.write_bytes(b"user image")
+    await asyncio.gather(*(handler(job) for job, handler in r.submitted))
+    assert existing.read_bytes() == b"user image"
+    assert first.output_path != existing
+    assert first.output_path != second.output_path
+    assert first.output_path.read_bytes() == second.output_path.read_bytes() == b"copied filesystem"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["rip", "burn"])
+async def test_copy_io_errors_fail_job_without_unwanted_burn(copy_runtime, monkeypatch, stage):
+    r = copy_runtime
+    async def fail(*args, **kwargs):
+        if stage == "rip":
+            Path(args[2]).write_bytes(b"partial")
+        raise OSError("simulated I/O failure")
+    if stage == "rip":
+        monkeypatch.setattr(DiscRipper, "rip", fail)
+    else:
+        monkeypatch.setattr(r.bridge.disc, "burn_iso", fail)
+    job, runner = await start_copy(r)
+    try:
+        await asyncio.wait_for(r.completed.wait(), 2)
+        assert job.state == JobState.FAILED
+        assert "simulated I/O failure" in job.error_message
+        assert job.output_path.exists() == (stage == "burn")
+        assert not any(c[0] == "burn" for c in r.calls)
+    finally:
+        await stop_copy(r, runner)
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_medium_probe_cannot_resume_burning(copy_runtime, monkeypatch):
+    r = copy_runtime
+    entered, release = asyncio.Event(), asyncio.Event()
+    async def probe(device):
+        entered.set()
+        await release.wait()
+        return {"present": True, "blank": True}
+    monkeypatch.setattr(r.bridge.disc, "get_disc_info", probe)
+    job, runner = await start_copy(r, "D:", "D:")
+    try:
+        await asyncio.wait_for(r.waiting.wait(), 2)
+        check = asyncio.create_task(r.bridge._confirm_copy_medium(job.id))
+        await asyncio.wait_for(entered.wait(), 2)
+        await r.bridge.pipeline.cancel_job(job.id)
+        release.set()
+        assert "error" in await check
+        assert not any(c[0] == "burn" for c in r.calls)
+    finally:
+        release.set()
+        await stop_copy(r, runner)

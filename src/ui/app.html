@@ -2103,9 +2103,10 @@ async function refreshQueue() {
       if (lj) {
         lj.state = bj.state;
         lj.prog  = bj.progress;
+        lj.awaitingCopyMedium = bj.awaiting_copy_medium === true;
       } else if (bj.state !== 'done') {
         S.jobs.push({id: bj.id, name: bj.name, state: bj.state,
-                     prog: bj.progress, status: ''});
+                     prog: bj.progress, status: '', awaitingCopyMedium: bj.awaiting_copy_medium === true});
       }
     });
     renderJobs();
@@ -2723,9 +2724,15 @@ function renderJobs() {
   }
   const icons = { pending:'⏳', running:'🔄', done:'✅', failed:'❌', cancelled:'⛔' };
   l.innerHTML = S.jobs.map(j => `
-    <div class="jobrow" style="${j.state==='running'?'background:#e8f4ff;':''}">
+    <div class="jobrow" style="${j.state==='running'?'background:#e8f4ff;':''}${j.awaitingCopyMedium?'flex-wrap:wrap;':''}">
       <span class="jstate">${icons[j.state]||'⏳'}</span>
       <span class="jname" title="${j.name||''}">${j.name||j.id}</span>
+      ${j.state==='running' && j.awaitingCopyMedium ? `
+        <div style="flex-basis:100%;padding:6px 0;">
+          <p>Quelldisc entfernen und leeren Rohling einlegen.</p>
+          <button class="btn98" onclick="confirmCopyMedium('${j.id}')">Rohling prüfen und fortsetzen</button>
+        </div>
+      ` : ''}
       ${j.state==='running'||j.state==='pending' ? `
         <div style="flex:1;background:#ddd;height:8px;border:1px solid #aaa;margin:0 6px;overflow:hidden;border-radius:2px;">
           <div style="height:100%;width:${j.prog||0}%;background:repeating-linear-gradient(90deg,#1144aa 0,#1144aa 10px,#3366cc 10px,#3366cc 12px);transition:width 0.3s;"></div>
@@ -2735,6 +2742,16 @@ function renderJobs() {
           onclick="cancelJobUI('${j.id}')">✕</button>
       ` : `<span class="jpct">${Math.floor(j.prog||0)}%</span>`}
     </div>`).join('');
+}
+
+async function confirmCopyMedium(jobId) {
+  const a = api();
+  if (!a) return;
+  try {
+    const result = JSON.parse(await a.confirm_copy_medium(jobId));
+    if (result.error) alert(result.error);
+    await refreshQueue();
+  } catch (e) { alert('Medium konnte nicht geprüft werden: ' + e); }
 }
 
 async function cancelJobUI(jobId) {
@@ -2821,6 +2838,7 @@ async function loadBurners(force){
   ba.innerHTML = '<div class="media-empty">Suche nach Laufwerk...</div>';
   try{
     const r = JSON.parse(await a.detect_burners());
+    DRIVES_LOADED = !r.error && Array.isArray(r.drives);
     if(r.error || !r.drives || r.drives.length===0){
       ba.innerHTML = '<div class="media-empty">Kein optisches Laufwerk gefunden.</div>'
         + (r.note ? '<div class="detect-note">'+r.note+'</div>' : '')
@@ -2877,6 +2895,7 @@ async function loadBurners(force){
         '<div class="detect-note">Hersteller &amp; genaue Kapazitaet eines leeren Rohlings sind ohne Tieferkennung nicht auslesbar.</div>';
     }
   }catch(e){
+    DRIVES_LOADED = false;
     ba.innerHTML = '<div class="media-empty">Fehler beim Auslesen.</div><div class="detect-note">'+e+'</div>';
   }
 }

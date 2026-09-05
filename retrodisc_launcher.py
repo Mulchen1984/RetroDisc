@@ -536,7 +536,8 @@ class RetroDiscBridge:
             jobs.append({"id": j.id,
                          "name": j.params.get("display_name", j.id),
                          "state": j.state.value,
-                         "progress": j.progress})
+                         "progress": j.progress,
+                         "awaiting_copy_medium": j.params.get("awaiting_copy_medium", False)})
         for j in self.pipeline.completed_jobs[-20:]:
             jobs.append({"id": j.id,
                          "name": j.params.get("display_name", j.id),
@@ -831,25 +832,86 @@ class RetroDiscBridge:
         # einlesen, dann den Rohling im selben Laufwerk brennen.
 
         safe = source.replace(":", "").replace("\\", "").replace("/", "") or "disc"
-        image = self.settings.directories.output_dir / f"Disc_{safe}_Copy.iso"
         job = Job(
-            JobType.RIP_DVD,
-            output_path=image,
+            job_type=JobType.RIP_DVD,
             params={"source": source, "target": target, "mode": mode,
                     "display_name": f"Disc kopieren: {source} -> {target}"},
         )
 
+        job.output_path = self.settings.directories.output_dir / f"Disc_{safe}_Copy_{job.id}.iso"
+
         async def _handler(j):
             from src.services.ripper import DiscRipper
 
+            # Reserve exclusively at execution time, including against files
+            # created after submission. Never truncate a pre-existing image.
+            requested = j.output_path
+            requested.parent.mkdir(parents=True, exist_ok=True)
+            suffix = 0
+            while True:
+                candidate = requested if not suffix else requested.with_stem(f"{requested.stem}_{suffix}")
+                try:
+                    with candidate.open("xb"):
+                        pass
+                    break
+                except FileExistsError:
+                    suffix += 1
+            j.output_path = candidate
             ripper = DiscRipper(self.ffmpeg, self.disc)
-            image_path = await ripper.rip(
-                j.params["source"], j.output_path, "iso", job=j)
+            try:
+                image_path = await ripper.rip(
+                    j.params["source"], j.output_path, "iso", job=j)
+            except BaseException:
+                candidate.unlink(missing_ok=True)
+                raise
             j.output_path = image_path
+            # Compare Windows drive aliases such as D:, d:/ and D:\.
+            if source.strip().rstrip("\\/").casefold() == target.strip().rstrip("\\/").casefold():
+                j._copy_media_ready = asyncio.Event()
+                j.params["awaiting_copy_medium"] = True
+                try:
+                    j.update_progress(50, "Quelldisc entfernen, leeren Rohling einlegen und in der Queue bestätigen.")
+                    await j._copy_media_ready.wait()
+                finally:
+                    j.params["awaiting_copy_medium"] = False
+                    del j._copy_media_ready
             await self.disc.burn_iso(
                 image_path, device=j.params["target"], job=j)
 
         return self._submit_job(job, _handler)
+
+    async def _confirm_copy_medium(self, job_id: str) -> dict:
+        from src.models.media import JobState
+
+        job = self.pipeline.get_job(job_id)
+        event = getattr(job, "_copy_media_ready", None)
+        if not job or job.state != JobState.RUNNING or event is None or event.is_set():
+            return {"error": "Dieser Kopierjob wartet nicht auf einen Medienwechsel."}
+        try:
+            info = await self.disc.get_disc_info(job.params["target"])
+        except Exception as exc:
+            return {"error": f"Medium konnte nicht geprüft werden: {exc}"}
+        if info.get("error"):
+            return {"error": str(info["error"])}
+        if not info.get("present"):
+            return {"error": "Kein Medium erkannt. Bitte einen leeren Rohling einlegen."}
+        if not info.get("blank"):
+            detail = " Wiederbeschreibbare Medien müssen vorher geleert werden." if info.get("rewritable") else ""
+            return {"error": "Bitte die Quelldisc entfernen und einen leeren Rohling einlegen." + detail}
+        # Cancellation or another confirmation may have completed during the probe.
+        if job.state != JobState.RUNNING or getattr(job, "_copy_media_ready", None) is not event or event.is_set():
+            return {"error": "Der Kopierjob wartet nicht mehr auf einen Medienwechsel."}
+        event.set()
+        return {"ok": True}
+
+    def confirm_copy_medium(self, job_id: str) -> str:
+        pending = self._async(self._confirm_copy_medium(job_id))
+        try:
+            return json.dumps(pending.result(timeout=30))
+        except Exception as exc:
+            # A timed-out check must never release the burn later in the background.
+            pending.cancel()
+            return json.dumps({"error": f"Medium konnte nicht geprüft werden: {exc}"})
 
     def rip_disc(self, device: str, output_format: str = "mkv_h265") -> str:
         """Rips an unprotected mounted DVD/Blu-ray or creates a filesystem ISO."""
@@ -1279,6 +1341,7 @@ class RetroDiscApi:
     def get_disc_info(self, *args): return self._bridge.get_disc_info(*args)
     def create_dvd(self, *args): return self._bridge.create_dvd(*args)
     def copy_disc(self, *args): return self._bridge.copy_disc(*args)
+    def confirm_copy_medium(self, job_id): return self._bridge.confirm_copy_medium(job_id)
     def rip_disc(self, *args): return self._bridge.rip_disc(*args)
     def create_highlights(self, *args): return self._bridge.create_highlights(*args)
     def generate_subtitles(self, *args): return self._bridge.generate_subtitles(*args)

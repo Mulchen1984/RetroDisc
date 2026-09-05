@@ -752,3 +752,55 @@ Bewusst zurueckgestellt, bis diese Kette steht: Cancel, Collision, Whisper und d
 Die Packaged-Acceptance-Kette ist **PASS**. Damit ist die Luecke geschlossen, die den charmap-Blocker durchgelassen hat, und ein Download gilt erst dann als erfolgreich, wenn Jobstatus, Datei, Groesse und Restfreiheit stimmen.
 
 Unveraendert offen und weiterhin nicht durch Code loesbar: die fehlende vertrauenswuerdige Code-Signatur (`NotSigned`, keine Weitergabe an Dritte) und der physische Brenn- und Rueckleseteset ohne verfuegbaren Rohling.
+
+
+### 2026-09-05 — Disc-Copy: isolierte Images, leerer Scan-Cache und Medienwechsel
+
+Auftrag im Worktree `RetroDisc-codex`, Branch `codex-crossplatform`, auf dem
+frisch gefetchten `origin/crossplatform-2026` bei `8b4392b`. Drei bestaetigte
+Review-Findings gemeinsam behoben, ohne zweite Rip-/Brennimplementierung.
+
+- Jeder Kopierjob bekommt eine echte Job-ID und einen ISO-Namen mit dieser ID.
+  Der bisherige positionale `Job(JobType.RIP_DVD, ...)`-Aufruf setzte versehentlich
+  die ID statt des Typs; jetzt wird `job_type=` explizit uebergeben. Exklusive
+  Dateireservierung beim Jobstart weicht auch bereits vorhandenen Dateien aus.
+  Teil-Images werden bei Rip-Fehler/Abbruch entfernt, vollstaendige Images bleiben
+  bei spaeterem Abbruch oder Brennfehler erhalten.
+- Erfolgreiche `drives: []`-Antworten werden fuer die Sitzung gecacht. Fehler
+  bleiben wiederholbar, auch nach einem fehlgeschlagenen erzwungenen Refresh.
+  Verhalten wird mit dem echten UI-JavaScript unter Node geprueft.
+- Bei gleichem Quell-/Ziellaufwerk wartet der Job nach dem Rippen auf eine
+  ausdrueckliche Bestaetigung in der Queue. Die UI fordert zum Entfernen der
+  Quelldisc und Einlegen eines leeren Rohlings auf. Erst der Klick auf
+  "Rohling pruefen und fortsetzen" fragt `DiscTools.get_disc_info` ab.
+  Nur `present` und `blank` erlauben das Fortsetzen; beschriebene wiederbeschreibbare
+  Medien werden mit dem Hinweis auf vorheriges Leeren abgewiesen. Keine automatische
+  Loeschung und keine periodische Suche oder feste Wartezeit als Freigabekriterium.
+  Das vorhandene `burn_iso` wird nach Freigabe benutzt. Bei verschiedenen Laufwerken
+  folgt es weiterhin direkt auf den vorhandenen `DiscRipper`-Pfad.
+- Pipeline-Abbruch beendet den wartenden Job; ein gleichzeitig laufender Mediencheck
+  darf ihn danach nicht mehr zum Brennen freigeben. Ein abgelaufener API-Aufruf
+  storniert seine Pruefung. Medienfehler lassen den Job fuer einen neuen Versuch warten.
+
+Verifikation auf dem finalen Source:
+
+- Fokussiert: `test_disc_copy_flow.py`, `test_drive_detection_ui.py`,
+  `test_disc_flows.py`, `test_webview_navigation.py`: **56 passed in 6.46 s**.
+- Gesamte Suite: **318 passed in 32.37 s**.
+- Verhaltenstests: Rip/Burn-Reihenfolge, Warten und Bestaetigen ueber den echten
+  API-Proxy, ungeeignete Medien, unterschiedliche Job-IDs/ISO-Pfade, vorhandene
+  Benutzerdatei, Rip-/Brennfehler, Abbruch beim Warten und waehrend der Medienpruefung.
+  JavaScript-Tests sichern Scan-Cache/Retry und Queue-Anzeige/API-Aktion ab.
+- `compileall`: Exitcode 0. `scripts/verify_ui_bridge.py`: PASS, 0 Befunde.
+  `node --check build/ui-audit/inline.js`: Exitcode 0.
+- `.hermes/verify_core.py`: PASS; Job `done`, MP3 402328 Bytes, Codec mp3.
+- `scripts/release_smoke.py`: PASS, Ausgabe `build/e2e-smoke-20260905-194633`;
+  unter anderem Upscale 2560x1440, Interpolation 50 fps, deutsche SRT 199 Bytes,
+  DVD-ISO 2627584 Bytes. Vorhandene Vendor-Dateien wurden fuer dieses Gate in
+  den ignorierten Vendor-Ordner dieses Worktrees kopiert.
+- `git diff --check`: Exitcode 0.
+
+Kein Release-Build und kein physischer Medienwechsel/Brennvorgang ausgefuehrt.
+Die neuen optischen Verhaltenstests simulieren die Hardwareantworten; fruehere
+Artefakt-Hashes sind kein Nachweis fuer diesen geaenderten Source. Die bekannten
+Signatur- und Hardware-Gates bleiben unveraendert offen.
