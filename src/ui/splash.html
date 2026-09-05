@@ -60,7 +60,12 @@ function finishStartup() {
     }
   }, 650);
 }
-window.addEventListener('pywebviewready', () => window.setTimeout(finishStartup, 1550));
+// Budget for how long the startup image stays up. It is deliberately well
+// under the two seconds the user actually sees: the window shows this document
+// before pywebviewready fires (~1 s later on this machine), and swapping in the
+// main document costs another ~0.25 s. Measured on the packaged EXE: a 2200 ms
+// budget showed for ~2.5 s and 1600 ms for 2.43 s, so 1200 ms lands near 2 s.
+window.addEventListener('pywebviewready', () => window.setTimeout(finishStartup, 550));
 </script>
 </body>
 </html>

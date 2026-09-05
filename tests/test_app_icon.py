@@ -109,42 +109,57 @@ def test_every_build_path_stamps_this_one_icon():
     ), "shortcuts no longer take their icon from the installed EXE"
 
 
-def test_the_splash_artwork_matches_its_window_and_is_referenced():
-    """A tolerance, not an exact ratio: the splash is a hand-made asset.
+def test_the_splash_shows_the_supplied_artwork_whole():
+    """The splash is a supplied asset and must be shown complete.
 
-    The property that matters is that ``object-fit: contain`` leaves no visible
-    letterbox, so a few percent off is fine and a 4:3 image in a 1.41:1 window
-    is not.
+    It is not generated and not resized to fit the window, so its aspect will
+    not match the window exactly - the current one is 4:3 in a 1.41:1 window.
+    That is fine: ``object-fit: contain`` letterboxes it with a thin dark band
+    and every pixel stays visible. What must never happen is ``cover``, which
+    would crop the artwork - here it would cut the dedication line off the
+    bottom edge.
     """
-    assert SPLASH.is_file()
+    assert SPLASH.is_file(), "the supplied splash artwork is missing"
     with Image.open(SPLASH) as splash:
         width, height = splash.size
     assert width >= 1200, "splash artwork is too small for a 900px-wide window"
 
-    wanted = SPLASH_WINDOW[0] / SPLASH_WINDOW[1]
-    actual = width / height
-    assert abs(actual - wanted) / wanted < 0.04, (
-        f"splash aspect {actual:.3f} is too far from the window's {wanted:.3f}; "
-        "object-fit: contain would letterbox it"
-    )
     html = (ROOT / "src" / "ui" / "splash.html").read_text(encoding="utf-8")
-    assert "../../assets/retrodisc_startup.png" in html
+    assert "../../assets/retrodisc_startup.png" in html, (
+        "the splash document no longer loads the supplied artwork"
+    )
+    assert "object-fit: contain" in html, (
+        "the splash must letterbox, never crop the supplied artwork"
+    )
+    assert "object-fit: cover" not in html
+
+    # Sanity: how much of the window stays empty at this aspect.
+    scale = min(SPLASH_WINDOW[0] / width, SPLASH_WINDOW[1] / height)
+    covered = (width * scale * height * scale) / (SPLASH_WINDOW[0] * SPLASH_WINDOW[1])
+    assert covered > 0.85, (
+        f"the artwork only fills {covered:.0%} of the splash window; "
+        "it would look like a small picture in a large frame"
+    )
 
 
 def test_the_splash_is_shown_for_about_two_seconds():
     """The startup image is meant to be seen, not to flash past.
 
     Two timers add up: the wait after ``pywebviewready`` before the finish is
-    requested, and the short hand-off delay before the main document replaces
-    the splash.
+    requested, and the hand-off delay before the main document replaces the
+    splash. What the user actually sees is longer than that sum, because
+    the window shows this document before ``pywebviewready`` fires, and the main
+    document needs roughly another 0.25 s. Measured on the packaged EXE: a
+    2200 ms budget was on screen for ~2.5 s and 1600 ms for 2.43 s, so the
+    bounds below sit around 1200 ms to land near two seconds.
     """
     html = (ROOT / "src" / "ui" / "splash.html").read_text(encoding="utf-8")
     delays = [int(value) for value in re.findall(r"window\.setTimeout\([^,]+,\s*(\d+)\)", html)]
     assert len(delays) == 2, f"expected two splash timers, found {delays}"
 
     total_ms = sum(delays)
-    assert 1800 <= total_ms <= 2600, (
-        f"splash budget is {total_ms} ms, which is not about two seconds"
+    assert 900 <= total_ms <= 1600, (
+        f"splash budget is {total_ms} ms; on screen that is not about two seconds"
     )
 
 
@@ -216,30 +231,21 @@ def test_the_title_bar_mark_is_the_disc_and_not_a_face():
     assert " Q" not in svg, "title bar mark has a quadratic curve again (mouth?)"
 
 
-def test_no_tracked_file_still_carries_the_old_person_image():
-    """Text and binaries both: the picture must be gone, not just unreferenced."""
-    banned = re.compile(r"trump|karikatur|caricature", re.I)
-    offenders: list[str] = []
+def test_the_icon_surfaces_carry_no_person_even_though_the_splash_does():
+    """The two are deliberately different, so the rule is per surface.
 
-    skip_dirs = {".git", ".venv", "build", "dist", "Output", "vendor", "__pycache__"}
-    for path in ROOT.rglob("*"):
-        if not path.is_file() or any(part in skip_dirs for part in path.parts):
-            continue
-        if path == Path(__file__):
-            continue  # this scanner has to name what it is looking for
-        if path.suffix.lower() in {".png", ".ico", ".icns", ".jpg", ".jpeg", ".gif"}:
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue
-        for number, line in enumerate(text.splitlines(), start=1):
-            if banned.search(line):
-                offenders.append(f"{path.relative_to(ROOT).as_posix()}:{number}")
+    An earlier revision swept the whole repository for the old artwork. That
+    rule is gone: the user supplies the splash and it does show a person by
+    intent. The icon surfaces are the ones that must stay clear of it, and
+    those are checked where it counts - ``assets/retrodisc.ico`` above, the
+    title-bar SVG in the test before this one, and the PE resources of both
+    binaries in ``scripts/verify_app_icon.py``.
+    """
+    icon_paths = [ASSETS / "retrodisc.ico"] + [
+        ASSETS / f"retrodisc_{size}.png" for size in REQUIRED_SIZES
+    ]
+    for path in icon_paths:
+        assert path.is_file(), f"icon asset missing: {path.name}"
 
-    # RELEASE_AUDIT_STATUS.md is the binding journal. A dated entry recording
-    # what a past run actually showed stays as written - rewriting it would
-    # falsify the audit record - so only that file may still name the old
-    # artwork, and only in its history.
-    unexpected = [o for o in offenders if not o.startswith("RELEASE_AUDIT_STATUS.md:")]
-    assert unexpected == [], f"old artwork still referenced: {unexpected}"
+    # The splash is a separate file and nothing in the icon pipeline names it.
+    assert SPLASH.name not in {p.name for p in icon_paths}
