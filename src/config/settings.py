@@ -15,6 +15,11 @@ def _default_burn_device() -> str:
     return "D:" if platform.system() == "Windows" else "/dev/sr0"
 
 
+def _default_media_root() -> Path:
+    """Return the single user-visible root for RetroDisc media results."""
+    return Path.home() / "Videos" / "RetroDisc"
+
+
 class ToolPaths(BaseModel):
     """Pfade zu externen Tools."""
     ffmpeg: str = "ffmpeg"
@@ -27,10 +32,122 @@ class ToolPaths(BaseModel):
 
 
 class DirectorySettings(BaseModel):
-    """Verzeichnis-Einstellungen."""
-    output_dir: Path = Field(default_factory=lambda: Path.home() / "Videos" / "RetroDisc")
-    temp_dir: Path = Field(default_factory=lambda: Path.home() / "Videos" / "RetroDisc" / "_temp")
-    download_dir: Path = Field(default_factory=lambda: Path.home() / "Downloads" / "RetroDisc")
+    """Verzeichnis-Einstellungen für einen durchgängigen Medien-Workflow.
+
+    RetroDisc soll für den normalen Benutzer genau einen sichtbaren Medienordner
+    haben: ``~/Videos/RetroDisc``. Downloads, Rips, Konvertierungen,
+    Bearbeitungsergebnisse sowie DVD-/ISO-Ausgaben landen standardmäßig alle
+    dort. Dadurch kann das Ergebnis eines Schrittes ohne erneute Suche direkt
+    im nächsten Schritt verwendet werden.
+
+    Nur temporäre Arbeitsdateien liegen im internen Unterordner ``_temp``.
+    Die zusätzlichen Felder bleiben aus Kompatibilitätsgründen erhalten, zeigen
+    standardmäßig aber alle auf denselben Medienordner.
+    """
+
+    media_root: Path = Field(default_factory=_default_media_root)
+    download_dir: Path = Field(default_factory=_default_media_root)
+    rip_dir: Path = Field(default_factory=_default_media_root)
+    output_dir: Path = Field(default_factory=_default_media_root)
+    edited_dir: Path = Field(default_factory=_default_media_root)
+    disc_dir: Path = Field(default_factory=_default_media_root)
+    temp_dir: Path = Field(default_factory=lambda: _default_media_root() / "_temp")
+
+    @property
+    def trim_dir(self) -> Path:
+        return self.edited_dir
+
+    @property
+    def merge_dir(self) -> Path:
+        return self.edited_dir
+
+    @property
+    def upscale_dir(self) -> Path:
+        return self.edited_dir
+
+    @property
+    def interpolate_dir(self) -> Path:
+        return self.edited_dir
+
+    @property
+    def subtitle_dir(self) -> Path:
+        return self.edited_dir
+
+    @property
+    def highlights_dir(self) -> Path:
+        return self.edited_dir
+
+    @property
+    def dvd_dir(self) -> Path:
+        return self.disc_dir
+
+    @property
+    def iso_dir(self) -> Path:
+        return self.disc_dir
+
+    def ensure_directories(self) -> None:
+        """Create all configured paths; duplicates are harmless."""
+        for path in (
+            self.media_root,
+            self.download_dir,
+            self.rip_dir,
+            self.output_dir,
+            self.edited_dir,
+            self.disc_dir,
+            self.temp_dir,
+        ):
+            path.mkdir(parents=True, exist_ok=True)
+
+    def migrate_legacy_defaults(self) -> bool:
+        """Collapse historical RetroDisc defaults into the single media root.
+
+        Arbitrary custom user paths are deliberately preserved. Only paths that
+        RetroDisc itself used as defaults in older builds (including the short-
+        lived numbered workflow layout) are migrated automatically.
+        """
+        changed = False
+        root = _default_media_root()
+
+        legacy_defaults = {
+            "download_dir": {
+                Path.home() / "Downloads" / "RetroDisc",
+                root / "01_Quellen" / "Downloads",
+                root,
+            },
+            "rip_dir": {
+                root / "01_Quellen" / "Rips",
+                root,
+            },
+            "output_dir": {
+                root / "02_Konvertiert",
+                root,
+            },
+            "edited_dir": {
+                root / "03_Bearbeitet",
+                root,
+            },
+            "disc_dir": {
+                root / "04_Disc",
+                root,
+            },
+        }
+
+        for field_name, known_defaults in legacy_defaults.items():
+            current = getattr(self, field_name)
+            if current in known_defaults and current != root:
+                setattr(self, field_name, root)
+                changed = True
+
+        expected_temp = root / "_temp"
+        legacy_temp = {
+            expected_temp,
+            Path.home() / "Videos" / "RetroDisc" / "_temp",
+        }
+        if self.temp_dir in legacy_temp and self.temp_dir != expected_temp:
+            self.temp_dir = expected_temp
+            changed = True
+
+        return changed
 
 
 class SoundSettings(BaseModel):
@@ -83,9 +200,7 @@ class AppSettings(BaseModel):
 
     def ensure_directories(self) -> None:
         """Erstellt alle konfigurierten Verzeichnisse."""
-        self.directories.output_dir.mkdir(parents=True, exist_ok=True)
-        self.directories.temp_dir.mkdir(parents=True, exist_ok=True)
-        self.directories.download_dir.mkdir(parents=True, exist_ok=True)
+        self.directories.ensure_directories()
 
     def save(self, path: Path | None = None) -> None:
         """Speichert Einstellungen als JSON."""
@@ -114,11 +229,15 @@ class AppSettings(BaseModel):
 
     @classmethod
     def load(cls, path: Path | None = None) -> "AppSettings":
-        """Lädt Einstellungen aus JSON."""
+        """Lädt Einstellungen aus JSON und migriert nur alte Standardpfade."""
         path = path or cls._default_config_path()
         if path.exists():
             try:
-                return cls.model_validate_json(path.read_text(encoding="utf-8"))
+                settings = cls.model_validate_json(path.read_text(encoding="utf-8"))
+                if settings.directories.migrate_legacy_defaults():
+                    settings.ensure_directories()
+                    settings.save(path)
+                return settings
             except (OSError, ValueError):
                 # Keep the invalid file for diagnosis, but do not prevent startup.
                 return cls()
