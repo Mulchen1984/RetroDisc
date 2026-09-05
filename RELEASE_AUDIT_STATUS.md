@@ -1,6 +1,6 @@
 # RetroDisc Release-Audit-Status
 
-Letzte Aktualisierung: 2026-09-05 20:50 CEST — sieben tote Bridge-Aktionen behoben (positionales `Job()`), Fix am gebauten Artefakt belegt
+Letzte Aktualisierung: 2026-09-05 21:45 CEST — Programmicon und Startbild durch die eigene RetroDisc-Disc-Marke ersetzt, an allen Flaechen am gebauten Artefakt belegt
 
 ## Verbindlicher Abschlussstatus
 
@@ -19,9 +19,9 @@ Zusätzlich offen als **ausstehende Hardware-Validierung** (kein Softwaremangel,
 ## Aktueller Checkpoint
 
 - Branch: `crossplatform-2026`
-- Letzter Freeze-Commit: `e07a6f4` (`Fix seven dead UI actions built from a positional Job()`) — dies ist der Stand, auf dem die aktuell gueltigen Artefakt-Hashes gemessen wurden
-- Vorheriger Freeze-Commit: `6fc623b` (`FIX: keep a Windows console codepage from failing finished jobs`)
-- Aeltere Freezes (historisch): `01e5fd9`, `1c486cc`
+- Letzter Freeze-Commit: `530344d` (`Replace the app icon with RetroDisc's own disc mark`) — dies ist der Stand, auf dem die aktuell gueltigen Artefakt-Hashes gemessen wurden
+- Vorheriger Freeze-Commit: `ba9805b` (`Integrate the Blu-ray ripper fix and void my artifact hashes`)
+- Aeltere Freezes (historisch): `6fc623b`, `01e5fd9`, `1c486cc`. **`e07a6f4` stand hier faelschlich weiter:** der Commit wurde beim Rebase auf `17f42c3` neu geschrieben und existiert nicht mehr; der zugehoerige Journalblock ist als abgeloest gekennzeichnet.
 - Tag des Abschlussstands: `v1.0.0-rc1`
 - Baseline-Commit: `e29f41d` (`BASELINE: preserve initial RetroDisc source state`)
 - Aktueller Arbeitsbaum: sauber; alle Build-Ausgaben sind ignoriert
@@ -1212,3 +1212,137 @@ Bewusst noch nicht als Packaged-Fall automatisiert: Cancel, Collision (auf
 Quellebene durch `tests/test_download_publish.py` abgedeckt),
 Whisper-Untertitel und der optische Teil. `rip_disc` ist seit diesem Block auf
 Bridge-Ebene abgesichert, end-to-end aber nur mit echter Hardware pruefbar.
+
+---
+
+### 2026-09-05 21:00–21:45 CEST — Programmicon und Startbild vollstaendig ersetzt
+
+Nutzerauftrag: das bisherige Personen-/Trump-Bild darf nirgends mehr als App-,
+EXE-, Installer-, Fenster- oder Shortcut-Icon auftauchen; stattdessen ein
+eigenes RetroDisc-Icon mit Disc-Motiv, dezentem Retro-/Rewind-/Kopier-Symbol,
+dunklem Hintergrund und Lesbarkeit bei 16x16 und 32x32.
+
+#### Was das alte Bild war und wo es ueberall steckte
+
+`assets/retrodisc.ico` war ein Zuschnitt aus `assets/retrodisc_startup.png`,
+einer Illustration mit einer realen Person. Windows zieht **alle** Icon-Flaechen
+aus dieser einen Datei, also EXE, Installer, Taskleiste, Titelbalken sowie
+Desktop- und Startmenue-Verknuepfung. Drei weitere Fundstellen waren **keine**
+Bildreferenz und daher mit einem Datei-Sweep nicht auffindbar:
+
+1. **Das Startbild selbst** (`retrodisc_startup.png`), eingebunden in
+   `src/ui/splash.html`.
+2. **Die App-Kopfzeile in `src/ui/app.html`** trug das Gesicht als **Inline-SVG**
+   (Kopf mit Augen, Mund und Haarbueschel). Kein `<img>`, kein Dateiname —
+   gefunden erst auf einem Screenshot der **laufenden** Anwendung.
+3. **`RUNTIME_GATE_ZWEITRECHNER.md`** wies den Tester auf dem Zweitrechner an,
+   genau dieses Startbild zu erwarten. Ein korrekter Build waere an dieser
+   Anleitung durchgefallen.
+
+#### Das neue Icon
+
+Prozedural gezeichnet in `scripts/create_icon.py`, ausschliesslich aus
+Koordinaten — keine Fotovorlage, kein Personenmotiv, kein politisches Motiv,
+kein fremdes Markenlogo, keine CloneCD-Originalgrafik. Motiv: optische Disc auf
+dunklem Grund, darin ein gegen den Uhrzeigersinn laufender Rewind-/Kopierbogen
+mit Pfeilspitze um die Nabe; kuehles Cyan auf Stahlblau, ein zurueckhaltender
+Magenta-Akzent.
+
+Lesbarkeit war die bestimmende Vorgabe: unter 48 px ueberleben nur Rand, Nabe
+und Bogen, deshalb entfallen dort Rillentextur, Lichtsichel und Klemmring, und
+die Strichstaerken steigen. **Jede Groesse wird einzeln gezeichnet**, nicht aus
+dem 256er heruntergerechnet; ein Test beweist das, indem er jede kleine Kachel
+gegen ein LANCZOS-Downscale des 256ers vergleicht und Ungleichheit verlangt.
+
+`assets/retrodisc.ico` enthaelt **16, 24, 32, 48, 64, 128, 256** — alle sieben
+belegt, jede mit echtem Inhalt. Zusaetzlich erzeugt: die Einzel-PNGs, das
+1024er-Master, die Vorschau, ein neues `retrodisc_startup.png` (1440x1024,
+exakt das 900x640-Seitenverhaeltnis des Splash-Fensters, damit `object-fit:
+contain` nicht letterboxt) und die `.icns` (macOS-Altbestand, nur der
+Konsistenz halber mitgezogen; von keinem Buildpfad benutzt).
+
+#### Entfernt
+
+- `scripts/generate_icon.py` — existierte ausschliesslich, um die Karikatur zu
+  zeichnen.
+- Die vier `.hermes`-Screenshots: sie zeigten eine ueberholte Vier-Aktionen-UI
+  **mit dem alten Icon im Titelbalken** und wurden von nichts referenziert
+  ausser dem historischen Baseline-Manifest.
+
+Die datierten Journaleintraege, die das alte Bild erwaehnen, bleiben **wie
+geschrieben** stehen. Ein Auditprotokoll nachtraeglich an eine spaetere
+Aenderung anzupassen waere eine Faelschung; der Sweep-Test laesst deshalb
+genau diese eine Datei zu und keine andere.
+
+#### Neue Gates und Tests
+
+`scripts/verify_app_icon.py` (neu) oeffnet `dist/RetroDisc.exe` und den
+Installer als PE-Dateien, liest deren `RT_ICON`-Ressourcen und vergleicht sie
+**pixelweise** mit `assets/retrodisc.ico`. Das ist die einzige Art zu sehen,
+was PyInstaller tatsaechlich eingestempelt hat. Zusaetzlich eine
+Hautton-Heuristik gegen ein Portrait: am realen Material gemessen lag das alte
+Icon bei **35–43 %**, die Disc-Marke bei **0,0 %**; die Grenze steht bei 18 %.
+
+`scripts/verify_release_artifacts.py` liest jetzt zusaetzlich in der
+Sandbox-Installation die `IconLocation` **beider** Verknuepfungen. Damit ist
+„Startmenue und Desktop zeigen das richtige Icon" gemessen statt angenommen.
+
+`tests/test_app_icon.py` (neu, 9 Tests): alle sieben Groessen vorhanden und
+nicht leer; dunkler Grund und helle Marke ueber Median-/Maximalluminanz statt
+ueber einen einzelnen Pixel gemessen (bei 16 px reicht die Disc bis dicht an
+den Rand, ein fester Messpunkt trifft ebenso gut den hellen Ring); kleine
+Groessen sind keine Downscales; alle Buildpfade zeigen auf dieselbe `.ico`;
+Splash-Seitenverhaeltnis passt zum Splash-Fenster; der Generator oeffnet keine
+Bilddatei; die Titelzeilen-Marke ist eine Disc und kein Gesicht; und ein
+Repository-Sweep ueber alle Textdateien.
+
+Negative Gegenprobe: gegen die **alten** Assets fallen
+`test_the_background_is_dark_and_the_mark_is_bright` und
+`test_the_splash_artwork_matches_its_window_and_is_referenced` durch, gegen die
+**alte** `app.html` faellt `test_the_title_bar_mark_is_the_disc_and_not_a_face`
+durch.
+
+#### Verifikation am gebauten Artefakt
+
+Gebaut aus dem eingefrorenen Commit `530344d`
+(`Replace the app icon with RetroDisc's own disc mark`), `build.py --clean`
+Exitcode 0. **Diese Hashes loesen die des Blocks vom 20:55–21:15 ab:**
+
+- `dist\RetroDisc.exe`: **500110479 Bytes**,
+  SHA-256 `EA73222B68D24738F2486464784A363BF09FB4DC93F8E5A74FB80A27649C602F`
+- `Output\RetroDisc_1.0.0_Portable.zip`: **498663867 Bytes**,
+  SHA-256 `525DD788BE3CF509F686A4D32A254B8FDBE70281F8718A7F2DFCB7B3623A8C3D`
+- `Output\RetroDisc_Setup_1.0.0.exe`: **505928848 Bytes**,
+  SHA-256 `D8F63A1B36689CCCD4C43224F89E0BAB8E9838B24CD227DDD2AE80476AD059BA`
+
+| Flaeche | Ergebnis |
+| --- | --- |
+| `RetroDisc.exe` | 7 `RT_ICON`-Ressourcen, Groessen 16/24/32/48/64/128/256, **jede pixelgleich** zur `.ico`, Hautton 0,0 % |
+| Installer | ebenso: 7 Ressourcen, alle Groessen, pixelgleich, Hautton 0,0 % |
+| Desktop-Verknuepfung | `IconLocation` zeigt auf die installierte EXE — bestaetigt in der Sandbox |
+| Startmenue-Verknuepfung | dito |
+| Taskleiste (`WM_GETICON`, `ICON_BIG`) | 40x40 aus dem laufenden Prozess abgegriffen, Hautton 0,0 %, mittlere Abweichung 6,6 gegen die 48er-Kachel — reine Resampling-Differenz 48→40 |
+| Fenstertitelbalken (`ICON_SMALL`) | identisch zur Taskleiste |
+| Splash | Screenshot der **gepackten** Anwendung: neues RetroDisc-Startbild, keine Person |
+| App-Kopfzeile | Screenshot des Hauptfensters: Disc-Marke statt Gesicht |
+
+`scripts/verify_release_artifacts.py`: **PASS, 0 Befunde** (ZIP byteidentisch,
+Installation und Deinstallation vollstaendig, `NotSigned` als Hinweis).
+`scripts/verify_app_icon.py`: **PASS, 0 Befunde**.
+
+#### Uebrige Gates auf diesem Stand
+
+- `pytest -q`: **357 passed** (vorher 348; +9 Icon-Tests).
+- `compileall`, `scripts/verify_ui_bridge.py` (PASS, 0 Befunde),
+  `node --check`, `git diff --check`: alle Exitcode 0.
+- `scripts/verify_home_layout.py`: **PASS, 10/10** — noetig, weil `app.html`
+  geaendert wurde.
+
+#### Stand
+
+Das Personenbild ist aus dem Produkt und aus dem Repository entfernt und an
+allen vom Nutzer genannten Flaechen durch die eigene RetroDisc-Disc-Marke
+ersetzt, belegt am gebauten Artefakt.
+
+Unveraendert offen und nicht durch Code loesbar: die fehlende vertrauenswuerdige
+Code-Signatur und der physische Brenn- und Rueckleseteset ohne Rohling.
