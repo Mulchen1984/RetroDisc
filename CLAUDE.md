@@ -115,3 +115,45 @@ unsigniert und damit nicht verlässlich weitergebbar. Details und die
 Umgebungsvariablen stehen in `README.md`. Ein selbst ausgestelltes Zertifikat
 löst das **nicht** — Smart App Control prüft nicht den lokalen
 Zertifikatspeicher. Die Richtlinie wird nie umgangen oder verändert.
+
+## Aktuelle UI-/UX- und Produktvorgaben
+
+Diese Vorgaben stammen aus der laufenden Produktabnahme und gelten bis zu einer
+expliziten Änderung durch den Nutzer:
+
+- Die Startseite hat fünf Primäraktionen: **Disc kopieren, Konvertieren,
+  Brennen, Rippen, Download**. Alle fünf müssen in der vorgesehenen
+  Fenstergröße vollständig sichtbar sein; kein Abschneiden oder horizontaler
+  Scroll-Zwang.
+- Die visuelle Sprache darf klar an klassische CloneCD-artige Disc-Utilities
+  erinnern, aber es werden **keine originalen CloneCD-Assets oder GIFs 1:1
+  übernommen**. Eigene SVGs/Animationen zeichnen.
+- Disc-Funktionen verwenden eine einheitliche goldene/orange Disc-Sprache.
+  **Brennen/Schreiben = Disc + Stift/Bleistift**. **Rippen/Lesen = Disc +
+  Brille**. **Disc kopieren = zwei Discs mit klarer Kopierbeziehung**.
+  Konvertieren bleibt ein eigenes Medien-/Format-Symbol ohne Disc-Zwang.
+- Dezente Retro-Animationen sind erwünscht: beim Brennen darf der Stift eine
+  kleine Schreibbewegung machen, beim Rippen darf die Brille eine kleine
+  Lese-/Scanbewegung machen. Keine blinkenden oder hektischen Effekte.
+- Die Endnutzer-/Release-Anwendung darf beim normalen Start **kein sichtbares
+  Python-, CMD- oder PowerShell-Konsolenfenster** zeigen. Ein Source-Run über
+  `python3.11.exe` ist nur Developer Mode und kein gültiger visueller
+  Produktnachweis.
+- Der Release-Build muss im äußeren Windows-Titelbalken und in der Taskleiste
+  das **RetroDisc-Icon**, nicht das Python-Icon zeigen. Die vorhandene
+  `retrodisc_final.spec`-Konfiguration mit `console=False` und
+  `assets/retrodisc.ico` ist der Referenzweg.
+- Beim normalen Programmstart werden **keine optischen Laufwerke erkannt** und
+  dafür keine PowerShell-/CMD-Helfer gestartet. Laufwerke ausschließlich lazy
+  beim Öffnen von Disc kopieren, Brennen oder Rippen bzw. über "Neu suchen"
+  erkennen; innerhalb der Sitzung cachen, keine periodische Hintergrundsuche.
+- Browser-/WebView-History darf RetroDisc nicht verlassen. Maus-Zurück/-Vorwärts
+  darf die WebView-History nicht auf Splash oder andere Dokumente bewegen; die
+  eigene interne Navigation muss funktionieren.
+- "Disc kopieren" darf einen Abbild-Workflow anbieten, aber **echtes
+  On-the-fly** nur dann so nennen, wenn tatsächlich direkt von Quelllaufwerk zu
+  Ziellaufwerk gestreamt wird. Ein sequenzielles Rippen in ein temporäres Image
+  und anschließendes Brennen ist kein On-the-fly und darf nicht so beschriftet
+  werden.
+- Physische Disc-Brenn-/Kopierpfade gelten ohne echte Laufwerke und Medien nicht
+  als hardwareverifiziert. Das in Status/Journals klar kennzeichnen.
