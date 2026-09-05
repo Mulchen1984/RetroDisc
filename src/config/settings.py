@@ -15,6 +15,11 @@ def _default_burn_device() -> str:
     return "D:" if platform.system() == "Windows" else "/dev/sr0"
 
 
+def _default_media_root() -> Path:
+    """Return the single user-visible root for RetroDisc media results."""
+    return Path.home() / "Videos" / "RetroDisc"
+
+
 class ToolPaths(BaseModel):
     """Pfade zu externen Tools."""
     ffmpeg: str = "ffmpeg"
@@ -27,10 +32,106 @@ class ToolPaths(BaseModel):
 
 
 class DirectorySettings(BaseModel):
-    """Verzeichnis-Einstellungen."""
-    output_dir: Path = Field(default_factory=lambda: Path.home() / "Videos" / "RetroDisc")
-    temp_dir: Path = Field(default_factory=lambda: Path.home() / "Videos" / "RetroDisc" / "_temp")
-    download_dir: Path = Field(default_factory=lambda: Path.home() / "Downloads" / "RetroDisc")
+    """Verzeichnis-Einstellungen für den nachvollziehbaren Medien-Workflow.
+
+    Alle benutzerrelevanten Ergebnisse liegen standardmäßig unter genau einem
+    Stammordner: ``~/Videos/RetroDisc``. Die nummerierten Unterordner bilden
+    den typischen Arbeitsablauf ab und verhindern, dass Ergebnisse unbemerkt
+    neben Quelldateien oder im allgemeinen Download-Ordner landen.
+    """
+
+    media_root: Path = Field(default_factory=_default_media_root)
+    download_dir: Path = Field(
+        default_factory=lambda: _default_media_root() / "01_Quellen" / "Downloads"
+    )
+    rip_dir: Path = Field(
+        default_factory=lambda: _default_media_root() / "01_Quellen" / "Rips"
+    )
+    output_dir: Path = Field(
+        default_factory=lambda: _default_media_root() / "02_Konvertiert"
+    )
+    edited_dir: Path = Field(
+        default_factory=lambda: _default_media_root() / "03_Bearbeitet"
+    )
+    disc_dir: Path = Field(
+        default_factory=lambda: _default_media_root() / "04_Disc"
+    )
+    temp_dir: Path = Field(
+        default_factory=lambda: _default_media_root() / "_temp"
+    )
+
+    @property
+    def trim_dir(self) -> Path:
+        return self.edited_dir / "Geschnitten"
+
+    @property
+    def merge_dir(self) -> Path:
+        return self.edited_dir / "Zusammengefuegt"
+
+    @property
+    def upscale_dir(self) -> Path:
+        return self.edited_dir / "Hochskaliert"
+
+    @property
+    def interpolate_dir(self) -> Path:
+        return self.edited_dir / "Framerate"
+
+    @property
+    def subtitle_dir(self) -> Path:
+        return self.edited_dir / "Untertitel"
+
+    @property
+    def highlights_dir(self) -> Path:
+        return self.edited_dir / "Highlights"
+
+    @property
+    def dvd_dir(self) -> Path:
+        return self.disc_dir / "DVD"
+
+    @property
+    def iso_dir(self) -> Path:
+        return self.disc_dir / "ISO"
+
+    def ensure_directories(self) -> None:
+        """Create the complete workflow tree."""
+        for path in (
+            self.media_root,
+            self.download_dir,
+            self.rip_dir,
+            self.output_dir,
+            self.edited_dir,
+            self.trim_dir,
+            self.merge_dir,
+            self.upscale_dir,
+            self.interpolate_dir,
+            self.subtitle_dir,
+            self.highlights_dir,
+            self.disc_dir,
+            self.dvd_dir,
+            self.iso_dir,
+            self.temp_dir,
+        ):
+            path.mkdir(parents=True, exist_ok=True)
+
+    def migrate_legacy_defaults(self) -> bool:
+        """Move only historical *default settings* to the workflow layout.
+
+        Custom user paths are deliberately left untouched. This only changes
+        values that exactly match RetroDisc's former defaults.
+        """
+        changed = False
+        old_output = Path.home() / "Videos" / "RetroDisc"
+        old_download = Path.home() / "Downloads" / "RetroDisc"
+        root = _default_media_root()
+
+        if self.output_dir == old_output:
+            self.output_dir = root / "02_Konvertiert"
+            changed = True
+        if self.download_dir == old_download:
+            self.download_dir = root / "01_Quellen" / "Downloads"
+            changed = True
+
+        return changed
 
 
 class SoundSettings(BaseModel):
@@ -83,9 +184,7 @@ class AppSettings(BaseModel):
 
     def ensure_directories(self) -> None:
         """Erstellt alle konfigurierten Verzeichnisse."""
-        self.directories.output_dir.mkdir(parents=True, exist_ok=True)
-        self.directories.temp_dir.mkdir(parents=True, exist_ok=True)
-        self.directories.download_dir.mkdir(parents=True, exist_ok=True)
+        self.directories.ensure_directories()
 
     def save(self, path: Path | None = None) -> None:
         """Speichert Einstellungen als JSON."""
@@ -114,11 +213,15 @@ class AppSettings(BaseModel):
 
     @classmethod
     def load(cls, path: Path | None = None) -> "AppSettings":
-        """Lädt Einstellungen aus JSON."""
+        """Lädt Einstellungen aus JSON und migriert nur alte Standardpfade."""
         path = path or cls._default_config_path()
         if path.exists():
             try:
-                return cls.model_validate_json(path.read_text(encoding="utf-8"))
+                settings = cls.model_validate_json(path.read_text(encoding="utf-8"))
+                if settings.directories.migrate_legacy_defaults():
+                    settings.ensure_directories()
+                    settings.save(path)
+                return settings
             except (OSError, ValueError):
                 # Keep the invalid file for diagnosis, but do not prevent startup.
                 return cls()
