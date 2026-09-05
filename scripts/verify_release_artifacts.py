@@ -43,7 +43,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.utils.subprocesses import decode_console_output  # noqa: E402
+from src.utils.subprocesses import (  # noqa: E402
+    decode_console_output,
+    run_powershell_hidden,
+)
 
 APP_EXE = ROOT / "dist" / "RetroDisc.exe"
 PORTABLE_ZIP = ROOT / "Output" / "RetroDisc_1.0.0_Portable.zip"
@@ -160,6 +163,24 @@ def check_signatures(info: dict) -> dict:
     return statuses
 
 
+def _shortcut_icon_location(link: Path) -> str | None:
+    """Read a .lnk's IconLocation through the same COM host that wrote it.
+
+    The link path is absolute, so this needs no sandbox environment - it only
+    reads the file the installer just produced.
+    """
+    script = (
+        "$s = (New-Object -ComObject WScript.Shell).CreateShortcut("
+        f"'{str(link).replace(chr(39), chr(39) * 2)}'); "
+        "Write-Output $s.IconLocation"
+    )
+    probe = run_powershell_hidden(script, timeout=60)
+    if probe.returncode != 0:
+        return None
+    value = decode_console_output(probe.stdout).strip()
+    return value or None
+
+
 def _sandbox_env(sandbox: Path) -> dict[str, str]:
     home = sandbox / "Home"
     roaming = home / "AppData" / "Roaming"
@@ -233,6 +254,24 @@ def check_install_uninstall(info: dict) -> dict:
                 ok(f"isolated {label} created")
             else:
                 fail(f"isolated {label} missing: {path}")
+
+        # Both shortcuts must take their icon from the installed EXE. That is
+        # the only reason the desktop and start menu show the RetroDisc mark
+        # instead of a generic one, and it is invisible in the source tests.
+        for label, link in (
+            ("desktop shortcut", desktop_link),
+            ("start menu shortcut", start_menu / "RetroDisc.lnk"),
+        ):
+            if not link.exists():
+                fail(f"{label} missing for the icon check: {link}")
+                continue
+            icon_location = _shortcut_icon_location(link)
+            if icon_location is None:
+                fail(f"{label}: IconLocation could not be read")
+            elif icon_location.split(",")[0].strip().lower() == str(installed_exe).lower():
+                ok(f"{label} takes its icon from the installed EXE")
+            else:
+                fail(f"{label} points its icon elsewhere: {icon_location}")
 
         if not uninstaller.exists():
             return result

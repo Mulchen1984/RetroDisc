@@ -45,8 +45,11 @@ Stimmt ein Hash nicht, ist der Test wertlos — Übertragung wiederholen.
 
 1. ZIP entpacken, enthaltene `RetroDisc.exe` hashen und mit dem
    Journal-Hash der `dist`-EXE vergleichen (muss byteidentisch sein).
-2. EXE starten. Erwartet: Trump-Startbild ca. 2–3 Sekunden, danach
-   Hauptfenster mit Titel `RetroDisc 1.0`.
+2. EXE starten. Erwartet: RetroDisc-Startbild ca. 2–3 Sekunden — dunkler
+   Hintergrund, die RetroDisc-Disc-Marke mit Rewind-Bogen und der Schriftzug
+   „RetroDisc" —, danach Hauptfenster mit Titel `RetroDisc 1.0`.
+   Im Titelbalken und in der Taskleiste muss das RetroDisc-Disc-Icon stehen,
+   **nicht** das Python-Icon und **kein Personenbild**.
 3. Prüfen, dass beim Start und während der Arbeit **kein** Konsolenfenster
    aufblitzt.
 4. Fehlerkanal kontrollieren: Es darf kein Traceback erscheinen

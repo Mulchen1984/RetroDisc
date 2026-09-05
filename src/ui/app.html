@@ -598,18 +598,17 @@ select, input[type="text"], input[type="url"], input[type="number"] {
   <!-- TITLE BAR -->
   <div id="titlebar">
     <div class="win-title">
-      <svg width="28" height="24" viewBox="0 0 52 44" style="flex-shrink:0;margin-right:2px">
-        <ellipse cx="26" cy="26" rx="17" ry="14" fill="#fff" stroke="#d8dce3" stroke-width="1.5"/>
-        <circle cx="15" cy="20" r="7" fill="#fff"/><circle cx="26" cy="15" r="8" fill="#fff"/>
-        <circle cx="37" cy="20" r="7" fill="#fff"/><circle cx="16" cy="30" r="7" fill="#fff"/>
-        <circle cx="36" cy="30" r="7" fill="#fff"/>
-        <ellipse cx="36" cy="26" rx="10" ry="9" fill="#ff8a3c"/>
-        <ellipse cx="33" cy="22" rx="2" ry="2.4" fill="#1a212b"/>
-        <ellipse cx="41" cy="22" rx="2" ry="2.4" fill="#1a212b"/>
-        <circle cx="33.5" cy="21.3" r="0.6" fill="#fff"/><circle cx="41.5" cy="21.3" r="0.6" fill="#fff"/>
-        <path d="M30 28 Q36 32 42 28" stroke="#1a212b" stroke-width="1.6" fill="none" stroke-linecap="round"/>
-        <ellipse cx="28" cy="19" rx="3" ry="5" fill="#e8721c"/>
-        <ellipse cx="44" cy="19" rx="3" ry="5" fill="#e8721c"/>
+      <!-- The RetroDisc mark: the same disc and rewind arc as assets/retrodisc.ico,
+           redrawn for 28x24 on the dark title bar. The magenta accent the icon
+           carries is left out here - at this size it is one grey pixel. -->
+      <svg width="28" height="24" viewBox="0 0 52 44" style="flex-shrink:0;margin-right:2px"
+           role="img" aria-label="RetroDisc">
+        <circle cx="26" cy="22" r="15" fill="#16304d"/>
+        <circle cx="26" cy="22" r="14" fill="none" stroke="#8ee6ff" stroke-width="3"/>
+        <path d="M20.77 15.30 A 8.5 8.5 0 1 1 29.46 29.76" fill="none"
+              stroke="#8ee6ff" stroke-width="3.5" stroke-linecap="butt"/>
+        <polygon points="15.81,19.18 18.36,12.21 23.18,18.39" fill="#8ee6ff"/>
+        <circle cx="26" cy="22" r="3.6" fill="#0a1220" stroke="#8ee6ff" stroke-width="1.6"/>
       </svg>
       <span style="font-weight:bold;letter-spacing:0.6px;">RetroDisc <span style="color:#ff8a3c;">1.0</span></span>
       <span style="font-size:10px;opacity:0.7;font-weight:normal;"> — All-in-One Media Suite</span>

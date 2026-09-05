@@ -28,7 +28,7 @@ Zusätzlich offen als **ausstehende Hardware-Validierung** (kein Softwaremangel,
 - Plattform: **Windows-only** (Entscheidung vom 2026-09-03, siehe Journal)
 - Baseline-Manifest: `BASELINE_SHA256_MANIFEST.json`
 - Manifestumfang: 147 Einträge, 679158086 Bytes, Stand `e29f41d`
-- Live-Verifikation gegen Manifest: 0 fehlende Einträge; 20 Einträge weichen ab. Das ist erwartet und kein Defekt: Es sind genau die Dateien, die seit `e29f41d` in den dokumentierten Arbeitsblöcken bewusst geändert wurden. Das Manifest ist der historische Ausgangsbeleg, kein Gate für den jeweils aktuellen Commit.
+- Live-Verifikation gegen Manifest: Einträge weichen ab und einige fehlen inzwischen. Das ist erwartet und kein Defekt: Es sind genau die Dateien, die seit `e29f41d` in den dokumentierten Arbeitsblöcken bewusst geändert oder entfernt wurden — darunter seit dem Icon-Block vom 2026-09-05 die vier veralteten `.hermes`-Screenshots und `scripts/generate_icon.py`. Das Manifest ist der historische Ausgangsbeleg, kein Gate für den jeweils aktuellen Commit.
 - Das Manifest umfasst Source/UI/Tests/Build-Konfiguration/Assets und benötigte Vendor-Runtimes; Build-Ausgaben, Caches und Umgebungen sind ausgeschlossen.
 
 ## Eingelesener Bestand
