@@ -1,4 +1,10 @@
-"""Draw the RetroDisc application icon and the startup branding.
+"""Draw the RetroDisc application icon.
+
+**This script never touches the splash screen.** The startup image
+(``assets/retrodisc_startup.png``) is a finished, hand-approved asset; icon and
+splash are kept strictly apart so regenerating the icon can never overwrite it.
+Anything here writes only ``retrodisc.ico``, ``retrodisc.icns`` and the icon
+PNGs.
 
 The motif is RetroDisc's own: an optical disc on a dark technical ground, with
 a rewind/copy arc sweeping counter-clockwise around the hub. No photograph, no
@@ -21,7 +27,7 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "assets"
@@ -204,70 +210,6 @@ def draw_icon(px: int, ss: int = SS) -> Image.Image:
     return icon
 
 
-# ── Startup branding ──────────────────────────────────────────────────────
-
-#: 900x640 splash window, so the artwork matches at object-fit: contain.
-SPLASH_SIZE = (1440, 1024)
-
-
-def _font(size: int, bold: bool = True) -> ImageFont.FreeTypeFont:
-    candidates = ["segoeuib.ttf", "seguisb.ttf", "segoeui.ttf", "arialbd.ttf", "arial.ttf"]
-    if not bold:
-        candidates = ["segoeui.ttf", "arial.ttf"] + candidates
-    for name in candidates:
-        path = Path("C:/Windows/Fonts") / name
-        if path.is_file():
-            return ImageFont.truetype(str(path), size)
-    return ImageFont.load_default()
-
-
-def draw_startup() -> Image.Image:
-    """The splash artwork: the same disc mark, a wordmark, and a quiet grid."""
-    w, h = SPLASH_SIZE
-    image = Image.new("RGB", (w, h), TILE_BOTTOM)
-    draw = ImageDraw.Draw(image, "RGBA")
-
-    for y in range(h):
-        draw.line([(0, y), (w, y)], fill=_lerp((14, 23, 40), (4, 7, 14), y / (h - 1)))
-
-    # Perspective floor grid: retro, but dim enough to stay background.
-    horizon = int(h * 0.66)
-    for i in range(-14, 15):
-        draw.line(
-            [(w / 2 + i * w * 0.052, horizon), (w / 2 + i * w * 0.30, h)],
-            fill=(60, 118, 168, 46), width=2,
-        )
-    step, y = 8.0, float(horizon)
-    while y < h:
-        draw.line([(0, y), (w, y)], fill=(60, 118, 168, 40), width=2)
-        step *= 1.34
-        y += step
-
-    mark = draw_icon(360, ss=4)
-    glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    ImageDraw.Draw(glow).ellipse(
-        (int(w * 0.115), int(h * 0.245), int(w * 0.395), int(h * 0.645)),
-        fill=(48, 150, 205, 70),
-    )
-    image.paste(
-        Image.alpha_composite(image.convert("RGBA"), glow.filter(ImageFilter.GaussianBlur(48))).convert("RGB"),
-        (0, 0),
-    )
-    image.paste(mark, (int(w * 0.135), int(h * 0.30)), mark)
-
-    tx, ty = int(w * 0.415), int(h * 0.305)
-    draw.text((tx, ty), "RetroDisc", font=_font(140), fill=(226, 244, 255))
-    draw.text((tx + 4, ty + 196), "KOPIEREN · KONVERTIEREN · BRENNEN",
-              font=_font(36), fill=(126, 214, 255))
-    draw.text((tx + 4, ty + 246), "RIPPEN · DOWNLOAD",
-              font=_font(36), fill=(126, 214, 255))
-    draw.line([(tx + 6, ty + 316), (int(w * 0.90), ty + 316)],
-              fill=(58, 116, 166, 220), width=3)
-    draw.text((tx + 4, ty + 336), "Windows-Medienwerkzeug",
-              font=_font(34, bold=False), fill=(128, 156, 190))
-    return image
-
-
 def main() -> None:
     ASSETS.mkdir(parents=True, exist_ok=True)
 
@@ -295,9 +237,7 @@ def main() -> None:
     icns = [draw_icon(s, ss=4) for s in (16, 32, 128, 256, 512)]
     icns[-1].save(ASSETS / "retrodisc.icns", format="ICNS", append_images=icns[:-1])
 
-    draw_startup().save(ASSETS / "retrodisc_startup.png", "PNG", optimize=True)
-
-    for name in ("retrodisc.ico", "retrodisc.icns", "retrodisc_startup.png"):
+    for name in ("retrodisc.ico", "retrodisc.icns"):
         print(f"{name}: {(ASSETS / name).stat().st_size} bytes")
 
 

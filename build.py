@@ -16,6 +16,7 @@ import argparse
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -176,6 +177,31 @@ def build_portable_zip() -> None:
     print(f"OK: {PORTABLE_ZIP} ({PORTABLE_ZIP.stat().st_size / 1024 / 1024:.1f} MB)")
 
 
+def verify_zip_signature(require: bool) -> str | None:
+    """Prueft die Signatur der EXE **im ZIP**, nicht der in ``dist``.
+
+    Das ist die Datei, die der Nutzer wirklich startet. Ein ZIP, das vor dem
+    Signieren gepackt wurde, enthaelt stillschweigend unsignierte Bytes,
+    waehrend ``dist\\RetroDisc.exe`` daneben sauber signiert daliegt -- der
+    Fehler faellt dann erst beim Endnutzer auf. Deshalb wird ausgepackt und
+    genau die ausgepackte Datei geprueft.
+    """
+    if not PORTABLE_ZIP.exists():
+        return None
+    member = f"RetroDisc/{APP_EXE.name}"
+    with tempfile.TemporaryDirectory(prefix="retrodisc-zip-verify-") as tmp:
+        with zipfile.ZipFile(PORTABLE_ZIP) as archive:
+            extracted = Path(archive.extract(member, tmp))
+        status = codesign.verify_signature(extracted)
+    print(f"Authenticode-Status der EXE im ZIP: {status}")
+    if require and status != "Valid":
+        raise SystemExit(
+            f"FEHLER: Die EXE im Portable-ZIP ist nicht gueltig signiert ({status}).\n"
+            "        Das ZIP muss nach dem Signieren der EXE gepackt werden."
+        )
+    return status
+
+
 def build_setup_exe() -> None:
     print("\n=== Installer EXE bauen ===")
     OUTPUT_DIR.mkdir(exist_ok=True)
@@ -233,13 +259,18 @@ def main() -> int:
 
     prepare_vendor()
     run_tests(args.skip_tests)
+    # Reihenfolge ist der ganze Punkt: bauen, signieren, pruefen -- und **erst
+    # danach** verpacken. Wer ein fertiges ZIP oder einen fertigen Installer
+    # nachtraeglich signiert, signiert die aeussere Huelle und laesst die EXE
+    # darin unsigniert. Deshalb wird hier nie nachsigniert.
     build_portable_exe()
-    # Zuerst die App-EXE signieren: ZIP und Installer betten sie danach ein und
-    # tragen die Signatur dadurch weiter.
     signed = sign_artifact(APP_EXE, require=args.sign)
     if not args.skip_zip:
         build_portable_zip()
+        # Gegenprobe an der ausgepackten Datei, nicht an der in dist.
+        verify_zip_signature(require=args.sign)
     if not args.skip_installer:
+        # Bettet die bereits signierte EXE ein.
         build_setup_exe()
         # Der Installer ist die Datei, die Smart App Control bisher blockiert hat.
         signed = sign_artifact(SETUP_EXE, require=args.sign) or signed

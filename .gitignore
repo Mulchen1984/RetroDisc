@@ -40,3 +40,16 @@ RetroDisc_Data/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Code-signing material. Never commit certificates, keys or passwords --
+# see SIGNING.md. Configuration reaches the build through environment
+# variables only (RETRODISC_SIGN_*).
+*.pfx
+*.p12
+*.pem
+*.key
+*.cer
+*.crt
+signing/
+.env
+.env.*

@@ -16,6 +16,7 @@ These tests hold three things:
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -109,15 +110,76 @@ def test_every_build_path_stamps_this_one_icon():
 
 
 def test_the_splash_artwork_matches_its_window_and_is_referenced():
+    """A tolerance, not an exact ratio: the splash is a hand-made asset.
+
+    The property that matters is that ``object-fit: contain`` leaves no visible
+    letterbox, so a few percent off is fine and a 4:3 image in a 1.41:1 window
+    is not.
+    """
     assert SPLASH.is_file()
     with Image.open(SPLASH) as splash:
         width, height = splash.size
     assert width >= 1200, "splash artwork is too small for a 900px-wide window"
-    assert round(width / height, 4) == round(SPLASH_WINDOW[0] / SPLASH_WINDOW[1], 4), (
-        "splash aspect does not match the splash window; object-fit would letterbox"
+
+    wanted = SPLASH_WINDOW[0] / SPLASH_WINDOW[1]
+    actual = width / height
+    assert abs(actual - wanted) / wanted < 0.04, (
+        f"splash aspect {actual:.3f} is too far from the window's {wanted:.3f}; "
+        "object-fit: contain would letterbox it"
     )
     html = (ROOT / "src" / "ui" / "splash.html").read_text(encoding="utf-8")
     assert "../../assets/retrodisc_startup.png" in html
+
+
+def test_the_splash_is_shown_for_about_two_seconds():
+    """The startup image is meant to be seen, not to flash past.
+
+    Two timers add up: the wait after ``pywebviewready`` before the finish is
+    requested, and the short hand-off delay before the main document replaces
+    the splash.
+    """
+    html = (ROOT / "src" / "ui" / "splash.html").read_text(encoding="utf-8")
+    delays = [int(value) for value in re.findall(r"window\.setTimeout\([^,]+,\s*(\d+)\)", html)]
+    assert len(delays) == 2, f"expected two splash timers, found {delays}"
+
+    total_ms = sum(delays)
+    assert 1800 <= total_ms <= 2600, (
+        f"splash budget is {total_ms} ms, which is not about two seconds"
+    )
+
+
+def test_the_icon_generator_never_writes_the_splash():
+    """Icon and splash are strictly separate assets.
+
+    The splash is a finished, approved image. Regenerating the icon must not
+    be able to overwrite it, so the generator may not name it at all.
+    """
+    source = (ROOT / "scripts" / "create_icon.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    # Docstrings may name the splash - explaining the rule is the point. Only
+    # a string the code actually uses could become a path it writes to.
+    docstrings = {
+        id(node.body[0].value)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef))
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+        and isinstance(node.body[0].value.value, str)
+    }
+    live = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in docstrings
+    ]
+    assert not [s for s in live if "retrodisc_startup" in s], (
+        "scripts/create_icon.py names the splash file in live code and could "
+        "overwrite it again"
+    )
+    assert "def draw_startup" not in source
 
 
 def test_the_icon_generator_draws_its_own_artwork_from_no_photograph():

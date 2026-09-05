@@ -9,10 +9,15 @@ a committed, repeatable gate:
    EXE -- the exact values that belong in ``RELEASE_AUDIT_STATUS.md``,
 2. ZIP integrity: the packaged EXE must be byte-identical to the ``dist`` EXE
    and the ZIP must carry the documented side files,
-3. Authenticode status of app and installer,
+3. Authenticode status of app and installer **and of the EXE unpacked from the
+   ZIP** -- the copy the user actually launches,
 4. a real silent installation into a fully isolated sandbox, a byte-identity
-   check of the installed EXE, and a real uninstall that must leave nothing
-   behind.
+   and Authenticode check of the installed EXE, and a real uninstall that must
+   leave nothing behind.
+
+``--require-signed`` turns every missing or invalid signature into a failure
+instead of a note. That is the release mode: a development build without a
+certificate stays possible, a release without a valid signature does not.
 
 The install step redirects ``USERPROFILE``, ``APPDATA`` and ``LOCALAPPDATA``
 into a temporary sandbox, so neither the real desktop nor the real start menu
@@ -24,6 +29,7 @@ Usage::
     python scripts/verify_release_artifacts.py
     python scripts/verify_release_artifacts.py --skip-install
     python scripts/verify_release_artifacts.py --json
+    python scripts/verify_release_artifacts.py --require-signed
 """
 from __future__ import annotations
 
@@ -148,9 +154,19 @@ def check_zip(info: dict) -> None:
         fail(f"packaged EXE differs: {packaged} != {info['app_exe']['sha256']}")
 
 
-def check_signatures(info: dict) -> dict:
+def check_signatures(info: dict, require_signed: bool) -> dict:
+    """Authenticode of the two shipped executables and of the EXE in the ZIP.
+
+    The ZIP copy is checked separately and on purpose. Signing a finished ZIP
+    signs nothing that Windows reads; the file the user actually launches is
+    the one inside it, and if the ZIP was packed before the EXE was signed,
+    ``dist/RetroDisc.exe`` sits there validly signed while the shipped copy is
+    not. Only unpacking catches that.
+    """
     print("\n[3] Authenticode")
     statuses: dict[str, str] = {}
+    report = fail if require_signed else note
+
     for label, path in (("app_exe", APP_EXE), ("setup_exe", SETUP_EXE)):
         if label not in info:
             continue
@@ -159,7 +175,22 @@ def check_signatures(info: dict) -> dict:
         if status == "Valid":
             ok(f"{path.name}: {status}")
         else:
-            note(f"{path.name}: {status} -- unsigned artifacts cannot be handed to third parties")
+            report(f"{path.name}: {status} -- unsigned artifacts cannot be handed to third parties")
+
+    if "portable_zip" in info:
+        with tempfile.TemporaryDirectory(prefix="retrodisc-zip-signature-") as tmp:
+            try:
+                with zipfile.ZipFile(PORTABLE_ZIP) as archive:
+                    extracted = Path(archive.extract(ZIP_EXE_MEMBER, tmp))
+            except KeyError:
+                fail(f"ZIP has no {ZIP_EXE_MEMBER} to check")
+                return statuses
+            status = authenticode_status(extracted)
+        statuses["zip_exe"] = status
+        if status == "Valid":
+            ok(f"{ZIP_EXE_MEMBER} (unpacked from the ZIP): {status}")
+        else:
+            report(f"{ZIP_EXE_MEMBER} (unpacked from the ZIP): {status}")
     return statuses
 
 
@@ -195,7 +226,7 @@ def _sandbox_env(sandbox: Path) -> dict[str, str]:
     return env
 
 
-def check_install_uninstall(info: dict) -> dict:
+def check_install_uninstall(info: dict, require_signed: bool) -> dict:
     print("\n[4] Installation und Deinstallation (isolierte Sandbox)")
     result: dict[str, object] = {"ran": False}
     if os.name != "nt":
@@ -240,6 +271,18 @@ def check_install_uninstall(info: dict) -> dict:
                 ok("installed EXE is byte-identical to dist/RetroDisc.exe")
             else:
                 fail(f"installed EXE differs: {installed_hash}")
+
+            # The signature is checked on the file the installer actually put
+            # on disk. Byte-identity already implies it, but this is the copy
+            # the user double-clicks, so it is measured rather than inferred.
+            installed_status = authenticode_status(installed_exe)
+            result["installed_authenticode"] = installed_status
+            if installed_status == "Valid":
+                ok(f"installed EXE Authenticode: {installed_status}")
+            elif require_signed:
+                fail(f"installed EXE Authenticode: {installed_status}")
+            else:
+                note(f"installed EXE Authenticode: {installed_status}")
         else:
             fail(f"installed EXE missing: {installed_exe}")
 
@@ -330,14 +373,28 @@ def main() -> int:
         help="only hash and inspect the artifacts, do not install",
     )
     parser.add_argument("--json", action="store_true", help="print a machine-readable summary")
+    parser.add_argument(
+        "--require-signed",
+        action="store_true",
+        help=(
+            "Release-Modus: jede nicht gueltig signierte EXE ist ein Fehler, "
+            "auch die im ZIP und die installierte"
+        ),
+    )
     args = parser.parse_args()
 
     print("RetroDisc Release-Artefakt-Gate")
     print("=" * 40)
+    if args.require_signed:
+        print("Modus: RELEASE -- eine fehlende oder ungueltige Signatur ist ein Fehler.")
     info = check_artifacts()
     check_zip(info)
-    signatures = check_signatures(info)
-    install = {"ran": False, "skipped": True} if args.skip_install else check_install_uninstall(info)
+    signatures = check_signatures(info, args.require_signed)
+    install = (
+        {"ran": False, "skipped": True}
+        if args.skip_install
+        else check_install_uninstall(info, args.require_signed)
+    )
 
     summary = {
         "artifacts": info,
