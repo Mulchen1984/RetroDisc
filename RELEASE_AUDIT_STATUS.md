@@ -619,3 +619,52 @@ Ein erster Test stellt ausdruecklich sicher, dass der cp1252-Strom das Zeichen w
 3. Der automatisierte Windows-Acceptance-Harness, der genau diese Luecke dauerhaft schliesst.
 
 Unveraendert offen bleiben die beiden bekannten externen Punkte: die fehlende vertrauenswuerdige Code-Signatur und der physische Brenn- und Rueckleseteset ohne verfuegbaren Rohling.
+
+---
+
+### 2026-09-05 15:10–15:20 CEST — Bestaetigung des charmap-Fixes am gebauten Artefakt
+
+#### Neuer Freeze und Build
+
+- Freeze: `6fc623b` — `FIX: keep a Windows console codepage from failing finished jobs`
+- `python build.py --clean` aus diesem Commit: Exitcode 0.
+
+Artefakte:
+
+- `dist/RetroDisc.exe`: **502909660 Bytes**, SHA-256 `F7378986678F91975862B8D6DF4A2CA43DE93A0AD240E94221A264D9F9B2A4CC`
+- `Output/RetroDisc_1.0.0_Portable.zip`: **501470621 Bytes**, SHA-256 `10A46060152E7B040D9EC14AA052A2905AC7B95223D2D0EAAE4221475E04D04D`
+- `Output/RetroDisc_Setup_1.0.0.exe`: **508847057 Bytes**, SHA-256 `E1688E35DB51EC2C1781C737FABFD7E17AAFA0A80BAA0B462112210DF911FDCB`
+
+#### Neues Gate: `scripts/verify_unicode_download.py`
+
+Das Gate schliesst genau die Luecke, durch die der Blocker geschluepft ist. Es stellt `sys.stdout` und `sys.stderr` **vor** dem Import des Launchers auf `cp1252`/`strict` - also auf das ungeschuetzte Windows-Verhalten - und faehrt danach einen echten Download ueber den produktiven Bridge-Pfad (`RetroDiscBridge.download_url` → Pipeline → Job).
+
+Es enthaelt eine eingebaute Vorbedingung: enthaelt der Titel **kein** in cp1252 undarstellbares Zeichen, endet der Lauf mit FAIL statt gruen zu sein, ohne etwas zu beweisen. Bewertet wird ausschliesslich der fachliche Endzustand.
+
+**Ergebnis: PASS**, Exitcode 0.
+
+- URL: `https://www.youtube.com/watch?v=9bZkp7q19f0`
+- Titel: `PSY - GANGNAM STYLE(강남스타일) M/V`; undarstellbare Zeichen: `강남스타일`
+- Jobstatus: **`done`**, Progress 100,0
+- Ausgabedatei vorhanden, **26736119 Bytes**, Dateiname traegt die Hangul-Zeichen
+- transiente Reste: keine; nicht aufgeraeumte Arbeitsverzeichnisse: keine
+- kein charmap-/UnicodeEncodeError
+- Dauer 11,4 s
+
+#### Artefakt-Gate und Runtime-Gate auf den neuen Bytes
+
+`scripts/verify_release_artifacts.py`: **PASS, 0 Befunde**, Exitcode 0. ZIP byteidentisch zur `dist`-EXE, Installation und Deinstallation in der isolierten Sandbox vollstaendig durchgelaufen, `NotSigned` als Hinweis.
+
+Runtime-Gate auf `F7378986…`: Hauptfenster `RetroDisc 1.0` nach 10,1 s, Splash-Uebergang und Haupt-UI sauber, **0 CodeIntegrity-Ereignisse 3033/3077**. Im Anwendungslog dieses Laufs (18 Zeilen): **0** Treffer auf `charmap`, `UnicodeEncodeError`, `Traceback` oder `ERROR`.
+
+**Messhinweis, damit spaetere Laeufe nicht falsch bewertet werden:** `%LOCALAPPDATA%\RetroDisc\logs\retrodisc.log` ist kumulativ und enthaelt alte Eintraege - unter anderem `Traceback`-Zeilen eines pywebview-Fehlers vom 2026-06-16, der laengst behoben ist. Eine Logpruefung muss auf den aktuellen Lauf eingegrenzt werden, sonst meldet sie Altlasten als Befund.
+
+#### Relevanter Nebenbefund zum Fix
+
+`retrodisc_final.spec` baut mit `console=False`. Die gepackte Anwendung ist damit **windowed**, und `sys.stdout` kann im gefrorenen Prozess `None` sein. Der `None`-Zweig in `logging_setup.py` ist deshalb kein Beiwerk, sondern ein produktiver Pfad; er ist von `test_make_stream_utf8_safe_tolerates_absent_streams` und `test_configure_structlog_falls_back_when_there_is_no_stream` abgedeckt.
+
+#### Stand
+
+Der charmap-Blocker ist behoben und auf dem gebauten Artefakt bestaetigt. **Windows ist trotzdem noch nicht als 100 % zu melden**, solange der automatisierte Windows-Acceptance-Harness fehlt: Der reale Download wurde ueber den produktiven Bridge-Pfad gefahren, aber nicht durch die Oberflaeche der gepackten EXE geklickt. Genau diese letzte Luecke soll der Harness schliessen.
+
+Unveraendert offen: die fehlende vertrauenswuerdige Code-Signatur und der physische Brenn- und Rueckleseteset.
