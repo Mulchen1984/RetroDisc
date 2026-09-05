@@ -1099,3 +1099,38 @@ Collision (auf Quellebene durch `tests/test_download_publish.py` abgedeckt),
 Whisper-Untertitel und der optische Teil. `rip_disc` ist durch den neuen
 Submit-Test auf Bridge-Ebene abgesichert, end-to-end aber weiterhin nur mit
 echter Hardware pruefbar.
+
+---
+
+### 2026-09-05 20:50–20:55 CEST — Fremde Blu-ray-Korrektur integriert, eigene Artefakt-Hashes dadurch ungueltig
+
+`git fetch origin` unmittelbar vor dem Push meldete zwei neue Commits auf
+`origin/crossplatform-2026`, die waehrend dieses Arbeitsblocks entstanden sind:
+
+- `0ae5069` — `Fix Blu-ray ISO classification in disc ripper`
+- `17f42c3` — `Add regression coverage for Blu-ray ISO classification`
+
+Sie aendern `src/services/ripper.py` und ergaenzen
+`tests/test_ripper_iso_types.py`: beim ISO-Rippen wird eine Blu-ray jetzt an
+`BDMV` erkannt und als `DiscType.BLURAY` an `create_iso` gereicht, statt wie
+bisher hinter `VIDEO_TS` auf `DiscType.CD` zu fallen. Der Diff wurde gelesen
+und ist fachlich richtig.
+
+Es gibt **keine Ueberschneidung** mit den Dateien dieses Blocks
+(`retrodisc_launcher.py`, `src/acceptance.py`,
+`tests/test_acceptance_harness.py`, `tests/test_job_submission.py`,
+`RELEASE_AUDIT_STATUS.md`). Die beiden eigenen Commits wurden per Rebase auf
+`17f42c3` gesetzt; kein Konflikt, kein Force-Push, nichts Fremdes
+ueberschrieben. `pytest -q` auf dem integrierten Stand: **348 passed in
+17,55 s** (345 aus diesem Block plus die drei neuen Ripper-Tests).
+`compileall`, `verify_ui_bridge` (PASS, 0 Befunde), `node --check` und
+`git diff --check`: alle Exitcode 0.
+
+**Konsequenz fuer die Artefakte, ausdruecklich festgehalten:** die im
+vorangegangenen Block genannten Hashes
+(`2DCF220D…`, `0F9D1373…`, `EAE20372…`) wurden auf einem Source gemessen, der
+die Blu-ray-Korrektur **nicht** enthaelt, und der Commit `e07a6f4`, den jener
+Block nennt, existiert nach dem Rebase nicht mehr. Die Messwerte jenes Blocks
+bleiben als historischer Beleg fuer den damals gemessenen Zustand richtig, sind
+aber **kein Nachweis fuer den jetzigen HEAD**. Es wird deshalb aus dem
+integrierten Stand neu gebaut und komplett neu gemessen.
