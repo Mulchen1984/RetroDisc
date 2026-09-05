@@ -1,6 +1,6 @@
 # RetroDisc Release-Audit-Status
 
-Letzte Aktualisierung: 2026-09-05 — charmap-Blocker behoben, automatisierter Packaged-Acceptance-Harness gruen
+Letzte Aktualisierung: 2026-09-05 20:50 CEST — sieben tote Bridge-Aktionen behoben (positionales `Job()`), Fix am gebauten Artefakt belegt
 
 ## Verbindlicher Abschlussstatus
 
@@ -18,9 +18,10 @@ Zusätzlich offen als **ausstehende Hardware-Validierung** (kein Softwaremangel,
 
 ## Aktueller Checkpoint
 
-- Branch: `main`
-- Letzter Freeze-Commit: `01e5fd9` (`RELEASE: isolate download publication, temp files and DVD tool paths`)
-- Vorheriger Freeze-Commit: `1c486cc` (`DOCS: state the Windows-only scope and the real build path`)
+- Branch: `crossplatform-2026`
+- Letzter Freeze-Commit: `e07a6f4` (`Fix seven dead UI actions built from a positional Job()`) — dies ist der Stand, auf dem die aktuell gueltigen Artefakt-Hashes gemessen wurden
+- Vorheriger Freeze-Commit: `6fc623b` (`FIX: keep a Windows console codepage from failing finished jobs`)
+- Aeltere Freezes (historisch): `01e5fd9`, `1c486cc`
 - Tag des Abschlussstands: `v1.0.0-rc1`
 - Baseline-Commit: `e29f41d` (`BASELINE: preserve initial RetroDisc source state`)
 - Aktueller Arbeitsbaum: sauber; alle Build-Ausgaben sind ignoriert
@@ -1002,3 +1003,99 @@ Unveraendert offen und nicht durch Code loesbar: die fehlende
 vertrauenswuerdige Code-Signatur und der physische Brenn- und Rueckleseteset
 ohne verfuegbaren Rohling. Die optischen Verhaltenstests simulieren weiterhin
 Hardwareantworten.
+
+---
+
+### 2026-09-05 20:35–20:50 CEST — Build, Artefakt-Gate, Packaged Acceptance und Runtime-Gate auf den neuen Hashes
+
+Gebaut aus dem eingefrorenen Commit `e07a6f4`
+(`Fix seven dead UI actions built from a positional Job()`), Arbeitsbaum sauber.
+`python build.py --clean`: Exitcode 0. Signierung uebersprungen — nicht
+konfiguriert, kein vertrauenswuerdiges Zertifikat vorhanden.
+
+#### Artefakte
+
+- `dist\RetroDisc.exe`: **502988544 Bytes**,
+  SHA-256 `2DCF220D115FF171EB02D190B333FBC0CE5027BE54BBABCCE1180C7402FA508B`
+- `Output\RetroDisc_1.0.0_Portable.zip`: **501542969 Bytes**,
+  SHA-256 `0F9D137378DE98447791E2E3CAF2810ED88E015BDA3FE1787CB24DDB400EF327`
+- `Output\RetroDisc_Setup_1.0.0.exe`: **508919714 Bytes**,
+  SHA-256 `EAE2037298915CE8F5557EEA57550124F2B7044C1677108B75169584324A43D8`
+
+Die Hashes des Blocks vom 15:20–15:40 sind damit abgeloest.
+
+#### `scripts/verify_release_artifacts.py`: PASS, 0 Befunde, Exitcode 0
+
+Alle drei Artefakte gehasht, ZIP-Inhalt geprueft und die enthaltene EXE
+**byteidentisch** zur `dist`-EXE, Installation und Deinstallation vollstaendig
+in der isolierten Sandbox durchlaufen (Installer rc 0, installierte EXE
+byteidentisch, Verknuepfungen angelegt und wieder entfernt, Installationsordner
+restlos geloescht). Authenticode: `NotSigned` fuer EXE und Installer — als
+Hinweis gefuehrt, kein Gate-Fehler, aber weiterhin der Weitergabe-Blocker.
+
+#### `scripts/run_acceptance.py`: PASS, Exitcode 0
+
+**source: PASS 6/6** — startup 3,72 s, settings 0,00 s, conversion 0,41 s,
+error_handling 0,11 s, **media_tools 2,58 s**, unicode_download 9,44 s.
+
+**packaged: PASS 7/7**, 29,7 s gesamt, im echten gefrorenen Prozess:
+
+| Fall | Status | Belegte Messwerte |
+| --- | --- | --- |
+| startup | PASS | `frozen=True`, ffmpeg rc 0, yt-dlp rc 0, stdout `utf-8` / `replace` |
+| settings | PASS | ueber `save_settings` geschrieben, per frischem `AppSettings.load()` bestaetigt, Ausgangswert wiederhergestellt |
+| conversion | PASS | Job `done`, Ausgabe 82590 Bytes, FFprobe liest `mp3` |
+| error_handling | PASS | ungueltige URL und fehlende Datei kontrolliert abgewiesen, App danach weiter benutzbar |
+| **media_tools** | **PASS** | Trim A `done` 31272 B, Trim B `done` 14420 B, Merge `done` 31859 B, Upscale `done` **640x360** (verdoppelt), Interpolation `done` **30,0 fps** |
+| unicode_download | PASS | Titel `PSY - GANGNAM STYLE(강남스타일) M/V`, Job `done`, 26736119 Bytes, keine transienten Reste, keine Arbeitsverzeichnisse |
+| restart | PASS | zweiter Start der EXE Exitcode 0, startup erneut PASS nach 18,2 s |
+
+Damit ist der Fix **am gebauten Artefakt** belegt, nicht nur im Quellstand:
+Trim, Merge, Upscale und Interpolation laufen in der ausgelieferten EXE ueber
+denselben Bridge-Pfad, den die Oberflaeche benutzt, und liefern jeweils eine von
+FFprobe lesbare Datei.
+
+#### Runtime-Gate auf `2DCF220D…`
+
+Normaler Start **ohne** Flag, also genau wie beim Endnutzer:
+
+- Hauptfenster **`RetroDisc 1.0`** erschienen; 0,6 s bei warmem Start (das
+  `_MEI`-Verzeichnis war vom vorherigen Lauf bereits entpackt, deshalb ist der
+  Wert nicht mit den frueher gemessenen ~10 s Kaltstart vergleichbar).
+- Zwei `RetroDisc`-Prozesse: PyInstaller-Bootloader plus Anwendung — bei
+  Onefile erwartet. Das Fenster gehoert dem **Kindprozess**; eine Messung ueber
+  `MainWindowTitle` des von `Start-Process` gelieferten Objekts findet es
+  deshalb nie und darf nicht als Fehlschlag gewertet werden.
+- **Kein** neuer `conhost`-, `cmd`- oder `powershell`-Prozess: kein sichtbares
+  Konsolenfenster, wie von den Produktvorgaben verlangt.
+- **0** CodeIntegrity-Ereignisse 3033/3077.
+- Im Anwendungslog dieses Laufs (19 neue Zeilen, auf den Lauf eingegrenzt):
+  **0** Treffer auf `ERROR`, `Traceback`, `charmap` oder `UnicodeEncodeError`.
+  Protokolliert sind Bundle-Werkzeuge, `Bridge initialisiert`, aktive
+  WebView2-Navigationssperre und der Uebergang `Splash fertig - lade Haupt-UI`.
+- Nach dem Beenden verblieben 0 `RetroDisc`-Prozesse.
+
+#### Stand
+
+Softwareseitig ist dieser Stand vollstaendig belegt: alle Source-Gates, der
+Artefakt-Gate, die Packaged Acceptance mit sieben Faellen und der Runtime-Gate
+sind auf den oben genannten Hashes gruen.
+
+Weiterhin offen und **nicht durch Code loesbar**:
+
+1. **Keine vertrauenswuerdige Code-Signatur.** `NotSigned` fuer EXE und
+   Installer; auf dem Host existiert nur ein abgelaufenes Selftest-Zertifikat.
+   Ohne Signatur ist keine verlaessliche Weitergabe an Dritte moeglich — Smart
+   App Control entscheidet je Datei, ein hier bestandener Start sagt nichts
+   ueber einen fremden Rechner. Fehlender Schritt: Zertifikat bereitstellen,
+   `python build.py --clean --sign`, Gates auf den dann entstehenden signierten
+   Hashes wiederholen.
+2. **Kein physischer Brenn- und Rueckleseteset.** Es stand kein Rohling zur
+   Verfuegung; beide Laufwerke meldeten erneut kein Medium. Die optischen
+   Verhaltenstests simulieren Hardwareantworten und ersetzen das nicht.
+
+Noch nicht als Packaged-Fall automatisiert, bewusst zurueckgestellt: Cancel,
+Collision (auf Quellebene durch `tests/test_download_publish.py` abgedeckt),
+Whisper-Untertitel und der optische Teil. `rip_disc` ist durch den neuen
+Submit-Test auf Bridge-Ebene abgesichert, end-to-end aber weiterhin nur mit
+echter Hardware pruefbar.
