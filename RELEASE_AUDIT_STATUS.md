@@ -1,6 +1,6 @@
 # RetroDisc Release-Audit-Status
 
-Letzte Aktualisierung: 2026-09-05 21:45 CEST — Programmicon und Startbild durch die eigene RetroDisc-Disc-Marke ersetzt, an allen Flaechen am gebauten Artefakt belegt
+Letzte Aktualisierung: 2026-09-05 22:15 CEST — Signierpipeline in der richtigen Reihenfolge integriert (EXE, ZIP-Inhalt und installierte EXE je Valid); benutzergeliefertes Startbild geschuetzt eingebunden
 
 ## Verbindlicher Abschlussstatus
 
@@ -18,9 +18,9 @@ Zusätzlich offen als **ausstehende Hardware-Validierung** (kein Softwaremangel,
 
 ## Aktueller Checkpoint
 
-- Branch: `crossplatform-2026`
-- Letzter Freeze-Commit: `530344d` (`Replace the app icon with RetroDisc's own disc mark`) — dies ist der Stand, auf dem die aktuell gueltigen Artefakt-Hashes gemessen wurden
-- Vorheriger Freeze-Commit: `ba9805b` (`Integrate the Blu-ray ripper fix and void my artifact hashes`)
+- Branch: `release-signing` (enthaelt `crossplatform-2026` bei `44af8d2` plus Signing- und Icon-Arbeit; Merge zurueck steht aus)
+- Letzter Freeze-Commit: `04a3f78` (`Use the supplied splash artwork and keep it separate from the icon`) — Stand der aktuell gueltigen, **signierten** Artefakt-Hashes
+- Vorheriger Freeze-Commit: `e86edc3` (`Sign the EXE before it is packed, and prove it inside ZIP and install`)
 - Aeltere Freezes (historisch): `6fc623b`, `01e5fd9`, `1c486cc`. **`e07a6f4` stand hier faelschlich weiter:** der Commit wurde beim Rebase auf `17f42c3` neu geschrieben und existiert nicht mehr; der zugehoerige Journalblock ist als abgeloest gekennzeichnet.
 - Tag des Abschlussstands: `v1.0.0-rc1`
 - Baseline-Commit: `e29f41d` (`BASELINE: preserve initial RetroDisc source state`)
@@ -1346,3 +1346,151 @@ ersetzt, belegt am gebauten Artefakt.
 
 Unveraendert offen und nicht durch Code loesbar: die fehlende vertrauenswuerdige
 Code-Signatur und der physische Brenn- und Rueckleseteset ohne Rohling.
+
+---
+
+### 2026-09-05 21:20–22:15 CEST — Signierpipeline in der richtigen Reihenfolge, benutzergeliefertes Startbild
+
+Zwei Nutzeraufträge in diesem Block: die Authenticode-Pipeline endgueltig in
+den Buildprozess integrieren, und das vom Nutzer gelieferte Splashscreen-Bild
+verwenden.
+
+#### Branch-Hinweis
+
+Der Arbeitsbaum wurde waehrend der Sitzung von einer anderen Sitzung auf
+`release-signing` umgestellt. Die Icon-Commits dieses Tages sind dadurch dort
+gelandet statt auf `crossplatform-2026`. `release-signing` enthaelt alles aus
+`crossplatform-2026` (`44af8d2`) plus die drei fremden Signing-Commits
+(`d9c883b`, `7d78a00`, `090abfd`) plus die eigene Arbeit. Nichts wurde
+ueberschrieben; ein Merge zurueck nach `crossplatform-2026` steht aus.
+
+#### Signieren: die Reihenfolge ist der ganze Punkt
+
+Ein fertiges ZIP oder einen fertigen Installer nachtraeglich zu signieren
+signiert die aeussere Huelle. Windows liest die Signatur der Datei, die es
+**ausfuehrt**. `build.py --sign` hatte die richtige Reihenfolge bereits; was
+fehlte, war der Nachweis an den ausgelieferten Kopien:
+
+1. Clean Build von `dist\RetroDisc.exe`
+2. EXE signieren, Status pruefen — alles ausser `Valid` bricht ab
+3. **danach** Portable-ZIP packen
+4. **neu:** ZIP in ein Temp-Verzeichnis auspacken und die **ausgepackte** EXE
+   pruefen (`verify_zip_signature`); unter `--sign` ist ein Fehlschlag ein
+   Abbruch
+5. Installer aus der bereits signierten EXE bauen
+6. Installer signieren und pruefen
+7. **neu:** im Artefakt-Gate die tatsaechlich **installierte** EXE pruefen
+
+`scripts/sign_release.ps1` wurde geloescht. Es signierte `dist\RetroDisc.exe`
+und den Installer *nachtraeglich* — nach einem Build ausgefuehrt haette es
+genau den Fehler erzeugt, den dieser Entwurf verhindert: ein ZIP mit
+unsignierten Bytes neben einer sauber signierten `dist`-EXE.
+
+`--require-signed` ist der Release-Modus des Gates: jede fehlende oder
+ungueltige Signatur ist ein Fehler statt eines Hinweises. Ohne ihn und ohne
+`--sign` bleibt ein Development-Build ohne Zertifikat moeglich.
+
+**Secret-Hygiene:** `.gitignore` blockt jetzt `*.pfx`, `*.p12`, `*.pem`,
+`*.key`, `*.cer`, `*.crt`, `signing/` und `.env*`. Kein Thumbprint und kein
+Passwort ist hart kodiert; `tests/test_release_signing.py` prueft das per
+Hex-Scan ueber `build.py`, das Gate und `tools/codesign.py`. Das Passwort
+erreicht PowerShell weiterhin ausschliesslich ueber die Prozessumgebung.
+
+#### Verwendetes Zertifikat — ausdruecklich nur Development
+
+Signiert wurde mit `CN=RetroDisc Development` (lokales Entwicklungszertifikat,
+Thumbprint nur ueber `RETRODISC_SIGN_THUMBPRINT` gesetzt, nirgends im Code).
+`Get-AuthenticodeSignature` meldet auf **diesem** Rechner `Valid`, weil die
+ausstellende Wurzel hier vertraut wird. Das ist der Nachweis, dass die Pipeline
+funktioniert — **kein** Nachweis fuer irgendeinen anderen Rechner. Auf einem
+fremden System liest dieselbe Datei als `UntrustedRoot`, und Smart App Control
+prueft seine eigene Richtlinie und Microsofts Reputationsdienst, in denen ein
+selbst ausgestelltes Zertifikat nicht steht. **Fuer oeffentliche Distribution
+ist weiterhin ein oeffentlich vertrauenswuerdiges Code-Signing-Zertifikat bzw.
+ein vertrauenswuerdiger Signing-Dienst erforderlich.** Das ist eine
+Beschaffungs-, keine Codefrage. `SIGNING.md` sagt das genauso.
+
+#### Startbild: benutzergeliefert, geschuetzt
+
+`assets/retrodisc_startup.png` ist eine **vom Nutzer gelieferte Datei**
+(2211516 Bytes, 1448x1086, SHA-256 beginnt `5993d4ab…`). Sie wurde nicht
+erzeugt, nicht skaliert, nicht neu kodiert — Worktree und Commit sind
+byteidentisch mit der gelieferten Datei.
+
+`scripts/create_icon.py` zeichnete zuvor auch ein Startbild. Diese Kopplung ist
+entfernt: ein erneuter Icon-Lauf haette die gelieferte Datei ueberschrieben.
+Der Generator schreibt jetzt nur noch Icon-Assets, und ein AST-Test stellt
+sicher, dass er den Splash-Pfad in aktivem Code gar nicht mehr nennen kann.
+
+Das Bild ist 4:3 in einem 1,41:1-Fenster. `object-fit: contain` laesst deshalb
+schmale dunkle Raender an den Seiten und zeigt **jedes Pixel**; der Test
+verlangt genau das und verbietet `cover`, das den unteren Bildrand samt
+Widmungszeile abschneiden wuerde.
+
+**Startbild und Programmicon sind strikt getrennt** und bewusst verschiedene
+Motive. Das Icon bleibt die RetroDisc-Disc-Marke auf EXE, Fenster, Taskleiste,
+Installer und beiden Verknuepfungen.
+
+#### Splashdauer real gemessen, nicht angenommen
+
+Am gebauten Artefakt per `PrintWindow` alle ~150 ms abgegriffen und die Frames
+ueber Saettigung/Helligkeit klassifiziert:
+
+| JS-Budget | Splash sichtbar |
+| --- | --- |
+| 2200 ms (Ausgangswert) | ~2,5 s |
+| 1600 ms | 2,43 s |
+| **1200 ms (jetzt)** | **2,06–2,30 s** |
+
+Das Sichtbare ist laenger als das Budget, weil das Fenster das Dokument rund
+eine Sekunde vor `pywebviewready` zeigt und das Einwechseln der Haupt-UI noch
+etwa 0,25 s kostet. Bei 1200 ms liegt die Anzeige bei ungefaehr zwei Sekunden.
+
+#### Visuelle Pruefung an der gepackten EXE
+
+Screenshot des laufenden Artefakts: **genau das gelieferte Bild** erscheint als
+Splash, im Titelbalken steht die Disc-Marke. Danach die Haupt-UI mit allen
+fuenf Aktionen.
+
+**Offener Nebenbefund, bewusst nicht geaendert:** Die gruene Statusleiste am
+unteren Rand liegt ueber dem unteren Bildrand und verdeckt dort die
+Widmungszeile und den bildeigenen LOADING-Balken. Die Leiste wird vom
+Erststart-Download-Splash (`show_download_splash`) fuer echten Fortschritt
+gebraucht, deshalb wurde sie nicht ohne Ruecksprache entfernt oder verschoben.
+
+#### Artefakte — gueltige Hashes, signiert
+
+Gebaut aus dem eingefrorenen Commit `04a3f78` mit
+`python build.py --clean --sign`, Exitcode 0.
+
+- `dist\RetroDisc.exe`: **502192928 Bytes**,
+  SHA-256 `DA9AC5A28103E11C1C6439E957BD45B53C95E9BF84A88E6D59D483F3D52366B7`
+- `Output\RetroDisc_1.0.0_Portable.zip`: **500744805 Bytes**,
+  SHA-256 `02BDDBA3822892CFE7E367F4597DDFE6DB64AEC3A469FC7F328C7A1A34DCC7DF`
+- `Output\RetroDisc_Setup_1.0.0.exe`: **508016864 Bytes**,
+  SHA-256 `E3EC838E377020CDB3540D81AED91E744E08725EFDF8AB47A58C4132C547357A`
+
+#### Gates auf diesen Bytes
+
+- `scripts/verify_release_artifacts.py --require-signed`: **PASS, 0 Befunde**.
+  `RetroDisc.exe` **Valid**, Installer **Valid**, **EXE ausgepackt aus dem ZIP
+  Valid**, **installierte EXE Valid**; ZIP byteidentisch, Installation und
+  Deinstallation vollstaendig, beide Verknuepfungen beziehen ihr Icon aus der
+  installierten EXE.
+- `scripts/verify_app_icon.py`: **PASS, 0 Befunde** — 7 `RT_ICON`-Groessen in
+  EXE und Installer, jede pixelgleich zur `.ico`, Hautton 0,0 %.
+- `scripts/run_acceptance.py`: **PASS** — source 6/6, packaged 7/7.
+- `pytest -q`: **371 passed**. `compileall`, `verify_ui_bridge` (PASS, 0
+  Befunde), `node --check`, `.hermes/verify_core.py`, `git diff --check`: alle 0.
+- Runtime-Gate: Hauptfenster `RetroDisc 1.0` nach 9,0 s, **kein**
+  Konsolenprozess, **0** CodeIntegrity 3033/3077, 19 Logzeilen mit **0**
+  Treffern auf `ERROR`/`Traceback`/`charmap`, Splash-Uebergang protokolliert,
+  0 verbliebene Prozesse.
+
+#### Stand
+
+Die Signierpipeline ist vollstaendig integriert und in der geforderten
+Reihenfolge belegt — auch an der EXE im ZIP und an der installierten EXE.
+Der physische Brenn- und Rueckleseteset bleibt offen (kein Rohling), und fuer
+eine oeffentliche Weitergabe fehlt weiterhin ein oeffentlich vertrauenswuerdiges
+Zertifikat; das lokale Development-Zertifikat ersetzt es nicht.
