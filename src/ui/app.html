@@ -503,20 +503,34 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 .refresh-btn:hover { border-color:#ff8a3c; color:#c75a12; }
 
 
-/* ════════ CloneCD-AUTHENTISCH: vier Knoepfe in einer Reihe ════════ */
+/* ════════ CloneCD-AUTHENTISCH: fuenf Knoepfe in einer Reihe ════════ */
+/* Die Startseite muss bei 100 %, 125 % und 150 % Windows-Skalierung alle
+   fuenf Aktionen vollstaendig zeigen. Feste Pixelmasse leisten das nicht:
+   je nach Bildschirm kappt Windows das skalierte Fenster, und der nutzbare
+   CSS-Viewport reicht von rund 884x601 bis hinunter zu 589x401. Deshalb
+   haengen Kachelgroesse, Abstaende und Schrift am Viewport, und die Reihe
+   darf nicht mehr umbrechen (flex-wrap:nowrap) - der Umbruch war genau der
+   Fehler: die fuenfte Kachel rutschte in eine zweite Zeile und aus dem
+   sichtbaren Bereich. Nachgemessen von scripts/verify_home_layout.py. */
 #homeview { padding:0 !important; }
-.cc-stage { flex:1; display:flex; flex-direction:column; align-items:center;
-  justify-content:center; gap:24px; width:100%; }
-.cc-row { display:flex; gap:18px; flex-wrap:wrap; justify-content:center;
-  max-width:840px; }
-.cbtn { width:152px; height:152px; cursor:pointer; border-radius:16px;
+.cc-stage { flex:1; min-height:0; width:100%; box-sizing:border-box;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:clamp(8px,2.2vh,20px); padding:clamp(8px,2vh,18px) clamp(6px,1vw,12px); }
+.cc-row { display:flex; flex-wrap:nowrap; justify-content:center; align-items:flex-start;
+  width:100%; box-sizing:border-box; gap:clamp(6px,1.4vw,14px); }
+.cbtn { flex:0 1 auto; min-width:0; cursor:pointer;
+  width:clamp(88px,13.6vw,122px); height:clamp(88px,13.6vw,122px);
+  border-radius:clamp(9px,1.4vw,13px);
   background:linear-gradient(180deg,#ffffff,#eef2f7); border:1px solid #d8dee6;
-  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:clamp(3px,0.8vh,8px);
   box-shadow:0 3px 10px rgba(40,60,90,.10), inset 0 1px 0 #fff;
   transition:transform .13s, box-shadow .13s, border-color .13s; }
 .cbtn:hover { transform:translateY(-3px); border-color:#ff8a3c; box-shadow:0 12px 26px rgba(40,60,90,.18); }
 .cbtn:active { transform:translateY(-1px); }
-.cc-ico { width:92px; height:80px; position:relative; display:flex; align-items:center; justify-content:center; }
+.cc-ico { width:74%; height:62%; flex:0 0 auto; position:relative;
+  display:flex; align-items:center; justify-content:center; }
+.cc-ico svg { width:100%; height:100%; display:block; }
 .cc-disc { position:absolute; inset:0; border-radius:50%;
   box-shadow:inset 0 2px 4px rgba(255,255,255,.9), inset 0 -5px 10px rgba(0,0,0,.28), 0 4px 8px rgba(0,0,0,.22); }
 .cc-shine { position:absolute; top:9px; left:50%; transform:translateX(-50%);
@@ -526,23 +540,51 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 .cc-hole { position:absolute; top:50%; left:50%; width:20px; height:20px;
   transform:translate(-50%,-50%); border-radius:50%; background:#f4f7fb;
   box-shadow:inset 0 0 0 1px rgba(0,0,0,.15); z-index:5; }
-.cc-label { font-size:13px; font-weight:bold; color:#2a323c; letter-spacing:.3px; }
-.cc-sub { color:#6c7884; font-size:12.5px; }
+.cc-label { font-size:clamp(10px,1.35vw,13px); font-weight:bold; color:#2a323c;
+  letter-spacing:.3px; max-width:100%; white-space:nowrap;
+  overflow:hidden; text-overflow:ellipsis; }
+.cc-sub { color:#6c7884; font-size:clamp(10px,1.25vw,12.5px); text-align:center; }
 .cbtn .d-blue { background:radial-gradient(circle at 38% 30%,#cfe6ff,#2f86e0 60%,#1d5fb0); }
 .cbtn .d-orange { background:radial-gradient(circle at 38% 30%,#ffe0c2,#ff7a2e 60%,#d85a14); }
 .cbtn .d-purple { background:radial-gradient(circle at 38% 30%,#e8d2ff,#9b59d0 60%,#6f3aa0); }
 .cbtn .d-green { background:radial-gradient(circle at 38% 30%,#cdf3da,#27ae60 60%,#1a8048); }
 
+/* Die Zusatzaktionen haengen am selben Budget wie die Kacheln; ihr fester
+   Aussenabstand kam frueher zum Stage-Abstand dazu und schob sie bei kleinem
+   Fenster aus dem sichtbaren Bereich. */
+.cc-stage .secondary { margin-top:0; max-width:100%; gap:clamp(4px,0.8vw,8px); }
+.cc-stage .sec-btn { font-size:clamp(10px,1.15vw,12px);
+  padding:clamp(4px,0.8vh,8px) clamp(8px,1.4vw,16px); }
 
-/* ── Kompakter Startbildschirm (kleines CloneCD-Fenster) ── */
-.cc-stage { gap:16px; padding:14px 10px; }
-.cc-row { gap:14px; }
-.cbtn { width:122px; height:122px; border-radius:13px; gap:8px; }
-.cc-ico { width:74px; height:64px; }
-.cbtn .cc-label { font-size:12px; }
-.cc-sub { font-size:11.5px; }
-.cc-pills { gap:6px !important; flex-wrap:wrap; max-width:520px; }
-.cc-pill, .sec-btn { font-size:11px !important; padding:6px 12px !important; }
+
+/* ── Retro-Gesten: Stift schreibt, Brille liest ──
+   Beide Bewegungen sind bewusst klein und stehen den groessten Teil des
+   Zyklus still - eine gelegentliche Geste, kein Blinken und kein Dauerzappeln.
+   Die Transformationen sitzen auf eigenen Gruppen, damit sie die
+   transform-Attribute der gezeichneten Teile nicht ueberschreiben, und sie
+   veraendern kein Layout. */
+@keyframes cc-write {
+  0%, 8%    { transform:translate(0,0) rotate(0deg); }
+  12%       { transform:translate(-2.4px,1.3px) rotate(-2.2deg); }
+  16%       { transform:translate(1.5px,-0.7px) rotate(1.5deg); }
+  20%       { transform:translate(-1.3px,0.8px) rotate(-1.1deg); }
+  26%, 100% { transform:translate(0,0) rotate(0deg); }
+}
+@keyframes cc-scan {
+  0%, 10%   { transform:translate(0,0); }
+  20%       { transform:translate(-3.4px,0.5px); }
+  32%       { transform:translate(3.4px,-0.5px); }
+  42%, 100% { transform:translate(0,0); }
+}
+.cc-pen { transform-box:view-box; transform-origin:70px 42px;
+  animation:cc-write 6.5s ease-in-out infinite; }
+.cc-glasses { transform-box:view-box; transform-origin:46px 17px;
+  animation:cc-scan 7s ease-in-out infinite; }
+.cbtn:hover .cc-pen { animation-duration:2.8s; }
+.cbtn:hover .cc-glasses { animation-duration:3.2s; }
+@media (prefers-reduced-motion: reduce) {
+  .cc-pen, .cc-glasses { animation:none; }
+}
 
 </style>
 </head>
@@ -650,11 +692,15 @@ select, input[type="text"], input[type="url"], input[type="number"] {
                 <ellipse cx="0" cy="0" rx="8.58" ry="7.8" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
                 <ellipse cx="0" cy="0" rx="3.12" ry="2.86" fill="#f0a830"/>
               </g>
-              <g transform="rotate(38 70 30)">
-                <rect x="63" y="5" width="13" height="31" rx="2.5" fill="#2f6fc0" stroke="#1d4e8f" stroke-width="1.4"/>
-                <rect x="63" y="5" width="13" height="7" rx="2.5" fill="#8fbcf0" stroke="#1d4e8f" stroke-width="1.4"/>
-                <path d="M63 36 L69.5 50 L76 36 Z" fill="#f3dcae" stroke="#1d4e8f" stroke-width="1.3"/>
-                <path d="M66.6 43.5 L69.5 49.5 L72.4 43.5 Z" fill="#26313d"/>
+              <!-- Brennen = Disc + Stift. Die aeussere Gruppe traegt nur die
+                   Schreibgeste, damit die Neigung des Stifts erhalten bleibt. -->
+              <g class="cc-pen">
+                <g transform="rotate(38 70 30)">
+                  <rect x="63" y="5" width="13" height="31" rx="2.5" fill="#2f6fc0" stroke="#1d4e8f" stroke-width="1.4"/>
+                  <rect x="63" y="5" width="13" height="7" rx="2.5" fill="#8fbcf0" stroke="#1d4e8f" stroke-width="1.4"/>
+                  <path d="M63 36 L69.5 50 L76 36 Z" fill="#f3dcae" stroke="#1d4e8f" stroke-width="1.3"/>
+                  <path d="M66.6 43.5 L69.5 49.5 L72.4 43.5 Z" fill="#26313d"/>
+                </g>
               </g>
             </svg>
           </div>
@@ -669,7 +715,8 @@ select, input[type="text"], input[type="url"], input[type="number"] {
                 <ellipse cx="0" cy="0" rx="8.25" ry="7.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
                 <ellipse cx="0" cy="0" rx="3.0" ry="2.75" fill="#f0a830"/>
               </g>
-              <g fill="#eaf6ff" fill-opacity="0.9" stroke="#26313d" stroke-width="2.6" stroke-linecap="round">
+              <!-- Rippen = Disc + Brille. Die Gruppe traegt die Lesebewegung. -->
+              <g class="cc-glasses" fill="#eaf6ff" fill-opacity="0.9" stroke="#26313d" stroke-width="2.6" stroke-linecap="round">
                 <rect x="13" y="9" width="24" height="16" rx="7"/>
                 <rect x="55" y="9" width="24" height="16" rx="7"/>
                 <path d="M37 17 L55 17" fill="none"/>
