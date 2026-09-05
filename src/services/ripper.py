@@ -84,7 +84,12 @@ class DiscRipper:
             job.update_progress(5, "Disc wird gelesen...")
 
         if output_format == "iso":
-            disc_type = DiscType.DVD if (root / "VIDEO_TS").is_dir() else DiscType.CD
+            if (root / "VIDEO_TS").is_dir():
+                disc_type = DiscType.DVD
+            elif (root / "BDMV").is_dir():
+                disc_type = DiscType.BLURAY
+            else:
+                disc_type = DiscType.CD
             return await self.disc.create_iso(
                 root, output_path, volume_label="RETRODISC_RIP",
                 disc_type=disc_type, job=job,
