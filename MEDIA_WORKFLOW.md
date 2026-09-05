@@ -44,7 +44,7 @@ Create DVD / ISO
 Burn
 ```
 
-The result from one step must be immediately usable as the input of the next step.
+The result from one step must be immediately usable as the input of the next step. In particular, a converted file must be selectable for DVD/ISO creation or burning from the same RetroDisc media folder without searching a second output directory.
 
 ## Default routing
 
