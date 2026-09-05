@@ -1300,7 +1300,18 @@ def show_download_splash(missing_tools: list) -> None:
 
 
 # ── Haupt-App ─────────────────────────────────────────────────────────
+#: Nur mit diesem Argument laeuft der Acceptance-Selbsttest statt der App.
+ACCEPTANCE_FLAG = "--acceptance-selftest"
+
+
 def main():
+    # Schmaler, ausschliesslich ueber dieses Argument aktivierbarer Hook. Ohne
+    # das Argument wird der Zweig nie betreten und src.acceptance nie
+    # importiert - der normale Produktbetrieb bleibt unveraendert.
+    if ACCEPTANCE_FLAG in sys.argv:
+        from src.acceptance import run_from_argv
+        raise SystemExit(run_from_argv(sys.argv))
+
     log.info("=" * 50)
     log.info("RetroDisc startet")
     log.info(f"  APPDATA: {APPDATA}")

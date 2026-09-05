@@ -1,10 +1,10 @@
 # RetroDisc Release-Audit-Status
 
-Letzte Aktualisierung: 2026-09-05 — charmap-Releaseblocker im manuellen Acceptance-Test gefunden und behoben
+Letzte Aktualisierung: 2026-09-05 — charmap-Blocker behoben, automatisierter Packaged-Acceptance-Harness gruen
 
 ## Verbindlicher Abschlussstatus
 
-**NOT RELEASE READY — Windows ist ausdruecklich NICHT bei 100 %. Der Fix fuer den charmap-Blocker ist noch nicht am gebauten Artefakt bestaetigt.**
+**NOT RELEASE READY — softwareseitig abgeschlossen und erstmals an der gepackten EXE belegt; die Weitergabe an Dritte bleibt durch die fehlende Signatur blockiert.**
 
 Der Arbeitsbaum nach `86098fe` wurde am 2026-09-05 als `01e5fd9` eingefroren; darauf liefen alle Source-Gates, ein Clean-Build, das Artefakt-Gate und der Runtime-Gate gruen. **Ein anschliessender manueller Acceptance-Test hat diesen Stand dann widerlegt:** ein vollstaendig heruntergeladener und korrekt veroeffentlichter YouTube-Download (rund 273 MB) wurde in der Oberflaeche als FAILED angezeigt, mit `'charmap' codec can't encode character ... : character maps to <undefined>`. Kein Gate hatte das gefunden - die automatisierten Laeufe schreiben auf einen UTF-8-faehigen Kanal, die gebaute Anwendung unter Windows nicht. Der Fehler ist behoben; die Bestaetigung am gebauten Artefakt steht noch aus. Die historischen Belege zu `1c486cc` gelten weiterhin nur fuer jenen alten Stand und seine Hashes.
 
@@ -668,3 +668,87 @@ Runtime-Gate auf `F7378986…`: Hauptfenster `RetroDisc 1.0` nach 10,1 s, Splash
 Der charmap-Blocker ist behoben und auf dem gebauten Artefakt bestaetigt. **Windows ist trotzdem noch nicht als 100 % zu melden**, solange der automatisierte Windows-Acceptance-Harness fehlt: Der reale Download wurde ueber den produktiven Bridge-Pfad gefahren, aber nicht durch die Oberflaeche der gepackten EXE geklickt. Genau diese letzte Luecke soll der Harness schliessen.
 
 Unveraendert offen: die fehlende vertrauenswuerdige Code-Signatur und der physische Brenn- und Rueckleseteset.
+
+---
+
+### 2026-09-05 15:20–15:40 CEST — Automatisierter Windows-Acceptance-Harness
+
+Auftrag: minimal bauen, keine neue Testplattform, kein allgemeines Remote-Control-System, fuer die gepackte EXE hoechstens ein schmaler und ausschliesslich explizit aktivierbarer Hook. Der normale Produktbetrieb darf sich nicht aendern.
+
+#### Warum
+
+Am selben Tag waren alle Source-Gates auf `01e5fd9` gruen und ein manueller Test fand trotzdem einen echten Releaseblocker (charmap). Die Ursache der Audit-Luecke ist strukturell: pytest, Smoke und `verify_core` laufen auf einem UTF-8-faehigen Kanal, die gebaute Anwendung unter Windows nicht. Ein Gate, das nur den Quellstand kennt, kann diese Klasse von Fehlern nicht finden.
+
+#### Aufbau
+
+Die Faelle stehen **einmal** in `src/acceptance.py` und werden von zwei Ebenen benutzt - keine Duplikate:
+
+- **source** — `scripts/run_acceptance.py --source-only` faehrt sie in diesem Prozess und stellt `sys.stdout`/`sys.stderr` vorher bewusst auf `cp1252`/`strict`, also auf das ungeschuetzte Windows-Verhalten.
+- **packaged** — dieselben Faelle laufen in der gebauten `dist/RetroDisc.exe` im eigenen gefrorenen Prozess.
+
+Der Hook im Produkt ist vier Zeilen am Anfang von `retrodisc_launcher.main()`: nur wenn `--acceptance-selftest` in `sys.argv` steht, wird der Zweig betreten und `src.acceptance` ueberhaupt importiert. Der Bericht geht als JSON und Text in eine Datei (`--report`), weil `retrodisc_final.spec` mit `console=False` baut und die EXE damit windowed ist und keinen Standardkanal hat.
+
+`scripts/verify_unicode_download.py` ist auf einen schmalen Alias desselben Falls reduziert; die Logik existiert nur noch an einer Stelle.
+
+#### Faelle und Ergebnisse
+
+Bewertet wird ausschliesslich der **fachliche Endzustand**. 100 % Fortschritt allein ist nie ein Erfolg.
+
+**source: PASS** — startup 1,97 s, settings 0,00 s, conversion 0,39 s, error_handling 0,11 s, unicode_download 9,62 s.
+
+**packaged: PASS**, Exitcode 0, 52,9 s gesamt:
+
+| Fall | Status | Belegte Messwerte |
+| --- | --- | --- |
+| startup | PASS | `frozen=True`, ffmpeg rc 0, yt-dlp rc 0, **stdout `utf-8` / `replace`** |
+| settings | PASS | Wert ueber `save_settings` geschrieben, per frischem `AppSettings.load()` bestaetigt, Ausgangswert wiederhergestellt |
+| conversion | PASS | echtes Video erzeugt, Job `done`, Ausgabe 82590 Bytes, FFprobe liest `mp3` |
+| error_handling | PASS | ungueltige URL und fehlende Datei kontrolliert abgewiesen, App danach weiter benutzbar |
+| unicode_download | PASS | Titel `PSY - GANGNAM STYLE(강남스타일) M/V`, Job `done`, 26736119 Bytes, keine transienten Reste, keine Arbeitsverzeichnisse |
+| restart | PASS | zweiter Start der EXE Exitcode 0, startup erneut PASS nach 17,0 s |
+
+Dass `stdout` **in der gepackten EXE** `utf-8`/`replace` meldet, ist der eigentliche Beleg: der charmap-Fix ist im ausgelieferten Artefakt wirksam, nicht nur im Quellstand.
+
+#### Normaler Produktbetrieb unveraendert
+
+- Start der gebauten EXE **ohne** Flag: Hauptfenster `RetroDisc 1.0` nach 10,1 s, 0 CodeIntegrity-Ereignisse 3033/3077.
+- `test_importing_the_launcher_does_not_pull_in_the_harness` beweist in einem eigenen Prozess, dass `src.acceptance` nach dem Import des Launchers **nicht** in `sys.modules` steht.
+- `test_launcher_hook_only_runs_behind_the_explicit_flag` prueft am Syntaxbaum, dass es keinen Import auf Modulebene gibt.
+
+#### Der Harness darf nicht gruen werden, ohne etwas zu beweisen
+
+`case_unicode_download` bricht mit FAIL ab, wenn der Titel **kein** in cp1252 undarstellbares Zeichen enthaelt. Ohne diese Vorbedingung waere der Fall gruen, ohne den Blocker zu reproduzieren. `test_unicode_case_fails_when_the_title_proves_nothing` sichert das ab. Weitere Tests decken ab, dass eine werfende Pruefung als FAIL statt als Absturz gemeldet wird und dass ein einzelner Fehlschlag das gesamte Release auf FAIL zieht.
+
+#### Zwei Funde waehrend des Baus, beide im Testcode
+
+- Der erste `startup`-Lauf meldete FAIL mit `ffmpeg startet nicht (rc=2880417800)`. Ursache war mein Schalter: FFmpeg kennt nur `-version` mit einem Strich, yt-dlp nur `--version`. Real nachgeprueft: `-version` → 0, `--version` → 1. Der Harness haette ein funktionierendes FFmpeg als kaputt ausgewiesen.
+- `src/acceptance.py` benutzte zunaechst direktes `subprocess.run` und verletzte damit die Subprocess-Haertungsregel. Der bestehende Test `test_product_code_has_no_unwrapped_background_cli_launches` hat das gefangen; alle drei Aufrufe laufen jetzt ueber `run_hidden`, damit unter Windows kein Konsolenfenster aufblitzt.
+
+#### Gates auf diesem Stand
+
+- `pytest -q`: **276 passed in 16,25 s**, Exitcode 0 (vorher 270).
+- `compileall`: Exitcode 0.
+- `.hermes/verify_core.py`: Exitcode 0.
+- `scripts/verify_ui_bridge.py`: PASS, 0 Befunde, Exitcode 0.
+- `node --check`: Exitcode 0.
+- `scripts/release_smoke.py`: Exitcode 0, Ausgabe `build/e2e-smoke-20260905-153446`; SRT 199 Bytes, DVD-ISO 2627584 Bytes.
+- `git diff --check`: Exitcode 0.
+- `scripts/verify_release_artifacts.py`: **PASS, 0 Befunde**, Exitcode 0.
+
+#### Artefakte
+
+Gebaut aus dem Stand dieses Blocks; die danach ergaenzte `tests/test_acceptance_harness.py` ist reiner Testcode und in keinem Artefakt enthalten, die Hashes bleiben also gueltig.
+
+- `dist/RetroDisc.exe`: **502962945 Bytes**, SHA-256 `0F2EB78B862F8163AFC3BB3AE65EB0F844D46AEC3139F30AFC25D847A7F16F9F`
+- `Output/RetroDisc_1.0.0_Portable.zip`: **501523758 Bytes**, SHA-256 `9958096327C899D810B9F5AA4C4D5CCE35212B4C2279E707606832FC61AD43A1`
+- `Output/RetroDisc_Setup_1.0.0.exe`: **508900314 Bytes**, SHA-256 `6BB3BADEC368D00BA9ECEDAA3C72BB2FEC8CD4E93C7E29D08103CADEF0E14038`
+
+#### Noch nicht automatisiert
+
+Bewusst zurueckgestellt, bis diese Kette steht: Cancel, Collision, Whisper und der optische Teil (Laufwerkserkennung, Brennen nur bei ausdruecklicher Konfiguration). Der Collision-Fall ist auf Quellebene bereits durch `tests/test_download_publish.py` abgedeckt, fehlt aber noch als Packaged-Fall.
+
+#### Stand
+
+Die Packaged-Acceptance-Kette ist **PASS**. Damit ist die Luecke geschlossen, die den charmap-Blocker durchgelassen hat, und ein Download gilt erst dann als erfolgreich, wenn Jobstatus, Datei, Groesse und Restfreiheit stimmen.
+
+Unveraendert offen und weiterhin nicht durch Code loesbar: die fehlende vertrauenswuerdige Code-Signatur (`NotSigned`, keine Weitergabe an Dritte) und der physische Brenn- und Rueckleseteset ohne verfuegbaren Rohling.

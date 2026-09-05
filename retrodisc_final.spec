@@ -67,7 +67,7 @@ hiddenimports = [
     "src.services.watch_folder", "src.services.ripper",
     "src.config.settings", "src.config.presets",
     "src.models.media", "src.utils.sound", "src.utils.mediainfo",
-    "src.ui.desktop", "src.bootstrap",
+    "src.ui.desktop", "src.bootstrap", "src.acceptance",
 
     # PyWebView — Windows-Backends
     "webview",
