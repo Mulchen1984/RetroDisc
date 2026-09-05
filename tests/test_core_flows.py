@@ -78,14 +78,15 @@ def test_ui_download_controls_are_addressable_and_url_is_editable():
     assert "a.download_url(u,quality,audioOnly,subtitles)" in html
 
 
-def test_convert_icon_shows_two_complete_non_overlapping_discs():
+def test_disc_copy_icon_shows_two_complete_non_overlapping_discs():
+    """Das Doppel-Disc-Symbol gehoert seit der Trennung zu 'Disc kopieren'."""
     html = UI_FILE.read_text(encoding="utf-8")
     convert_button = re.search(
-        r'<div class="cbtn" onclick="openFlow\(\'convert\'\)">(.*?)</svg>',
+        r'<div class="cbtn" onclick="openFlow\(\'disccopy\'\)">(.*?)</svg>',
         html,
         re.DOTALL,
     )
-    assert convert_button, "Konvertieren-Button fehlt"
+    assert convert_button, "Disc-kopieren-Button fehlt"
 
     groups = re.findall(
         r'<g transform="translate\(([\d.]+),([\d.]+)\)">\s*'

@@ -507,7 +507,8 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 #homeview { padding:0 !important; }
 .cc-stage { flex:1; display:flex; flex-direction:column; align-items:center;
   justify-content:center; gap:24px; width:100%; }
-.cc-row { display:flex; gap:24px; }
+.cc-row { display:flex; gap:18px; flex-wrap:wrap; justify-content:center;
+  max-width:840px; }
 .cbtn { width:152px; height:152px; cursor:pointer; border-radius:16px;
   background:linear-gradient(180deg,#ffffff,#eef2f7); border:1px solid #d8dee6;
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px;
@@ -590,23 +591,52 @@ select, input[type="text"], input[type="url"], input[type="number"] {
   <div id="homeview">
     <div class="cc-stage">
       <div class="cc-row">
-        <div class="cbtn" onclick="openFlow('convert')">
+        <div class="cbtn" onclick="openFlow('disccopy')">
           <div class="cc-ico">
             <svg width="92" height="80" viewBox="0 0 92 80">
-              <g transform="translate(23,41)">
-                <ellipse cx="0" cy="0" rx="20" ry="18.5" fill="url(#g1a)" stroke="#9a5e0e" stroke-width="1.5"/>
-                <ellipse cx="0" cy="0" rx="6.8" ry="6" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
-                <ellipse cx="0" cy="0" rx="2.4" ry="2" fill="#d98a1c"/>
+              <defs><radialGradient id="gCopyA" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffe6a8"/><stop offset="55%" stop-color="#e09a22"/><stop offset="100%" stop-color="#b56f10"/></radialGradient><radialGradient id="gCopyB" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
+              <path d="M31 14 L55 14" stroke="#2f6fc0" stroke-width="4" fill="none" stroke-linecap="round"/>
+              <path d="M51 8 L59 14 L51 20" stroke="#2f6fc0" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              <g transform="translate(23,46)">
+                <ellipse cx="0" cy="0" rx="19" ry="17.48" fill="url(#gCopyA)" stroke="#9a5e0e" stroke-width="1.5"/>
+                <ellipse cx="0" cy="0" rx="6.27" ry="5.7" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
+                <ellipse cx="0" cy="0" rx="2.28" ry="2.09" fill="#d98a1c"/>
               </g>
-              <g transform="translate(69,41)">
-                <ellipse cx="0" cy="0" rx="20" ry="18.5" fill="url(#g1b)" stroke="#9a5e0e" stroke-width="1.5"/>
-                <ellipse cx="0" cy="0" rx="6.8" ry="6" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
-                <ellipse cx="0" cy="0" rx="2.4" ry="2" fill="#f0a830"/>
+              <g transform="translate(69,46)">
+                <ellipse cx="0" cy="0" rx="19" ry="17.48" fill="url(#gCopyB)" stroke="#9a5e0e" stroke-width="1.5"/>
+                <ellipse cx="0" cy="0" rx="6.27" ry="5.7" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
+                <ellipse cx="0" cy="0" rx="2.28" ry="2.09" fill="#f0a830"/>
               </g>
-              <defs>
-                <radialGradient id="g1a" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffe6a8"/><stop offset="55%" stop-color="#e09a22"/><stop offset="100%" stop-color="#b56f10"/></radialGradient>
-                <radialGradient id="g1b" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient>
-              </defs>
+            </svg>
+          </div>
+          <div class="cc-label">Disc kopieren</div>
+        </div>
+        <div class="cbtn" onclick="openFlow('convert')">
+          <div class="cc-ico">
+            <!-- Konvertieren: Quelldatei -> Zieldatei mit Umwandlungspfeil.
+                 Bewusst keine Discs: das Doppel-Disc-Symbol steht jetzt fuer
+                 "Disc kopieren". -->
+            <svg width="92" height="80" viewBox="0 0 92 80">
+              <g>
+                <rect x="6" y="13" width="30" height="38" rx="3" fill="#ffffff" stroke="#8a94a0" stroke-width="1.6"/>
+                <rect x="6" y="13" width="7" height="38" fill="#eef1f5" stroke="#8a94a0" stroke-width="1"/>
+                <rect x="8" y="17" width="3" height="3.5" fill="#8a94a0"/>
+                <rect x="8" y="24" width="3" height="3.5" fill="#8a94a0"/>
+                <rect x="8" y="31" width="3" height="3.5" fill="#8a94a0"/>
+                <rect x="8" y="38" width="3" height="3.5" fill="#8a94a0"/>
+                <path d="M19 25 L30 32 L19 39 Z" fill="#5a6672"/>
+              </g>
+              <g>
+                <rect x="56" y="29" width="30" height="38" rx="3" fill="#eaf3ff" stroke="#2f6fc0" stroke-width="1.6"/>
+                <rect x="62" y="46" width="3.4" height="10" rx="1.7" fill="#2f6fc0"/>
+                <rect x="68" y="40" width="3.4" height="16" rx="1.7" fill="#2f6fc0"/>
+                <rect x="74" y="44" width="3.4" height="12" rx="1.7" fill="#2f6fc0"/>
+                <rect x="80" y="49" width="3.4" height="7" rx="1.7" fill="#2f6fc0"/>
+              </g>
+              <path d="M39 31 L52 31" stroke="#2f6fc0" stroke-width="3.4" fill="none" stroke-linecap="round"/>
+              <path d="M48 27 L53 31 L48 35" stroke="#2f6fc0" stroke-width="3.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M53 46 L40 46" stroke="#8a94a0" stroke-width="3.4" fill="none" stroke-linecap="round"/>
+              <path d="M44 42 L39 46 L44 50" stroke="#8a94a0" stroke-width="3.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
           <div class="cc-label">Konvertieren</div>
@@ -614,18 +644,18 @@ select, input[type="text"], input[type="url"], input[type="number"] {
         <div class="cbtn" onclick="openFlow('burn')">
           <div class="cc-ico">
             <svg width="92" height="80" viewBox="0 0 92 80">
-              <g transform="translate(40,44)">
-                <ellipse cx="0" cy="0" rx="29" ry="26" fill="url(#g2)" stroke="#9a5e0e" stroke-width="1.5"/>
-                <ellipse cx="0" cy="0" rx="9.5" ry="8.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
-                <ellipse cx="0" cy="0" rx="3.5" ry="3" fill="#f0a830"/>
+              <defs><radialGradient id="gBurn" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
+              <g transform="translate(36,48)">
+                <ellipse cx="0" cy="0" rx="26" ry="23.92" fill="url(#gBurn)" stroke="#9a5e0e" stroke-width="1.5"/>
+                <ellipse cx="0" cy="0" rx="8.58" ry="7.8" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
+                <ellipse cx="0" cy="0" rx="3.12" ry="2.86" fill="#f0a830"/>
               </g>
-              <g transform="rotate(38 60 30)">
-                <rect x="52" y="2" width="10" height="44" rx="2" fill="#e8c84a" stroke="#9a7a10" stroke-width="1.2"/>
-                <rect x="52" y="2" width="10" height="7" fill="#c0392b" stroke="#9a7a10" stroke-width="1.2"/>
-                <path d="M52 46 L57 55 L62 46 Z" fill="#3a2a14" stroke="#9a7a10" stroke-width="1"/>
-                <path d="M54.5 50 L57 53.5 L59.5 50 Z" fill="#1a1208"/>
+              <g transform="rotate(38 70 30)">
+                <rect x="63" y="5" width="13" height="31" rx="2.5" fill="#2f6fc0" stroke="#1d4e8f" stroke-width="1.4"/>
+                <rect x="63" y="5" width="13" height="7" rx="2.5" fill="#8fbcf0" stroke="#1d4e8f" stroke-width="1.4"/>
+                <path d="M63 36 L69.5 50 L76 36 Z" fill="#f3dcae" stroke="#1d4e8f" stroke-width="1.3"/>
+                <path d="M66.6 43.5 L69.5 49.5 L72.4 43.5 Z" fill="#26313d"/>
               </g>
-              <defs><radialGradient id="g2" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
             </svg>
           </div>
           <div class="cc-label">Brennen</div>
@@ -633,13 +663,19 @@ select, input[type="text"], input[type="url"], input[type="number"] {
         <div class="cbtn" onclick="openFlow('rip')">
           <div class="cc-ico">
             <svg width="92" height="80" viewBox="0 0 92 80">
-              <g transform="translate(46,50)">
-                <ellipse cx="0" cy="0" rx="29" ry="25" fill="url(#g3)" stroke="#9a5e0e" stroke-width="1.5"/>
-                <ellipse cx="0" cy="0" rx="9.5" ry="8.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
-                <ellipse cx="0" cy="0" rx="3.5" ry="3" fill="#f0a830"/>
+              <defs><radialGradient id="gRip" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
+              <g transform="translate(46,52)">
+                <ellipse cx="0" cy="0" rx="25" ry="23.0" fill="url(#gRip)" stroke="#9a5e0e" stroke-width="1.5"/>
+                <ellipse cx="0" cy="0" rx="8.25" ry="7.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
+                <ellipse cx="0" cy="0" rx="3.0" ry="2.75" fill="#f0a830"/>
               </g>
-              <path d="M46 30 L46 7 M37 16 L46 6 L55 16" stroke="#2a7a3a" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-              <defs><radialGradient id="g3" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
+              <g fill="#eaf6ff" fill-opacity="0.9" stroke="#26313d" stroke-width="2.6" stroke-linecap="round">
+                <rect x="13" y="9" width="24" height="16" rx="7"/>
+                <rect x="55" y="9" width="24" height="16" rx="7"/>
+                <path d="M37 17 L55 17" fill="none"/>
+                <path d="M13 17 L5 22" fill="none"/>
+                <path d="M79 17 L87 22" fill="none"/>
+              </g>
             </svg>
           </div>
           <div class="cc-label">Rippen</div>
@@ -647,19 +683,20 @@ select, input[type="text"], input[type="url"], input[type="number"] {
         <div class="cbtn" onclick="openFlow('download')">
           <div class="cc-ico">
             <svg width="92" height="80" viewBox="0 0 92 80">
-              <g transform="translate(46,52)">
-                <ellipse cx="0" cy="0" rx="29" ry="24" fill="url(#g4)" stroke="#9a5e0e" stroke-width="1.5"/>
-                <ellipse cx="0" cy="0" rx="9.5" ry="8.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
-                <ellipse cx="0" cy="0" rx="3.5" ry="3" fill="#f0a830"/>
+              <defs><radialGradient id="gDownload" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
+              <g transform="translate(46,54)">
+                <ellipse cx="0" cy="0" rx="25" ry="23.0" fill="url(#gDownload)" stroke="#9a5e0e" stroke-width="1.5"/>
+                <ellipse cx="0" cy="0" rx="8.25" ry="7.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
+                <ellipse cx="0" cy="0" rx="3.0" ry="2.75" fill="#f0a830"/>
               </g>
-              <path d="M46 5 L46 29 M37 20 L46 30 L55 20" stroke="#2f6fc0" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-              <defs><radialGradient id="g4" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
+              <path d="M46 4 L46 24" stroke="#2f6fc0" stroke-width="5" fill="none" stroke-linecap="round"/>
+              <path d="M35 17 L46 29 L57 17" stroke="#2f6fc0" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
           </div>
           <div class="cc-label">Download</div>
         </div>
       </div>
-      <div class="cc-sub">Klicke auf eine der vier Aktionen.</div>
+      <div class="cc-sub">Klicke auf eine der fuenf Aktionen.</div>
       <div class="secondary">
         <div class="sec-btn" onclick="openFlow('search')">Suche</div>
         <div class="sec-btn" onclick="openFlow('edit')">Bearbeiten</div>
@@ -677,6 +714,17 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 
   <div id="toolbar">
     <!-- Konvertieren: blaue Pfeile -->
+    <button class="tbtn" onclick="showTab('disccopy',this)" id="tbtn-disccopy">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <ellipse cx="12" cy="20" rx="10" ry="6.5" fill="#e09a22" stroke="#9a5e0e" stroke-width="1.4"/>
+        <ellipse cx="12" cy="20" rx="3.2" ry="2" fill="#fff" stroke="#9a5e0e" stroke-width="0.8"/>
+        <ellipse cx="24" cy="27" rx="10" ry="6.5" fill="#f0a830" stroke="#9a5e0e" stroke-width="1.4"/>
+        <ellipse cx="24" cy="27" rx="3.2" ry="2" fill="#fff" stroke="#9a5e0e" stroke-width="0.8"/>
+        <path d="M14 9 L26 9 M22 5 L27 9 L22 13" stroke="#2f6fc0" stroke-width="2.6"
+              fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="tbtn-label">Disc kopieren</span>
+    </button>
     <button class="tbtn active" onclick="showTab('convert',this)" id="tbtn-convert">
       <svg width="36" height="36" viewBox="0 0 36 36">
         <circle cx="18" cy="18" r="15" fill="#3388dd" stroke="#1155aa" stroke-width="1.5"/>
@@ -950,7 +998,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 
         <div class="sect">
           <div class="sect-title" style="display:flex;align-items:center;">Brenner
-            <button class="refresh-btn" onclick="loadBurners()">Neu suchen</button>
+            <button class="refresh-btn" onclick="loadBurners(true)">Neu suchen</button>
           </div>
           <div class="sect-body">
             <div id="burnerArea"><div class="media-empty">Suche nach Laufwerk...</div></div>
@@ -1038,6 +1086,58 @@ select, input[type="text"], input[type="url"], input[type="number"] {
         <div style="display:flex;gap:8px;">
           <button class="btn98 default" onclick="goBurn()">🔥 Brennen starten</button>
           <button class="btn98" onclick="createISO()">💿 Nur ISO erstellen</button>
+          <button class="btn98" onclick="goHome()">Abbrechen</button>
+        </div>
+      </div>
+
+      <!-- ══ DISC KOPIEREN ══ -->
+      <div class="tabpanel" id="tab-disccopy">
+        <div class="sect">
+          <div class="sect-title">💿 Disc kopieren</div>
+          <div class="sect-body">
+            <div class="groupbox" style="margin-top:12px;">
+              <div class="groupbox-title">Laufwerke</div>
+              <div class="row">
+                <label style="width:150px;">Quelle (Leselaufwerk):</label>
+                <select style="width:280px;" id="copySourceSelect" onchange="updateCopyModes()">
+                  <option>Bitte Laufwerk erkennen</option>
+                </select>
+              </div>
+              <div class="row">
+                <label style="width:150px;">Ziel (Brenner):</label>
+                <select style="width:280px;" id="copyTargetSelect" onchange="updateCopyModes()">
+                  <option>Bitte Laufwerk erkennen</option>
+                </select>
+              </div>
+              <div class="row" id="copyDriveNote" style="color:#8a4b00;"></div>
+            </div>
+            <div class="groupbox" style="margin-top:12px;">
+              <div class="groupbox-title">Kopiermodus</div>
+              <div class="row">
+                <label style="width:150px;">
+                  <input type="radio" name="copyMode" value="image" id="copyModeImage" checked>
+                  Ueber Abbild
+                </label>
+                <span style="color:#6c7884;">Disc erst einlesen, dann brennen. Nur ein Laufwerk noetig.</span>
+              </div>
+              <div class="row" style="color:#6c7884;">
+                Kopiert wird das Dateisystem der Disc, nicht Sektor fuer Sektor.
+                Fuer ungeschuetzte Video-DVDs bleibt der abspielbare Inhalt
+                vollstaendig erhalten.
+              </div>
+              <div class="row">
+                <label style="width:150px;">
+                  <input type="radio" name="copyMode" value="onthefly" id="copyModeOnTheFly" disabled>
+                  On-the-fly
+                </label>
+                <span id="copyOnTheFlyNote" style="color:#6c7884;"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn98 default" onclick="goDiscCopy()">💿 Kopieren starten</button>
+          <button class="btn98" onclick="loadBurners(true)">Laufwerke neu erkennen</button>
           <button class="btn98" onclick="goHome()">Abbrechen</button>
         </div>
       </div>
@@ -2054,7 +2154,10 @@ async function startup() {
   await loadSettingsIntoForm();
   await loadPresetsFromBackend();
   await loadWatchFolders();
-  await loadBurners();
+  // Bewusst KEIN loadBurners() hier: die Laufwerkserkennung startet unter
+  // Windows PowerShell-Prozesse. Beim normalen Programmstart und auf dem
+  // Home-Screen hat das nichts zu suchen - sie laeuft erst, wenn der Nutzer
+  // einen Disc-Bereich oeffnet.
   // Alle 2 Sekunden Queue aktualisieren
   setInterval(refreshQueue, 2000);
 }
@@ -2643,8 +2746,73 @@ async function cancelJobUI(jobId) {
 // ── Korrekter Start: erst UI aufbauen, dann auf die Python-Bridge warten ──
 // init() ist reines JavaScript (Tabs, Buttons) -> sofort OK
 
+// ── Disc kopieren ─────────────────────────────────────────────────────────
+// Quelle ist ein optisches Leselaufwerk, Ziel ein Brenner. On-the-fly setzt
+// zwei verschiedene Laufwerke voraus; sonst bleibt nur der Weg ueber ein
+// Abbild. Die Laufwerksliste stammt aus loadBurners() - keine zweite Erkennung.
+let COPY_DRIVES = [];
+
+function updateCopyModes(){
+  const source=document.getElementById('copySourceSelect');
+  const target=document.getElementById('copyTargetSelect');
+  const onTheFly=document.getElementById('copyModeOnTheFly');
+  const note=document.getElementById('copyOnTheFlyNote');
+  const driveNote=document.getElementById('copyDriveNote');
+  if(!source||!target||!onTheFly||!note||!driveNote) return;
+
+  const sameDrive = source.value && source.value===target.value;
+  const twoDrives = COPY_DRIVES.length>1;
+  const possible = twoDrives && !sameDrive;
+
+  onTheFly.disabled = !possible;
+  if(possible){
+    note.textContent='Zwei Laufwerke erkannt — im Backend aber noch nicht '
+      +'umgesetzt; bitte \u00dcber Abbild verwenden.';
+  } else if(!twoDrives){
+    note.textContent='Nicht moeglich: dafuer werden zwei optische Laufwerke '
+      +'benoetigt, erkannt wurde nur '+COPY_DRIVES.length+'.';
+  } else {
+    note.textContent='Nicht moeglich: Quelle und Ziel sind dasselbe Laufwerk.';
+  }
+  if(!possible && onTheFly.checked){
+    document.getElementById('copyModeImage').checked = true;
+  }
+
+  if(sameDrive && twoDrives){
+    driveNote.textContent='Quelle und Ziel duerfen nicht dasselbe Laufwerk sein.';
+  } else if(sameDrive){
+    driveNote.textContent='Nur ein Laufwerk erkannt: die Disc wird zuerst '
+      +'eingelesen, dann wird der Rohling im selben Laufwerk gebrannt.';
+  } else {
+    driveNote.textContent='';
+  }
+}
+
+async function goDiscCopy(){
+  const source=document.getElementById('copySourceSelect')?.value||'';
+  const target=document.getElementById('copyTargetSelect')?.value||'';
+  const mode=document.querySelector('input[name="copyMode"]:checked')?.value||'image';
+  if(!source||!target){ alert('Bitte Quelle und Ziel waehlen.'); return; }
+  if(mode==='onthefly' && source===target){
+    alert('On-the-fly braucht zwei verschiedene Laufwerke.'); return;
+  }
+  const a=api();
+  if(!a){ alert('Backend noch nicht bereit — Kopieren nicht moeglich.'); return; }
+  try{
+    const r=JSON.parse(await a.copy_disc(source,target,mode));
+    if(r.error){ alert('Fehler: '+r.error); return; }
+    showTab('queue',document.getElementById('tbtn-queue'));
+  }catch(e){ alert('Kopieren konnte nicht gestartet werden: '+e); }
+}
+
 // ── Brenner-/Rohling-Erkennung anzeigen ──
-async function loadBurners(){
+let DRIVES_LOADED = false;
+
+async function loadBurners(force){
+  // Erkennung nur auf Anforderung. Ohne force wird ein bereits erkanntes
+  // Ergebnis wiederverwendet, damit das Oeffnen eines Disc-Bereichs nicht
+  // jedes Mal erneut PowerShell startet.
+  if(DRIVES_LOADED && !force) return;
   const ba = document.getElementById('burnerArea');
   const ma = document.getElementById('mediaArea');
   if(!ba) return;
@@ -2667,6 +2835,18 @@ async function loadBurners(){
     const ripDriveSelect=document.getElementById('ripDriveSelect');
     if(burnerSelect) burnerSelect.innerHTML=driveOptions;
     if(ripDriveSelect) ripDriveSelect.innerHTML=driveOptions;
+    // Disc kopieren nutzt dieselbe Erkennung - es gibt bewusst keine zweite.
+    DRIVES_LOADED = true;
+    COPY_DRIVES = r.drives.map(d => ({letter:d.letter||'', name:d.name||'Optisches Laufwerk'}));
+    const copySource=document.getElementById('copySourceSelect');
+    const copyTarget=document.getElementById('copyTargetSelect');
+    if(copySource) copySource.innerHTML=driveOptions;
+    if(copyTarget){
+      copyTarget.innerHTML=driveOptions;
+      // Bei zwei Laufwerken sinnvoll vorbelegen: Quelle != Ziel.
+      if(COPY_DRIVES.length>1) copyTarget.selectedIndex=1;
+    }
+    updateCopyModes();
 
     const d = r.drives[0];
     let caps = (d.caps||[]).map(c=>'<span class="dev-cap">'+c+'</span>').join('');
@@ -2703,6 +2883,7 @@ async function loadBurners(){
 
 // ── LAUNCHER-NAVIGATION (CloneCD-Stil) ──
 const FLOW_TITLES = {
+  disccopy:['Disc kopieren','Quelllaufwerk und Brenner waehlen'],
   convert:['Konvertieren','Format waehlen und umwandeln'],
   burn:['Disc brennen','Rohling einlegen und brennen'],
   rip:['Disc rippen','DVD oder CD als Datei einlesen'],
@@ -2721,7 +2902,11 @@ function openFlow(name){
   // runtimes, calling window.resize from a JS bridge thread minimizes the app.
   const btn = document.getElementById('tbtn-'+name);
   showTab(name, btn);
-  if(name==='burn'){ setTimeout(loadBurners, 50); }
+  // Die drei Disc-Bereiche brauchen Laufwerke - und nur sie loesen die
+  // Erkennung aus. Kein Timer, keine Hintergrundsuche.
+  if(name==='burn' || name==='rip' || name==='disccopy'){
+    setTimeout(() => loadBurners(false), 50);
+  }
   if(name==='download'){ setTimeout(()=>document.getElementById('urlinp')?.focus(), 50); }
   const t = FLOW_TITLES[name] || [name,''];
   document.getElementById('flowTitle').textContent = t[0];
@@ -2731,6 +2916,43 @@ function goHome(){
   document.body.classList.remove('flow-mode');
   document.body.classList.add('home-mode');
 }
+
+// ── Maus-Zurueck/-Vorwaerts ───────────────────────────────────────────────
+// RetroDisc ist eine Desktop-Anwendung. Die seitlichen Maustasten loesen in
+// WebView2 sonst Browser-Navigation aus und wuerden den Nutzer aus der UI
+// heraus auf das Splash-Dokument werfen. Sie werden hier abgefangen und die
+// Zurueck-Taste auf RetroDiscs eigenen Weg gemappt.
+//
+// Bewusst NICHT ueber history.back()/pushState: die WebView-History gehoert
+// nicht der Anwendung. Der verlaessliche Riegel sitzt zusaetzlich im
+// Launcher an NavigationStarting; das hier ist die UI-Ebene davon.
+//
+// Es werden ausschliesslich die Buttons 3 und 4 behandelt. Linke, rechte und
+// mittlere Maustaste bleiben vollstaendig unveraendert.
+const MOUSE_BACK = 3, MOUSE_FORWARD = 4;
+
+function appBack(){
+  // Der eigene Zurueck-Weg, identisch zum Zurueck-Knopf oben links.
+  if(document.body.classList.contains('flow-mode')) goHome();
+}
+
+function isSideButton(e){
+  return e.button === MOUSE_BACK || e.button === MOUSE_FORWARD;
+}
+
+// mousedown/mouseup in der Capture-Phase: Chromium leitet die Navigation aus
+// diesen Ereignissen ab, ein spaeteres preventDefault kaeme zu spaet.
+window.addEventListener('mousedown', function(e){
+  if(isSideButton(e)) e.preventDefault();
+}, true);
+window.addEventListener('mouseup', function(e){
+  if(isSideButton(e)) e.preventDefault();
+}, true);
+window.addEventListener('auxclick', function(e){
+  if(!isSideButton(e)) return;
+  e.preventDefault();
+  if(e.button === MOUSE_BACK) appBack();   // Vorwaerts hat keine Entsprechung
+}, true);
 // Beim Start im Home-Modus
 document.body.classList.add('home-mode');
 

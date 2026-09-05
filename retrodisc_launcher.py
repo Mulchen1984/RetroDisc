@@ -783,6 +783,74 @@ class RetroDiscBridge:
 
         return self._submit_job(job, _handler)
 
+    def copy_disc(self, source: str, target: str, mode: str = "image") -> str:
+        """Kopiert eine Disc ueber ein Abbild: einlesen, dann brennen.
+
+        Setzt bewusst nur vorhandene Bausteine zusammen - ``DiscRipper`` fuer
+        das Einlesen und ``DiscTools.burn_iso`` fuer das Schreiben. Weder der
+        Rip- noch der Brennpfad wird dafuer veraendert.
+
+        **Was das ist und was nicht.** ``DiscRipper.rip(..., "iso")`` liest das
+        *gemountete Dateisystem* der Quelle und erzeugt daraus mit ``mkisofs``
+        ein neues Abbild (siehe ``src/services/ripper.py``). Das Ergebnis ist
+        eine **Dateisystem-Kopie**, kein sektorweiser 1:1-Klon: Strukturen
+        ausserhalb des Dateisystems werden nicht uebernommen. Fuer eine
+        ungeschuetzte DVD-Video-Disc bleibt ``VIDEO_TS`` vollstaendig erhalten
+        und das Ergebnis ist abspielbar; als forensische Kopie taugt es nicht.
+
+        ``mode="image"`` ist der einzige heute umgesetzte Weg; ein einzelnes
+        Laufwerk genuegt dafuer. ``mode="onthefly"`` wird ausdruecklich
+        abgewiesen: dafuer muesste direkt von Laufwerk zu Laufwerk gestreamt
+        werden, und diesen Pfad gibt es im Backend nicht. Er wird nicht
+        stillschweigend durch den Abbild-Weg ersetzt - das waere ein falsches
+        Versprechen an den Nutzer.
+        """
+        from src.models.media import Job, JobType
+
+        mode = (mode or "image").lower().strip()
+        if mode not in {"image", "onthefly"}:
+            return json.dumps({"error": f"Unbekannter Kopiermodus: {mode}"})
+        if not source:
+            return json.dumps({"error": "Kein Quelllaufwerk ausgewählt."})
+        if not target:
+            return json.dumps({"error": "Kein Ziellaufwerk ausgewählt."})
+        if mode == "onthefly":
+            if source == target:
+                return json.dumps({
+                    "error": "On-the-fly benötigt zwei verschiedene Laufwerke. "
+                             "Quelle und Ziel sind dasselbe Laufwerk."
+                })
+            # Nicht stillschweigend auf den Abbild-Weg ausweichen: der Nutzer
+            # hat ausdruecklich etwas anderes gewaehlt.
+            return json.dumps({
+                "error": "On-the-fly-Kopieren ist in dieser Version noch nicht "
+                         "verfügbar. Bitte 'Über Abbild' wählen: die Disc wird "
+                         "dabei zuerst eingelesen und danach gebrannt."
+            })
+        # Ueber ein Abbild ist auch ein einzelnes Laufwerk zulaessig: erst
+        # einlesen, dann den Rohling im selben Laufwerk brennen.
+
+        safe = source.replace(":", "").replace("\\", "").replace("/", "") or "disc"
+        image = self.settings.directories.output_dir / f"Disc_{safe}_Copy.iso"
+        job = Job(
+            JobType.RIP_DVD,
+            output_path=image,
+            params={"source": source, "target": target, "mode": mode,
+                    "display_name": f"Disc kopieren: {source} -> {target}"},
+        )
+
+        async def _handler(j):
+            from src.services.ripper import DiscRipper
+
+            ripper = DiscRipper(self.ffmpeg, self.disc)
+            image_path = await ripper.rip(
+                j.params["source"], j.output_path, "iso", job=j)
+            j.output_path = image_path
+            await self.disc.burn_iso(
+                image_path, device=j.params["target"], job=j)
+
+        return self._submit_job(job, _handler)
+
     def rip_disc(self, device: str, output_format: str = "mkv_h265") -> str:
         """Rips an unprotected mounted DVD/Blu-ray or creates a filesystem ISO."""
         from src.models.media import Job, JobType
@@ -1210,6 +1278,7 @@ class RetroDiscApi:
     def detect_burners(self): return self._bridge.detect_burners()
     def get_disc_info(self, *args): return self._bridge.get_disc_info(*args)
     def create_dvd(self, *args): return self._bridge.create_dvd(*args)
+    def copy_disc(self, *args): return self._bridge.copy_disc(*args)
     def rip_disc(self, *args): return self._bridge.rip_disc(*args)
     def create_highlights(self, *args): return self._bridge.create_highlights(*args)
     def generate_subtitles(self, *args): return self._bridge.generate_subtitles(*args)
@@ -1304,6 +1373,61 @@ def show_download_splash(missing_tools: list) -> None:
 ACCEPTANCE_FLAG = "--acceptance-selftest"
 
 
+def block_webview_history_navigation(window) -> bool:
+    """Verhindert, dass die WebView-History den Nutzer aus der UI navigiert.
+
+    RetroDisc ist eine Desktop-Anwendung, keine Website. Die seitlichen
+    Maustasten (XButton1/XButton2) loesen in Chromium und damit in WebView2
+    aber Vor-/Zurueck-Navigation aus. Weil der Splash ueber ``load_html``
+    ersetzt wird, existiert ein History-Eintrag: Maus-Zurueck landet auf dem
+    Splash-Dokument, in dem die Anwendung nicht mehr existiert.
+
+    pywebview 6.2.1 schaltet ``IsSwipeNavigationEnabled`` und (ausserhalb des
+    Debugmodus) die Browser-Tastenkuerzel bereits ab - die Maustasten deckt
+    keine dieser Einstellungen ab.
+
+    Gegriffen wird deshalb an ``NavigationStarting``, dem zuverlaessigen
+    WebView2-Hook: ``NavigationKind == BackOrForward`` identifiziert genau die
+    History-Navigation und wird abgebrochen. Die eigene ``load_html``-
+    Navigation der Anwendung ist ``NewDocument`` und laeuft unveraendert
+    weiter. Es werden bewusst keine History-Eintraege manipuliert.
+
+    Gibt True zurueck, wenn der Hook haengt. Schlaegt etwas fehl - anderes
+    Backend, andere SDK-Version, macOS - bleibt es bei der JavaScript-Ebene
+    in ``app.html``; die Anwendung laeuft dann normal weiter.
+    """
+    try:
+        from webview.platforms.winforms import BrowserView
+    except Exception as exc:  # pragma: no cover - nur auf Nicht-Windows
+        log.info("WebView2-Navigationssperre nicht verfuegbar: %s", exc)
+        return False
+
+    form = BrowserView.instances.get(getattr(window, "uid", None))
+    control = getattr(form, "webview", None)
+    if control is None:
+        log.info("WebView2-Navigationssperre: kein Control gefunden")
+        return False
+
+    def _on_navigation_starting(sender, args):
+        try:
+            if str(getattr(args, "NavigationKind", "")) == "BackOrForward":
+                args.Cancel = True
+                log.info("History-Navigation der WebView unterbunden")
+        except Exception:
+            # Im Zweifel nicht blockieren: eine kaputte Pruefung darf die
+            # Anwendung nicht daran hindern, ihre eigene UI zu laden.
+            pass
+
+    try:
+        control.NavigationStarting += _on_navigation_starting
+    except Exception as exc:
+        log.info("WebView2-Navigationssperre konnte nicht gesetzt werden: %s", exc)
+        return False
+
+    log.info("WebView2-Navigationssperre aktiv (BackOrForward wird abgebrochen)")
+    return True
+
+
 def main():
     # Schmaler, ausschliesslich ueber dieses Argument aktivierbarer Hook. Ohne
     # das Argument wird der Zweig nie betreten und src.acceptance nie
@@ -1378,6 +1502,10 @@ def main():
             text_select=False,
         )
     bridge.window = window
+
+    # Maus-Zurueck/-Vorwaerts duerfen die WebView-History nie bewegen.
+    # Der Hook haengt sich an, sobald das Control existiert.
+    window.events.shown += lambda: block_webview_history_navigation(window)
 
     debug = os.environ.get("RETRODISC_DEBUG", "0") == "1"
     log.info(f"Starte Fenster (debug={debug})")
