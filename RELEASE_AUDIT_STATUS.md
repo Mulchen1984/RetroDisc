@@ -1134,3 +1134,81 @@ Block nennt, existiert nach dem Rebase nicht mehr. Die Messwerte jenes Blocks
 bleiben als historischer Beleg fuer den damals gemessenen Zustand richtig, sind
 aber **kein Nachweis fuer den jetzigen HEAD**. Es wird deshalb aus dem
 integrierten Stand neu gebaut und komplett neu gemessen.
+
+---
+
+### 2026-09-05 20:55–21:15 CEST — Gueltige Artefakte: Neubau aus dem integrierten Stand
+
+Gebaut aus dem eingefrorenen Commit `ba9805b`
+(`Integrate the Blu-ray ripper fix and void my artifact hashes`), Arbeitsbaum
+sauber. `python build.py --clean`: Exitcode 0. Signierung uebersprungen — nicht
+konfiguriert.
+
+**Dies sind die aktuell gueltigen Artefakt-Hashes.** Sie loesen sowohl die des
+Blocks vom 15:20–15:40 als auch die des Blocks vom 20:35–20:50 ab; jene bleiben
+nur als historischer Beleg fuer ihren jeweiligen Source stehen.
+
+- `dist\RetroDisc.exe`: **502988285 Bytes**,
+  SHA-256 `9B401B0C74B1BE1CCB213A18ED8E56686D848739978B526A2BCF886B2897F302`
+- `Output\RetroDisc_1.0.0_Portable.zip`: **501543016 Bytes**,
+  SHA-256 `A46009AB3C25935FC5474ECAAE0BDCBBCB391E7CF2C29BA09B5AB38AA9B24587`
+- `Output\RetroDisc_Setup_1.0.0.exe`: **508919403 Bytes**,
+  SHA-256 `2BCFAF4F4BD11DA75DB79797AFC515691BFC958A83746409D356858C3A8D56E6`
+
+#### `scripts/verify_release_artifacts.py`: PASS, 0 Befunde, Exitcode 0
+
+ZIP-Inhalt vollstaendig, enthaltene EXE **byteidentisch** zur `dist`-EXE,
+Installation und Deinstallation in der isolierten Sandbox komplett durchlaufen
+(Installer rc 0, installierte EXE byteidentisch, Verknuepfungen angelegt und
+wieder entfernt, Installationsordner restlos geloescht). Authenticode:
+`NotSigned` fuer EXE und Installer — Hinweis, kein Gate-Fehler, aber
+unveraendert der Weitergabe-Blocker.
+
+#### `scripts/run_acceptance.py`: PASS, Exitcode 0
+
+**packaged: PASS 7/7** im echten gefrorenen Prozess:
+
+| Fall | Status | Belegte Messwerte |
+| --- | --- | --- |
+| startup | PASS | `frozen=True`, ffmpeg rc 0, yt-dlp rc 0, stdout `utf-8` / `replace` (6,08 s) |
+| settings | PASS | geschrieben, per frischem `AppSettings.load()` bestaetigt, Ausgangswert wiederhergestellt |
+| conversion | PASS | Job `done`, Ausgabe 82590 Bytes, FFprobe liest `mp3` |
+| error_handling | PASS | ungueltige URL und fehlende Datei kontrolliert abgewiesen, App danach benutzbar |
+| **media_tools** | **PASS** | Trim A `done` 31272 B, Trim B `done` 14420 B, Merge `done` 31859 B, Upscale `done` **640x360**, Interpolation `done` **30,0 fps** (2,55 s) |
+| unicode_download | PASS | Titel mit Hangul, Job `done`, 26736119 Bytes, keine transienten Reste, keine Arbeitsverzeichnisse |
+| restart | PASS | zweiter Start Exitcode 0, startup erneut PASS nach 15,7 s |
+
+`media_tools` ist damit auch auf diesen Bytes gruen: die vier zuvor toten
+Werkzeuge laufen in der ausgelieferten EXE ueber denselben Bridge-Pfad wie die
+Oberflaeche und liefern jeweils eine von FFprobe lesbare Datei.
+
+#### Runtime-Gate auf `9B401B0C…` (Kaltstart, frisch entpacktes Bundle)
+
+- Hauptfenster **`RetroDisc 1.0`** nach **8,7 s**.
+- **Kein** neuer `conhost`-, `cmd`- oder `powershell`-Prozess: kein sichtbares
+  Konsolenfenster.
+- **0** CodeIntegrity-Ereignisse 3033/3077.
+- Anwendungslog dieses Laufs, auf den Lauf eingegrenzt: 19 Zeilen, **0** Treffer
+  auf `ERROR`, `Traceback`, `charmap` oder `UnicodeEncodeError`; je einmal
+  `Navigationssperre aktiv` und `Splash fertig - lade Haupt-UI`.
+- Nach dem Beenden 0 verbliebene `RetroDisc`-Prozesse.
+
+#### Verbleibende offene Release-Gates
+
+Softwareseitig ist dieser Stand vollstaendig belegt. Was noch fehlt, ist **nicht
+durch Code loesbar**:
+
+1. **Vertrauenswuerdige Code-Signatur.** `NotSigned` fuer EXE und Installer; auf
+   dem Host existiert nur ein abgelaufenes Selftest-Zertifikat. Ein selbst
+   ausgestelltes Zertifikat loest das nicht. Fehlender Schritt: Zertifikat
+   bereitstellen, `python build.py --clean --sign`, danach Artefakt-,
+   Acceptance- und Runtime-Gate auf den dann entstehenden signierten Hashes
+   wiederholen.
+2. **Physischer Brenn- und Rueckleseteset.** Kein Rohling verfuegbar; beide
+   Laufwerke melden weiterhin kein Medium. Die optischen Verhaltenstests
+   simulieren Hardwareantworten und ersetzen das nicht.
+
+Bewusst noch nicht als Packaged-Fall automatisiert: Cancel, Collision (auf
+Quellebene durch `tests/test_download_publish.py` abgedeckt),
+Whisper-Untertitel und der optische Teil. `rip_disc` ist seit diesem Block auf
+Bridge-Ebene abgesichert, end-to-end aber nur mit echter Hardware pruefbar.
