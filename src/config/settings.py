@@ -32,103 +32,119 @@ class ToolPaths(BaseModel):
 
 
 class DirectorySettings(BaseModel):
-    """Verzeichnis-Einstellungen für den nachvollziehbaren Medien-Workflow.
+    """Verzeichnis-Einstellungen für einen durchgängigen Medien-Workflow.
 
-    Alle benutzerrelevanten Ergebnisse liegen standardmäßig unter genau einem
-    Stammordner: ``~/Videos/RetroDisc``. Die nummerierten Unterordner bilden
-    den typischen Arbeitsablauf ab und verhindern, dass Ergebnisse unbemerkt
-    neben Quelldateien oder im allgemeinen Download-Ordner landen.
+    RetroDisc soll für den normalen Benutzer genau einen sichtbaren Medienordner
+    haben: ``~/Videos/RetroDisc``. Downloads, Rips, Konvertierungen,
+    Bearbeitungsergebnisse sowie DVD-/ISO-Ausgaben landen standardmäßig alle
+    dort. Dadurch kann das Ergebnis eines Schrittes ohne erneute Suche direkt
+    im nächsten Schritt verwendet werden.
+
+    Nur temporäre Arbeitsdateien liegen im internen Unterordner ``_temp``.
+    Die zusätzlichen Felder bleiben aus Kompatibilitätsgründen erhalten, zeigen
+    standardmäßig aber alle auf denselben Medienordner.
     """
 
     media_root: Path = Field(default_factory=_default_media_root)
-    download_dir: Path = Field(
-        default_factory=lambda: _default_media_root() / "01_Quellen" / "Downloads"
-    )
-    rip_dir: Path = Field(
-        default_factory=lambda: _default_media_root() / "01_Quellen" / "Rips"
-    )
-    output_dir: Path = Field(
-        default_factory=lambda: _default_media_root() / "02_Konvertiert"
-    )
-    edited_dir: Path = Field(
-        default_factory=lambda: _default_media_root() / "03_Bearbeitet"
-    )
-    disc_dir: Path = Field(
-        default_factory=lambda: _default_media_root() / "04_Disc"
-    )
-    temp_dir: Path = Field(
-        default_factory=lambda: _default_media_root() / "_temp"
-    )
+    download_dir: Path = Field(default_factory=_default_media_root)
+    rip_dir: Path = Field(default_factory=_default_media_root)
+    output_dir: Path = Field(default_factory=_default_media_root)
+    edited_dir: Path = Field(default_factory=_default_media_root)
+    disc_dir: Path = Field(default_factory=_default_media_root)
+    temp_dir: Path = Field(default_factory=lambda: _default_media_root() / "_temp")
 
     @property
     def trim_dir(self) -> Path:
-        return self.edited_dir / "Geschnitten"
+        return self.edited_dir
 
     @property
     def merge_dir(self) -> Path:
-        return self.edited_dir / "Zusammengefuegt"
+        return self.edited_dir
 
     @property
     def upscale_dir(self) -> Path:
-        return self.edited_dir / "Hochskaliert"
+        return self.edited_dir
 
     @property
     def interpolate_dir(self) -> Path:
-        return self.edited_dir / "Framerate"
+        return self.edited_dir
 
     @property
     def subtitle_dir(self) -> Path:
-        return self.edited_dir / "Untertitel"
+        return self.edited_dir
 
     @property
     def highlights_dir(self) -> Path:
-        return self.edited_dir / "Highlights"
+        return self.edited_dir
 
     @property
     def dvd_dir(self) -> Path:
-        return self.disc_dir / "DVD"
+        return self.disc_dir
 
     @property
     def iso_dir(self) -> Path:
-        return self.disc_dir / "ISO"
+        return self.disc_dir
 
     def ensure_directories(self) -> None:
-        """Create the complete workflow tree."""
+        """Create all configured paths; duplicates are harmless."""
         for path in (
             self.media_root,
             self.download_dir,
             self.rip_dir,
             self.output_dir,
             self.edited_dir,
-            self.trim_dir,
-            self.merge_dir,
-            self.upscale_dir,
-            self.interpolate_dir,
-            self.subtitle_dir,
-            self.highlights_dir,
             self.disc_dir,
-            self.dvd_dir,
-            self.iso_dir,
             self.temp_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)
 
     def migrate_legacy_defaults(self) -> bool:
-        """Move only historical *default settings* to the workflow layout.
+        """Collapse historical RetroDisc defaults into the single media root.
 
-        Custom user paths are deliberately left untouched. This only changes
-        values that exactly match RetroDisc's former defaults.
+        Arbitrary custom user paths are deliberately preserved. Only paths that
+        RetroDisc itself used as defaults in older builds (including the short-
+        lived numbered workflow layout) are migrated automatically.
         """
         changed = False
-        old_output = Path.home() / "Videos" / "RetroDisc"
-        old_download = Path.home() / "Downloads" / "RetroDisc"
         root = _default_media_root()
 
-        if self.output_dir == old_output:
-            self.output_dir = root / "02_Konvertiert"
-            changed = True
-        if self.download_dir == old_download:
-            self.download_dir = root / "01_Quellen" / "Downloads"
+        legacy_defaults = {
+            "download_dir": {
+                Path.home() / "Downloads" / "RetroDisc",
+                root / "01_Quellen" / "Downloads",
+                root,
+            },
+            "rip_dir": {
+                root / "01_Quellen" / "Rips",
+                root,
+            },
+            "output_dir": {
+                root / "02_Konvertiert",
+                root,
+            },
+            "edited_dir": {
+                root / "03_Bearbeitet",
+                root,
+            },
+            "disc_dir": {
+                root / "04_Disc",
+                root,
+            },
+        }
+
+        for field_name, known_defaults in legacy_defaults.items():
+            current = getattr(self, field_name)
+            if current in known_defaults and current != root:
+                setattr(self, field_name, root)
+                changed = True
+
+        expected_temp = root / "_temp"
+        legacy_temp = {
+            expected_temp,
+            Path.home() / "Videos" / "RetroDisc" / "_temp",
+        }
+        if self.temp_dir in legacy_temp and self.temp_dir != expected_temp:
+            self.temp_dir = expected_temp
             changed = True
 
         return changed
