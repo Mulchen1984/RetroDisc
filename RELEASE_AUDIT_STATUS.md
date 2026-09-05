@@ -1,12 +1,12 @@
 # RetroDisc Release-Audit-Status
 
-Letzte Aktualisierung: 2026-09-05 — Windows-Abschluss in Arbeit
+Letzte Aktualisierung: 2026-09-05 — charmap-Releaseblocker im manuellen Acceptance-Test gefunden und behoben
 
 ## Verbindlicher Abschlussstatus
 
-**NOT RELEASE READY — aktueller Windows-Patch wird final verifiziert.**
+**NOT RELEASE READY — Windows ist ausdruecklich NICHT bei 100 %. Der Fix fuer den charmap-Blocker ist noch nicht am gebauten Artefakt bestaetigt.**
 
-Der aktuelle Arbeitsbaum enthaelt weitere Aenderungen nach `86098fe` (DVD-Toolpfade/Settings, Download-Publikation, private Tempdateien und Vendor-Guards). Die folgenden historischen Belege zu `1c486cc` gelten ausschliesslich fuer diesen alten Stand. Fuer den aktuellen Patch sind nach unabhaengiger QA alle Source-Gates, ein neuer Freeze, ein frischer Build und die Artefakt-/Runtime-Gates erforderlich. Der Baseline-Testlauf am 2026-09-05 bestand mit **220 passed in 12.68s**, Exitcode 0, eigenem pytest-Tempordner. Die danach aufgenommenen Fixes muessen erneut getestet werden.
+Der Arbeitsbaum nach `86098fe` wurde am 2026-09-05 als `01e5fd9` eingefroren; darauf liefen alle Source-Gates, ein Clean-Build, das Artefakt-Gate und der Runtime-Gate gruen. **Ein anschliessender manueller Acceptance-Test hat diesen Stand dann widerlegt:** ein vollstaendig heruntergeladener und korrekt veroeffentlichter YouTube-Download (rund 273 MB) wurde in der Oberflaeche als FAILED angezeigt, mit `'charmap' codec can't encode character ... : character maps to <undefined>`. Kein Gate hatte das gefunden - die automatisierten Laeufe schreiben auf einen UTF-8-faehigen Kanal, die gebaute Anwendung unter Windows nicht. Der Fehler ist behoben; die Bestaetigung am gebauten Artefakt steht noch aus. Die historischen Belege zu `1c486cc` gelten weiterhin nur fuer jenen alten Stand und seine Hashes.
 
 Aktueller Nutzerauftrag: zuerst Windows abschliessen. macOS-Unterstuetzung ist wieder gewuenscht, aber auf spaeter verschoben; sie ist derzeit nicht verifiziert. Ein physischer DVD-Brenn-/Ruecklesetest und eine vertrauenswuerdige Signatur bleiben verpflichtende offene Release-Gates. Am 2026-09-05 wurden beide physischen Laufwerke erneut ohne Medium gemeldet; als Code-Signing-Zertifikat ist nur das abgelaufene Selftest-Zertifikat vorhanden.
 
@@ -19,7 +19,8 @@ Zusätzlich offen als **ausstehende Hardware-Validierung** (kein Softwaremangel,
 ## Aktueller Checkpoint
 
 - Branch: `main`
-- Letzter Freeze-Commit: `1c486cc` (`DOCS: state the Windows-only scope and the real build path`)
+- Letzter Freeze-Commit: `01e5fd9` (`RELEASE: isolate download publication, temp files and DVD tool paths`)
+- Vorheriger Freeze-Commit: `1c486cc` (`DOCS: state the Windows-only scope and the real build path`)
 - Tag des Abschlussstands: `v1.0.0-rc1`
 - Baseline-Commit: `e29f41d` (`BASELINE: preserve initial RetroDisc source state`)
 - Aktueller Arbeitsbaum: sauber; alle Build-Ausgaben sind ignoriert
@@ -506,3 +507,115 @@ Offen bleiben genau zwei Punkte, beide extern und keiner davon durch Code lösba
 
 Für einen zusätzlichen unabhängigen Lauffähigkeitsbeleg auf fremder Hardware steht weiterhin `RUNTIME_GATE_ZWEITRECHNER.md` bereit.
 
+
+---
+
+### 2026-09-05 14:39–15:05 CEST — Windows-Abschlusskette auf dem Freeze `01e5fd9`
+
+Auftrag: Windows vollstaendig release-fertig abschliessen, macOS ausdruecklich nicht bearbeiten, nur bestaetigte Releaseblocker anfassen, keine kosmetischen Aenderungen, kein breiter Neu-Audit.
+
+Drei zunaechst gestartete unabhaengige QA-Agenten wurden auf Nutzerwunsch beendet, bevor sie Befunde erzeugt hatten. Sie haben keine Datei veraendert und liefern **keinen** Auditbeleg. Die Verifikation erfolgte stattdessen direkt gegen Code und Regressionstests.
+
+#### Die fuenf bestaetigten Restpunkte — Beleglage
+
+1. **Automatisch erkannte DVD-Toolpfade landen nicht dauerhaft in den Einstellungen.** `RetroDiscBridge._resolve_disc_tool_paths()` loest die gebuendelten Werkzeuge pro Lauf auf, migriert alte gespeicherte PyInstaller-Extraktionspfade (`_MEIxxxx`) auf den blossen Kommandonamen und laesst eigene Benutzerpfade unangetastet. Abgedeckt von `test_save_settings_reapplies_current_bundle_without_persisting_paths`, `test_legacy_extraction_paths_resolve_to_current_bundle`, `test_custom_disc_paths_survive_initialization_save_reload_and_runtime_updates` und `test_missing_bundled_disc_tools_keep_default_commands`.
+2. **Namenskollisionen trennen Video und Untertitel nicht mehr.** `Downloader._claim_target_group()` reserviert Hauptdatei und Begleitdateien als Gruppe mit demselben Kollisionszaehler, exklusiv per `O_CREAT|O_EXCL`. Abgedeckt von `test_collision_renames_the_whole_media_and_sidecar_group` und `test_playlist_sidecars_follow_their_own_longest_matching_media_stem`.
+3. **Eine fehlgeschlagene Veroeffentlichung laesst keine halbfertigen Ergebnisse zurueck.** Jeder Download arbeitet in einem privaten `mkdtemp()`-Verzeichnis; bricht das Verschieben ab, entfernt `_remove_claimed_targets()` alle von diesem Aufruf beanspruchten Ziele. Abgedeckt von `test_move_failure_rolls_back_all_files_owned_by_this_call` und `test_reservation_failure_releases_current_and_previous_groups`.
+4. **Die CI verdeckt keine Fehlercodes mehr.** Nach jedem Source-Gate in `.github/workflows/build.yml` steht ein `$LASTEXITCODE`-Riegel; Tag-Releases sind bei fehlender gueltiger Signatur und fehlenden Artefakten fail-closed (`fail_on_unmatched_files: true`). Abgedeckt von `test_workflow_stops_at_each_failed_source_gate` und `test_workflow_tag_release_is_fail_closed_on_signature_and_artifacts`. `build.py` gab Fehlercodes bereits korrekt weiter (`check=True`, `raise SystemExit(main())`) und wurde nicht angefasst.
+5. **Vollstaendiger realistischer Windows-Medien-Smoke** — Exitcode 0, siehe unten.
+
+Gezielter Lauf dieser drei Testdateien: **74 passed in 5,64 s**, Exitcode 0.
+
+#### Source-Gates auf `01e5fd9`
+
+Jeder Exitcode wurde einzeln geprueft, nicht nur die Ausgabe gelesen.
+
+- `pytest -q`: **263 passed in 16,27 s**, Exitcode 0 (vorher 193 auf `1c486cc`). Buildinterner Wiederholungslauf: **263 passed in 15,43 s**.
+- `compileall` ueber `src`, `tests`, `scripts`, `installer`, `tools`, `build.py`, beide Launcher und `prepare_vendor.py`: Exitcode 0.
+- `.hermes/verify_core.py`: Exitcode 0; echter FFmpeg-Job `done`, 100 %, MP3 **402328 Bytes**. **Abweichung bewusst festgehalten:** bis `1c486cc` waren es 403477 Bytes. Ursache ist der neu gepinnte FFmpeg-Autobuild, kein Produktdefekt; die frueher benutzte Formulierung "wertidentisch" gilt fuer diesen Wert nicht mehr.
+- `scripts/verify_ui_bridge.py`: **PASS, 0 Befunde** — 47 Aufrufstellen, 36 verschiedene UI-Methoden, 39 Proxy-Methoden, 41 Bridge-Methoden.
+- `node --check build/ui-audit/inline.js` (Node v22.22.3): Exitcode 0.
+- `scripts/release_smoke.py`: Exitcode 0, Ausgabe `build/e2e-smoke-20260905-144434`. Merge 20,72 s, Upscale 2560x1440, Interpolation 1280x720/50 fps, Highlights 6,013968 s, deutsche Faster-Whisper-SRT 199 Bytes, DVD-ISO 2627584 Bytes.
+- `git diff --check`: Exitcode 0.
+
+`.gitignore` wurde um `RetroDisc_Data/` und `.claude/settings.local.json` ergaenzt. Real geprueft: beide Pfade waren zuvor **nicht** getrackt, und `git check-ignore` bestaetigt, dass `RELEASE_NOTES_1.0.0.md` und `tests/test_download_publish.py` **nicht** ignoriert werden.
+
+#### Build, Artefakt-Gate und Runtime-Gate auf `01e5fd9`
+
+`python build.py --clean`, Exitcode 0. `prepare_vendor.py` meldete alle vier gepinnten Vendor-Baeume als bereits bereit. Damit ist real belegt, dass der neue `_marker_metadata_matches()`-Guard den Whisper-Baum **nicht** faelschlich als veraltet verwirft und keine Neu-Download-Schleife ausloest.
+
+- `dist/RetroDisc.exe`: **502905831 Bytes**, SHA-256 `CDE62A311E06C0B11862C686A267EAC2C461FF6535CAADB95FBDF05972D6D752`
+- `Output/RetroDisc_1.0.0_Portable.zip`: **501468103 Bytes**, SHA-256 `CEE984780993963155EB4B8D6AD44FD2EED796677FE53A8F952B45516B5AEBBF`
+- `Output/RetroDisc_Setup_1.0.0.exe`: **508844345 Bytes**, SHA-256 `F3D2A59C1043F728FF02E2F59734E35334E38A693E32AB512EBE4EC2B9509EA1`
+
+`scripts/verify_release_artifacts.py`: **PASS, 0 Befunde**, Exitcode 0 — ZIP-Inhalt byteidentisch zur `dist`-EXE, `NotSigned` als Hinweis, stille Installation und Deinstallation in einer isolierten Sandbox mit umgelenktem `USERPROFILE`/`APPDATA`/`LOCALAPPDATA` vollstaendig durchgelaufen.
+
+Runtime-Gate: Hauptfenster `RetroDisc 1.0` nach 10,2 s, **0 CodeIntegrity-Ereignisse 3033/3077**. **Messmethodik festgehalten**, weil ein erster Versuch daran scheiterte: Bei einem PyInstaller-Onefile besitzt der *Kindprozess* das Fenster; `MainWindowTitle` am gestarteten Bootloader bleibt dauerhaft leer und meldete faelschlich "kein Fenster nach 120 s". Gemessen werden muss ueber `Get-Process -Name RetroDisc | Where-Object { $_.MainWindowTitle }`. Die 10,2 s sind ein **Warmstart** und nicht mit den 36,5 s Kaltstart aus dem `1c486cc`-Lauf vergleichbar.
+
+---
+
+### 2026-09-05 15:00–15:10 CEST — charmap-Releaseblocker aus dem manuellen Acceptance-Test
+
+**Dieser Block widerlegt den vorstehenden Abschluss.** Alle Gates auf `01e5fd9` waren gruen; ein manueller Acceptance-Test am gebauten Produkt fand trotzdem einen echten, reproduzierbaren Windows-Releaseblocker.
+
+#### Befund
+
+Ein YouTube-Download erreichte 100 %, die Datei lag korrekt und vollstaendig unter `C:\Users\marco\Downloads\RetroDisc\` (rund 273 MB) — die Oberflaeche zeigte den Job trotzdem rot, mit `'charmap' codec can't encode character ... : character maps to <undefined>` in der Statusleiste.
+
+#### Ursache, real reproduziert
+
+1. Windows gibt einem Prozess Standardstroeme mit der ANSI-Codepage (cp1252, `charmap`).
+2. `retrodisc_launcher.py` konfigurierte **structlog gar nicht**. structlog benutzte damit seine Default-`PrintLoggerFactory`, die genau auf diesen cp1252-Strom schreibt. Zusaetzlich haengte `logging.basicConfig` einen `StreamHandler(sys.stdout)` ohne Encoding daneben — die Logdatei war mit `encoding="utf-8"` geschuetzt, der Konsolenkanal nicht.
+3. `Downloader.download()` rief `log.info("Download abgeschlossen", path=str(final_path))` **innerhalb** seines `try` auf.
+4. Ein Emoji im YouTube-Titel steht im Dateinamen. Das blosse Loggen dieses Namens warf `UnicodeEncodeError`; der umschliessende `except BaseException: raise` machte daraus einen gescheiterten Job — obwohl die Datei laengst korrekt veroeffentlicht war.
+
+Isoliert nachgestellt: `structlog` auf einen `cp1252`/`strict`-Strom gebunden, `log.info(..., path="… \U0001F600 …")` → `UnicodeEncodeError: 'charmap' codec can't encode characters`.
+
+**Warum kein Gate das gefunden hat:** pytest, Smoke und `verify_core` laufen alle auf einem UTF-8-faehigen Kanal. Der Defekt existiert nur dort, wo das Produkt tatsaechlich lebt — als gebaute Anwendung unter Windows mit cp1252-Stroemen. Das ist die Luecke, die der geplante Acceptance-Harness schliessen soll.
+
+#### Fix
+
+Wurzel zuerst, in `src/utils/logging_setup.py` (neu, bewusst klein: keine Formatter, keine Handler, keine Level):
+
+- `make_stream_utf8_safe()` stellt einen Strom auf UTF-8 mit `errors="replace"` um. `None` bleibt `None` (PyInstaller-Windowed-Build ohne Standardstroeme); fuer Stroeme ohne `reconfigure` gibt es den `buffer`-Fallback ueber einen neuen `TextIOWrapper`.
+- `configure_console_encoding()` wendet das auf `sys.stdout` und `sys.stderr` an.
+- `configure_structlog()` bindet structlog explizit an diesen sicheren Strom, statt sich auf die Default-Factory zu verlassen; das Rendering bleibt unveraendert. Ohne Konsole faellt es auf `open_null_stream()` zurueck.
+
+`retrodisc_launcher.py` ruft beides auf, **bevor** `logging.basicConfig` die Stroeme einsammelt, und uebergibt den gesicherten Strom an den `StreamHandler`.
+
+`src/core/downloader.py` bekommt zusaetzlich einen bewusst **engen** Riegel: Der Erfolgs-Log steht jetzt ausserhalb des `try` und faengt ausschliesslich `UnicodeEncodeError`. Der Vorfall wird nicht verschluckt, sondern ASCII-sicher ueber `ascii(str(final_path))` als Warnung gemeldet, damit die Meldung ueber denselben Kanal nicht erneut scheitert. Jeder andere Fehler laeuft unveraendert in den `except BaseException`-Pfad.
+
+Wichtige Zwischenerkenntnis, die den Fix geformt hat: Den Logaufruf nur aus dem `try` herauszuziehen **reicht nicht**. Die `UnicodeEncodeError` wuerde weiterhin aus `download()` herausfliegen und den Job scheitern lassen. Traegt allein der sichere Strom plus der enge Riegel.
+
+#### Regressionstest mit Negativkontrolle
+
+`tests/test_windows_console_encoding.py`, 7 Tests. Der zentrale Test bindet structlog bewusst an einen `cp1252`/`strict`-Strom und faehrt einen vollstaendigen Download mit `\U0001F600` im Dateinamen durch den echten Produktpfad. Geprueft wird der fachliche Endzustand, nicht der Fortschritt: Rueckgabepfad, Datei existiert, Inhalt stimmt, Untertitel liegt beim Video, Arbeitsverzeichnis ist weg.
+
+Ein erster Test stellt ausdruecklich sicher, dass der cp1252-Strom das Zeichen wirklich ablehnt — sonst waere der Regressionstest gruen, weil das Zeichen harmlos ist, statt weil der Fix wirkt.
+
+**Negativkontrolle real gefahren:** Mit temporaer entferntem Riegel faellt genau dieser Test mit `UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f600' in position 184: character maps to <undefined>` — also exakt der vom Nutzer gemeldeten Fehlermeldung. Mit Fix: 7 passed.
+
+#### Gates nach dem Fix
+
+- `pytest -q`: **270 passed in 16,10 s**, Exitcode 0.
+- `compileall`: Exitcode 0.
+- `scripts/verify_ui_bridge.py`: PASS, 0 Befunde, Exitcode 0.
+- `node --check`: Exitcode 0.
+- `scripts/release_smoke.py`: Exitcode 0, Ausgabe `build/e2e-smoke-20260905-150558`; SRT 199 Bytes, DVD-ISO 2627584 Bytes — wertidentisch zu den vorherigen gruenen Laeufen.
+- `git diff --check`: Exitcode 0.
+- Launcher-Import real geprueft: `sys.stdout` und `sys.stderr` melden anschliessend `utf-8` / `replace`.
+
+#### Bekannte, bewusst nicht behobene Beobachtungen (keine Blocker)
+
+- `Downloader._claim_unique_target` (`src/core/downloader.py`) wird von keinem Produktpfad aufgerufen, nur von `tests/test_media_process_streams.py`. Toter Produktcode, Kandidat fuer den naechsten Aufraeumdurchlauf.
+- Die Arbeitsdateien im Ausgabeordner (`.retrodisc-dl-*`, `.<stem>.retrodisc-concat-*.txt`, `.<stem>.retrodisc-upscale-*`) sind unter Windows waehrend eines Laufs sichtbar, da Windows fuehrende Punkte nicht ausblendet. Sie werden im `finally` entfernt; bei hartem Prozessabbruch koennen Reste bleiben.
+
+#### Stand
+
+**Windows ist ausdruecklich NICHT bei 100 %.** Der Fix ist auf Source-Ebene vollstaendig belegt, aber noch **nicht am gebauten Artefakt** bestaetigt. Offen und zwingend vor jeder 100-%-Aussage:
+
+1. Neuer Freeze, frischer Build, Artefakt- und Runtime-Gate auf den neuen Hashes.
+2. **Wiederholung genau des realen Downloads mit Unicode-Titel an der gebauten EXE.** PASS nur, wenn die Datei vorhanden ist, der Job DONE/gruen zeigt und kein charmap-/UnicodeEncodeError erscheint.
+3. Der automatisierte Windows-Acceptance-Harness, der genau diese Luecke dauerhaft schliesst.
+
+Unveraendert offen bleiben die beiden bekannten externen Punkte: die fehlende vertrauenswuerdige Code-Signatur und der physische Brenn- und Rueckleseteset ohne verfuegbaren Rohling.

@@ -237,8 +237,6 @@ class Downloader:
             if final_path is None:
                 raise DownloadError("Download-Datei nicht gefunden")
 
-            log.info("Download abgeschlossen", path=str(final_path))
-            return final_path
         except BaseException:
             if proc is not None:
                 await terminate_process(proc)
@@ -248,6 +246,24 @@ class Downloader:
                 job._process = None
             # Nur das eigene Arbeitsverzeichnis entfernen — nie den Ausgabebaum.
             shutil.rmtree(work_dir, ignore_errors=True)
+
+        # Der Erfolgs-Log steht bewusst ausserhalb des try/except. Die Datei ist
+        # hier bereits veroeffentlicht. Ein Problem beim Schreiben der Logzeile -
+        # etwa ein im Ausgabekanal nicht darstellbares Zeichen aus dem Titel -
+        # darf einen fertigen Download nicht nachtraeglich zum Fehler machen.
+        try:
+            log.info("Download abgeschlossen", path=str(final_path))
+        except UnicodeEncodeError:
+            # Die Datei ist veroeffentlicht und vollstaendig. Wenn nur der
+            # Ausgabekanal ein Zeichen des Namens nicht darstellen kann, darf
+            # das keinen fertigen Download zum Fehlschlag machen. Der Vorfall
+            # wird nicht verschluckt, sondern gemeldet - nur eben ASCII-sicher,
+            # damit die Meldung ueber denselben Kanal nicht erneut scheitert.
+            log.warning(
+                "Download abgeschlossen; Pfad im Ausgabekanal nicht darstellbar",
+                path_ascii=ascii(str(final_path)),
+            )
+        return final_path
 
     # Transiente yt-dlp-Zwischendateien, die nie veroeffentlicht werden.
     _TRANSIENT_SUFFIXES = frozenset(

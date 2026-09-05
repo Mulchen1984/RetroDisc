@@ -45,12 +45,22 @@ LOG_DIR = APPDATA / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
 # ── Logging ───────────────────────────────────────────────────────────
+# Zuerst die Standardstroeme UTF-8-sicher machen. Windows liefert sie mit der
+# ANSI-Codepage (cp1252); ein Dateiname mit Emoji oder CJK-Zeichen - bei
+# YouTube-Titeln der Normalfall - loest dort sonst schon beim blossen Loggen
+# eine UnicodeEncodeError aus und kann bereits fertige Arbeit als Fehler
+# erscheinen lassen. Muss vor den Handlern laufen, die die Stroeme einsammeln.
+from src.utils.logging_setup import configure_console_encoding, configure_structlog
+
+_STDOUT, _STDERR = configure_console_encoding()
+configure_structlog(_STDOUT)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
         logging.FileHandler(LOG_DIR / "retrodisc.log", encoding="utf-8"),
-        logging.StreamHandler(sys.stdout),
+        logging.StreamHandler(_STDOUT) if _STDOUT is not None else logging.NullHandler(),
     ],
 )
 log = logging.getLogger("retrodisc")
