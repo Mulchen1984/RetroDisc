@@ -6,13 +6,14 @@ import asyncio
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.core.downloader import Downloader
+from src.core.downloader import DownloadError, Downloader
 from src.core.ffmpeg import FFmpeg
 from src.services.upscaler import UpscalerError, VideoUpscaler
 from src.utils.subprocesses import (
@@ -178,18 +179,32 @@ async def test_ffmpeg_reader_failure_reaps_child_and_only_removes_staging_output
         assert not output_path.exists()
 
 
+def _work_dir_from_cmd(cmd: tuple) -> Path:
+    """Extract the private per-call download directory from a yt-dlp argv."""
+    parts = [str(c) for c in cmd]
+    return Path(parts[parts.index("-o") + 1]).parent
+
+
 @pytest.mark.asyncio
-async def test_download_failure_removes_only_new_partial_files(tmp_path):
-    existing_partial = tmp_path / "older-download.mp4.part"
-    existing_partial.write_bytes(b"resume-data")
-    new_partial = tmp_path / "current-download.mp4.part"
+async def test_download_failure_cleans_only_its_own_work_dir(tmp_path):
+    # A parallel download's partial, sitting directly in the shared output dir …
+    other_partial = tmp_path / "parallel-download.mp4.part"
+    other_partial.write_bytes(b"resume-data")
+    # … and another parallel job's private work area with its own partial.
+    other_work = tmp_path / ".retrodisc-dl-parallel"
+    other_work.mkdir()
+    (other_work / "clip.mp4.part").write_bytes(b"other-job-partial")
+
     process = _FakeDownloadProcess()
     downloader = Downloader(
         ytdlp_path="yt-dlp", output_dir=tmp_path, ffmpeg_path="ffmpeg"
     )
+    seen: dict = {}
 
-    async def fake_create(*_cmd, **_kwargs):
-        new_partial.write_bytes(b"new-partial-data")
+    async def fake_create(*cmd, **_kwargs):
+        work_dir = _work_dir_from_cmd(cmd)
+        seen["work_dir"] = work_dir
+        (work_dir / "current.mp4.part").write_bytes(b"this-job-partial")
         return process
 
     with patch("src.core.downloader.create_hidden_subprocess", new=fake_create):
@@ -198,8 +213,165 @@ async def test_download_failure_removes_only_new_partial_files(tmp_path):
 
     assert process.terminated
     assert process.waited
-    assert existing_partial.read_bytes() == b"resume-data"
-    assert not new_partial.exists()
+    # This call owns exactly one work dir and removes only that.
+    assert not seen["work_dir"].exists()
+    # Nothing that belongs to other downloads is scanned or deleted.
+    assert other_partial.read_bytes() == b"resume-data"
+    assert (other_work / "clip.mp4.part").read_bytes() == b"other-job-partial"
+
+
+@pytest.mark.asyncio
+async def test_successful_download_publishes_media_and_sidecars_from_work_dir(tmp_path):
+    downloader = Downloader(
+        ytdlp_path="yt-dlp", output_dir=tmp_path, ffmpeg_path="ffmpeg"
+    )
+
+    async def fake_create(*cmd, **_kwargs):
+        work_dir = _work_dir_from_cmd(cmd)
+        media = work_dir / "Great Video [abc123].mp4"
+        media.write_bytes(b"downloaded-media")
+        (work_dir / "Great Video [abc123].de.srt").write_text(
+            "1\n00:00:00,0 --> 00:00:01,0\nhallo\n", encoding="utf-8"
+        )
+        (work_dir / "Great Video [abc123].mp4.part").write_bytes(b"leftover")
+        return _FinishedProcess(
+            stdout=f"[download] 100%\n__RETRODISC_FILE__:{media}\n".encode()
+        )
+
+    with patch("src.core.downloader.create_hidden_subprocess", new=fake_create):
+        result = await downloader.download("https://example.invalid/v")
+
+    assert result == tmp_path / "Great Video [abc123].mp4"
+    assert result.read_bytes() == b"downloaded-media"
+    assert (tmp_path / "Great Video [abc123].de.srt").is_file()
+    # The transient .part file is never published, the work dir is gone.
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "Great Video [abc123].de.srt",
+        "Great Video [abc123].mp4",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_download_never_overwrites_an_existing_output_file(tmp_path):
+    existing = tmp_path / "Clip [x].mp4"
+    existing.write_bytes(b"do-not-touch")
+    downloader = Downloader(
+        ytdlp_path="yt-dlp", output_dir=tmp_path, ffmpeg_path="ffmpeg"
+    )
+
+    async def fake_create(*cmd, **_kwargs):
+        work_dir = _work_dir_from_cmd(cmd)
+        media = work_dir / "Clip [x].mp4"
+        media.write_bytes(b"fresh-download")
+        return _FinishedProcess(stdout=f"__RETRODISC_FILE__:{media}\n".encode())
+
+    with patch("src.core.downloader.create_hidden_subprocess", new=fake_create):
+        result = await downloader.download("https://example.invalid/v")
+
+    assert existing.read_bytes() == b"do-not-touch"
+    assert result == tmp_path / "Clip [x] (1).mp4"
+    assert result.read_bytes() == b"fresh-download"
+
+
+@pytest.mark.asyncio
+async def test_parallel_downloads_do_not_touch_each_others_files(tmp_path):
+    downloader = Downloader(
+        ytdlp_path="yt-dlp", output_dir=tmp_path, ffmpeg_path="ffmpeg"
+    )
+    failing_started = asyncio.Event()
+
+    async def fake_create(*cmd, **_kwargs):
+        work_dir = _work_dir_from_cmd(cmd)
+        if str(cmd[-1]).endswith("/fail"):
+            (work_dir / "fail.mp4.part").write_bytes(b"partial")
+            failing_started.set()
+            proc = _FinishedProcess(stdout=b"[download]  50%\n")
+            proc.returncode = 1
+            return proc
+        await failing_started.wait()
+        media = work_dir / "ok [id].mp4"
+        media.write_bytes(b"good")
+        return _FinishedProcess(stdout=f"__RETRODISC_FILE__:{media}\n".encode())
+
+    with patch("src.core.downloader.create_hidden_subprocess", new=fake_create):
+        results = await asyncio.gather(
+            downloader.download("https://example.invalid/fail"),
+            downloader.download("https://example.invalid/ok"),
+            return_exceptions=True,
+        )
+
+    assert isinstance(results[0], DownloadError)
+    assert results[1] == tmp_path / "ok [id].mp4"
+    assert results[1].read_bytes() == b"good"
+    # The failing job took its partial with it; nothing else leaked.
+    assert sorted(p.name for p in tmp_path.rglob("*")) == ["ok [id].mp4"]
+
+
+@pytest.mark.asyncio
+async def test_download_without_after_move_line_falls_back_to_the_media_file(tmp_path):
+    downloader = Downloader(
+        ytdlp_path="yt-dlp", output_dir=tmp_path, ffmpeg_path="ffmpeg"
+    )
+
+    async def fake_create(*cmd, **_kwargs):
+        work_dir = _work_dir_from_cmd(cmd)
+        (work_dir / "Video [id].mp4").write_bytes(b"the-media")
+        # A sidecar that is *larger* than the media must not win the fallback.
+        (work_dir / "Video [id].de.srt").write_text("x" * 500, encoding="utf-8")
+        return _FinishedProcess(stdout=b"[download] 100%\n")
+
+    with patch("src.core.downloader.create_hidden_subprocess", new=fake_create):
+        result = await downloader.download("https://example.invalid/v")
+
+    assert result == tmp_path / "Video [id].mp4"
+    assert (tmp_path / "Video [id].de.srt").is_file()
+
+
+def test_build_download_command_roots_template_in_dest_dir(tmp_path):
+    downloader = Downloader(ytdlp_path="yt-dlp", output_dir=tmp_path)
+    work = tmp_path / ".retrodisc-dl-abc"
+    common = dict(
+        url="https://example.invalid/v", format="best", output_template=None,
+        extract_audio=False, audio_format="mp3", audio_quality="320k",
+        subtitles=False, subtitle_langs="de,en",
+    )
+
+    scoped = downloader._build_download_command(dest_dir=work, **common)
+    assert Path(scoped[scoped.index("-o") + 1]).parent == work
+
+    default = downloader._build_download_command(**common)
+    assert Path(default[default.index("-o") + 1]).parent == tmp_path
+
+
+def test_claim_unique_target_is_atomic_under_real_thread_concurrency(tmp_path):
+    """A genuine OS-level race (real threads, not cooperative asyncio tasks)
+    must never let two publishes agree on the same free name.
+
+    A plain ``exists()`` check followed later by ``os.replace`` is a classic
+    check-then-act race: two callers can both observe the same "free" name
+    before either claims it, and the second replace then silently overwrites
+    the first caller's file. asyncio.gather alone can never exercise this
+    window (this method makes no ``await`` call, so the event loop cannot
+    interleave callers), so real OS threads are required to prove the fix.
+    """
+    target = tmp_path / "race.mp4"
+    claimed: list[Path] = []
+    lock = threading.Lock()
+
+    def claim():
+        path = Downloader._claim_unique_target(target)
+        with lock:
+            claimed.append(path)
+
+    threads = [threading.Thread(target=claim) for _ in range(32)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert len(claimed) == 32
+    assert len(set(claimed)) == 32  # every thread won a distinct name
+    assert all(path.is_file() for path in claimed)
 
 
 class _FinishedProcess:
@@ -391,3 +563,210 @@ async def test_windows_termination_actually_kills_spawned_descendant(tmp_path):
                 stderr=subprocess.PIPE,
                 check=False,
             )
+
+
+# ── FFmpeg merge: eigene, eindeutige Concat-Liste ──────────────────────
+
+def _concat_path_from_cmd(cmd: tuple) -> Path:
+    parts = [str(c) for c in cmd]
+    return Path(parts[parts.index("-i") + 1])
+
+
+@pytest.mark.asyncio
+async def test_merge_uses_a_private_concat_file_and_spares_a_foreign_one(tmp_path):
+    a = tmp_path / "a.mp4"
+    a.write_bytes(b"a")
+    b = tmp_path / "b.mp4"
+    b.write_bytes(b"b")
+    output = tmp_path / "final.mp4"
+    # The old deterministic name would have been clobbered and then deleted.
+    foreign = tmp_path / "_concat_final.txt"
+    foreign.write_text("someone elses list", encoding="utf-8")
+    seen: dict = {}
+
+    async def fake_create(*cmd, **_kwargs):
+        concat = _concat_path_from_cmd(cmd)
+        seen["concat"] = concat
+        # Readable in full here => the descriptor was flushed and closed.
+        seen["text"] = concat.read_text(encoding="utf-8")
+        Path(str(cmd[-1])).write_bytes(b"merged")
+        return _FinishedProcess(stderr=b"muxing")
+
+    ffmpeg = FFmpeg(ffmpeg_path="ffmpeg", ffprobe_path="ffprobe")
+    with patch("src.core.ffmpeg.create_hidden_subprocess", new=fake_create):
+        result = await ffmpeg.merge([a, b], output)
+
+    assert result == output
+    assert output.read_bytes() == b"merged"
+    assert foreign.read_text(encoding="utf-8") == "someone elses list"
+    assert seen["concat"].name != "_concat_final.txt"
+    assert seen["concat"].name.startswith(".final.retrodisc-concat-")
+    assert not seen["concat"].exists()
+    assert str(a.resolve()) in seen["text"]
+    assert str(b.resolve()) in seen["text"]
+
+
+@pytest.mark.asyncio
+async def test_merge_concat_list_quotes_apostrophes_in_paths(tmp_path):
+    tricky = tmp_path / "Rock 'n' Roll.mp4"
+    tricky.write_bytes(b"x")
+    plain = tmp_path / "plain.mp4"
+    plain.write_bytes(b"y")
+    captured: dict = {}
+
+    async def fake_create(*cmd, **_kwargs):
+        captured["text"] = _concat_path_from_cmd(cmd).read_text(encoding="utf-8")
+        Path(str(cmd[-1])).write_bytes(b"merged")
+        return _FinishedProcess(stderr=b"ok")
+
+    ffmpeg = FFmpeg(ffmpeg_path="ffmpeg", ffprobe_path="ffprobe")
+    with patch("src.core.ffmpeg.create_hidden_subprocess", new=fake_create):
+        await ffmpeg.merge([tricky, plain], tmp_path / "out.mp4")
+
+    assert "Rock '\\''n'\\'' Roll.mp4" in captured["text"]
+    assert f"file '{plain.resolve()}'" in captured["text"]
+
+
+@pytest.mark.asyncio
+async def test_parallel_merges_to_same_output_use_distinct_concat_files(tmp_path):
+    a = tmp_path / "a.mp4"
+    a.write_bytes(b"a")
+    b = tmp_path / "b.mp4"
+    b.write_bytes(b"b")
+    output = tmp_path / "same.mp4"
+    concat_paths: list[Path] = []
+    both_ready = asyncio.Event()
+
+    async def fake_create(*cmd, **_kwargs):
+        concat = _concat_path_from_cmd(cmd)
+        concat_paths.append(concat)
+        if len(concat_paths) >= 2:
+            both_ready.set()
+        await both_ready.wait()
+        # Both jobs' concat lists coexist right now, each still its own file.
+        assert concat.is_file()
+        Path(str(cmd[-1])).write_bytes(b"merged")
+        return _FinishedProcess(stderr=b"ok")
+
+    ffmpeg = FFmpeg(ffmpeg_path="ffmpeg", ffprobe_path="ffprobe")
+    with patch("src.core.ffmpeg.create_hidden_subprocess", new=fake_create):
+        results = await asyncio.gather(
+            ffmpeg.merge([a, b], output),
+            ffmpeg.merge([a, b], output),
+        )
+
+    assert results == [output, output]
+    assert len({str(p) for p in concat_paths}) == 2
+    assert not any(p.exists() for p in concat_paths)
+
+
+# ── Upscaler / Interpolation: eigene, eindeutige Scratch-Verzeichnisse ──
+
+def _fake_ncnn_backend():
+    """Stand-in for ffmpeg + realesrgan/rife that only touches given paths."""
+    async def fake_create(*cmd, **_kwargs):
+        parts = [str(c) for c in cmd]
+        target = parts[-1]
+        if target.endswith("frame_%08d.png"):
+            frames = Path(target).parent
+            frames.mkdir(parents=True, exist_ok=True)
+            (frames / "frame_00000001.png").write_bytes(b"png")
+        elif "-framerate" in parts:
+            Path(target).write_bytes(b"rendered-video")
+        return _FinishedProcess(stderr=b"1/1\n")
+
+    return fake_create
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "method_name, deterministic, prefix",
+    [
+        ("upscale", "_upscale_temp_clip_out", ".clip_out.retrodisc-upscale-"),
+        ("interpolate", "_interpolate_temp_clip_out", ".clip_out.retrodisc-interpolate-"),
+    ],
+)
+async def test_ncnn_cleanup_spares_a_foreign_deterministic_temp_dir(
+    tmp_path, monkeypatch, method_name, deterministic, prefix
+):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"src")
+    output = tmp_path / "clip_out.mp4"
+    foreign = tmp_path / deterministic
+    foreign.mkdir()
+    (foreign / "keep.txt").write_text("keep me", encoding="utf-8")
+
+    upscaler = VideoUpscaler(
+        realesrgan_path="realesrgan", rife_path="rife", ffmpeg_path="ffmpeg"
+    )
+    monkeypatch.setattr(
+        "src.services.upscaler.shutil.which", lambda _p: "/usr/bin/tool"
+    )
+    monkeypatch.setattr(upscaler, "_get_fps", AsyncMock(return_value=25.0))
+
+    with patch(
+        "src.services.upscaler.create_hidden_subprocess", new=_fake_ncnn_backend()
+    ):
+        kwargs = {"scale": 2} if method_name == "upscale" else {"target_fps": 50}
+        result = await getattr(upscaler, method_name)(source, output, **kwargs)
+
+    assert result == output
+    assert output.read_bytes() == b"rendered-video"
+    assert (foreign / "keep.txt").read_text(encoding="utf-8") == "keep me"
+    assert not any(p.name.startswith(prefix) for p in tmp_path.iterdir())
+
+
+@pytest.mark.asyncio
+async def test_parallel_upscales_to_same_output_keep_isolated_scratch_dirs(
+    tmp_path, monkeypatch
+):
+    src_a = tmp_path / "a.mp4"
+    src_a.write_bytes(b"a")
+    src_b = tmp_path / "b.mp4"
+    src_b.write_bytes(b"b")
+    output = tmp_path / "shared_2x.mp4"
+
+    monkeypatch.setattr(
+        "src.services.upscaler.shutil.which", lambda _p: "/usr/bin/tool"
+    )
+    upscaler = VideoUpscaler(
+        realesrgan_path="realesrgan", rife_path="rife", ffmpeg_path="ffmpeg"
+    )
+    monkeypatch.setattr(upscaler, "_get_fps", AsyncMock(return_value=25.0))
+
+    scratch_dirs: list[Path] = []
+    both_extracted = asyncio.Event()
+    extracted = 0
+
+    async def fake_create(*cmd, **_kwargs):
+        nonlocal extracted
+        parts = [str(c) for c in cmd]
+        target = parts[-1]
+        if target.endswith("frame_%08d.png"):
+            frames = Path(target).parent
+            frames.mkdir(parents=True, exist_ok=True)
+            (frames / "frame_00000001.png").write_bytes(b"png")
+            scratch_dirs.append(frames.parent)
+            extracted += 1
+            if extracted >= 2:
+                both_extracted.set()
+            await both_extracted.wait()
+            # Each job must still see exactly its own single extracted frame.
+            assert sorted(p.name for p in frames.iterdir()) == ["frame_00000001.png"]
+        elif "-framerate" in parts:
+            Path(target).write_bytes(b"video")
+        return _FinishedProcess(stderr=b"1/1\n")
+
+    with patch("src.services.upscaler.create_hidden_subprocess", new=fake_create):
+        results = await asyncio.gather(
+            upscaler.upscale(src_a, output, scale=2),
+            upscaler.upscale(src_b, output, scale=2),
+        )
+
+    assert results == [output, output]
+    assert output.is_file()
+    assert len({str(d) for d in scratch_dirs}) == 2
+    assert not any(d.exists() for d in scratch_dirs)
+    assert not any(
+        p.name.startswith(".shared_2x.retrodisc-upscale-") for p in tmp_path.iterdir()
+    )

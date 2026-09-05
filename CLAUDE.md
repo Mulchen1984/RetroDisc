@@ -85,11 +85,28 @@ Die gemessenen Hashes gehören anschließend ins Journal.
 
 ## Plattform
 
+Aktueller Nutzerauftrag vom 2026-09-05: zuerst Windows fertigstellen;
+macOS danach auf denselben Funktionsstand bringen. Die folgenden Angaben
+beschreiben den derzeit belegten Bauweg, keine dauerhafte Absage an macOS.
+
 RetroDisc ist ein **Windows**-Produkt. `build.py` baut für Windows,
-`prepare_vendor.py` vendort Windows-Binärdateien, und die CI baut ausschließlich
-Windows-Artefakte. Es gibt weiterhin macOS-Reste im Repository
-(`BUILD_MACOS.sh`, `create_dmg.py`, `retrodisc.spec`); sie sind an keinem Gate
-belegt und dürfen nicht als unterstützter Pfad dargestellt werden.
+`prepare_vendor.py` vendort Windows-Binärdateien, und
+`.github/workflows/build.yml` enthält genau einen Buildjob (`build-windows`).
+Der macOS-Job wurde am 2026-09-03 bewusst gestrichen; die Entscheidung steht im
+Journal.
+
+Verbliebene macOS-Reste im Repository — an keinem Gate belegt, von keinem
+Buildpfad referenziert, nicht unterstützt:
+
+- `BUILD_MACOS.sh`
+- `create_dmg.py`
+- `assets/retrodisc.icns` (wird ausschließlich von `BUILD_MACOS.sh` benutzt)
+
+`retrodisc.spec` und `retrodisc_onefile.spec` sind **keine** macOS-Reste,
+sondern ältere Windows-Specs. Produktiv ist ausschließlich
+`retrodisc_final.spec` über `build.py`. `retrodisc_portable.py` und
+`src/ui/desktop.py` enthalten weiterhin Plattformzweige für Darwin/Linux;
+beide sind nicht der produktive Einstieg der gepackten EXE.
 
 ## Signierung
 

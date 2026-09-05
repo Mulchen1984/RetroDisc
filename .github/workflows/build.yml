@@ -36,12 +36,28 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install pyinstaller pywebview certifi
 
+      - name: Node.js für das UI-Gate installieren
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Source-Gates ausführen
+        shell: pwsh
         run: |
           python -m pytest -q
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m compileall -q src installer scripts tools build.py retrodisc_launcher.py prepare_vendor.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python prepare_vendor.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python .hermes/verify_core.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/verify_ui_bridge.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --check build/ui-audit/inline.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/release_smoke.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Canonical Windows-Build (PR/Branch, unsigniert)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
@@ -92,6 +108,24 @@ jobs:
             }
           }
 
+      - name: Signaturpflicht auf Tags durchsetzen
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        shell: pwsh
+        run: |
+          # build.py --sign hat die Signatur schon verifiziert; das hier ist der
+          # fail-closed Riegel der Pipeline selbst, direkt vor Upload und Release.
+          # Die Portable-ZIP trägt die Signatur über die eingebettete EXE weiter.
+          $mustBeSigned = @(
+            "dist\RetroDisc.exe",
+            "Output\RetroDisc_Setup_1.0.0.exe"
+          )
+          foreach ($artifact in $mustBeSigned) {
+            $status = (Get-AuthenticodeSignature -LiteralPath $artifact).Status
+            if ($status -ne 'Valid') {
+              throw "Tag-Release verweigert: $artifact ist nicht gueltig signiert ($status)."
+            }
+          }
+
       - name: Windows-Artefakte hochladen
         uses: actions/upload-artifact@v4
         with:
@@ -138,5 +172,6 @@ jobs:
             release/dist/RetroDisc.exe
             release/Output/RetroDisc_1.0.0_Portable.zip
             release/Output/RetroDisc_Setup_1.0.0.exe
+          fail_on_unmatched_files: true
           draft: false
           prerelease: false

@@ -8,6 +8,7 @@ before they can enter ``vendor/``.
 """
 
 import hashlib
+import http.client
 import json
 import os
 import shutil
@@ -141,6 +142,8 @@ def _manifest_tree_matches(
         marker = json.loads(marker_path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         return False
+    if not isinstance(marker, dict):
+        return False
     files = marker.pop("files", None)
     if marker != expected_metadata or not isinstance(files, dict) or not files:
         return False
@@ -153,13 +156,37 @@ def _manifest_tree_matches(
     return _tree_matches(root, files, allowed_extra={marker_name})
 
 
+def _marker_metadata_matches(
+    root: Path,
+    marker_name: str,
+    expected: dict[str, str],
+) -> bool:
+    """Return True only if *marker_name* parses to exactly *expected*.
+
+    For trees whose file manifest is a fixed audited constant (Whisper), the
+    provenance marker still has to name the exact pinned source revision, so a
+    stale tree from an earlier revision is rejected and re-fetched.
+    """
+    try:
+        marker = json.loads((root / marker_name).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return False
+    return marker == expected
+
+
 def download_with_progress(
     url: str,
     dest: Path,
     label: str,
     expected_sha256: str | None = None,
 ) -> None:
-    """Download atomically and reject bytes that do not match a known digest."""
+    """Download atomically and reject bytes that do not match a known digest.
+
+    *dest* is never touched until a complete, digest-checked copy exists: the
+    transfer lands in a ``.download`` sidecar that is renamed into place only on
+    success and removed on every failure path -- a mid-stream connection drop, a
+    bad digest or a keyboard interrupt all leave the previous file intact.
+    """
     print(f"  Lade {label}...")
     print(f"  URL: {url}")
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -206,10 +233,14 @@ def download_with_progress(
         os.replace(partial, dest)
         print(f"\r  OK: {label} heruntergeladen ({done/1024/1024:.1f} MB)")
 
-    except (OSError, RuntimeError, urllib.error.URLError) as e:
-        partial.unlink(missing_ok=True)
+    except (OSError, RuntimeError, http.client.HTTPException, urllib.error.URLError) as e:
         print(f"\n  FEHLER: Download fehlgeschlagen oder ungültig: {e}")
         raise
+    finally:
+        # os.replace() consumes the sidecar on success; on any failure it stays
+        # behind and must go, so a later run cannot mistake a truncated file for
+        # a finished download.
+        partial.unlink(missing_ok=True)
 
 
 def extract_ffmpeg(zip_path: Path) -> None:
@@ -325,6 +356,8 @@ def ffmpeg_is_ready() -> bool:
         marker = json.loads(FFMPEG_SOURCE_MARKER.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         return False
+    if not isinstance(marker, dict):
+        return False
     files = marker.pop("files", None)
     if marker != {
         "tag": FFMPEG_TAG,
@@ -363,10 +396,15 @@ def dvdtools_are_ready() -> bool:
 
 
 def whisper_is_ready() -> bool:
+    root = VENDOR_DIR / "whisper-base"
     return _tree_matches(
-        VENDOR_DIR / "whisper-base",
+        root,
         WHISPER_REQUIRED_SHA256,
         allowed_extra={"RETRODISC_SOURCE.json"},
+    ) and _marker_metadata_matches(
+        root,
+        "RETRODISC_SOURCE.json",
+        {"repository": WHISPER_REPO, "revision": WHISPER_REVISION},
     )
 
 

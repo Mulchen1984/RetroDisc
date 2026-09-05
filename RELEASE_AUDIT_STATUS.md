@@ -1,10 +1,14 @@
 # RetroDisc Release-Audit-Status
 
-Letzte Aktualisierung: 2026-09-04 00:30 CEST
+Letzte Aktualisierung: 2026-09-05 — Windows-Abschluss in Arbeit
 
 ## Verbindlicher Abschlussstatus
 
-**SOFTWARE COMPLETE — NOT SIGNED, DAHER NICHT ZUR WEITERGABE FREIGEGEBEN**
+**NOT RELEASE READY — aktueller Windows-Patch wird final verifiziert.**
+
+Der aktuelle Arbeitsbaum enthaelt weitere Aenderungen nach `86098fe` (DVD-Toolpfade/Settings, Download-Publikation, private Tempdateien und Vendor-Guards). Die folgenden historischen Belege zu `1c486cc` gelten ausschliesslich fuer diesen alten Stand. Fuer den aktuellen Patch sind nach unabhaengiger QA alle Source-Gates, ein neuer Freeze, ein frischer Build und die Artefakt-/Runtime-Gates erforderlich. Der Baseline-Testlauf am 2026-09-05 bestand mit **220 passed in 12.68s**, Exitcode 0, eigenem pytest-Tempordner. Die danach aufgenommenen Fixes muessen erneut getestet werden.
+
+Aktueller Nutzerauftrag: zuerst Windows abschliessen. macOS-Unterstuetzung ist wieder gewuenscht, aber auf spaeter verschoben; sie ist derzeit nicht verifiziert. Ein physischer DVD-Brenn-/Ruecklesetest und eine vertrauenswuerdige Signatur bleiben verpflichtende offene Release-Gates. Am 2026-09-05 wurden beide physischen Laufwerke erneut ohne Medium gemeldet; als Code-Signing-Zertifikat ist nur das abgelaufene Selftest-Zertifikat vorhanden.
 
 Begründung: Auf dem Freeze-Stand `1c486cc` sind alle automatisierbaren Gates grün und real belegt — Source-Gates (193 Tests), vollständiger Real-Media-Smoke, UI/Bridge-Vergleich, Artefakt-Gate, Installation, **Start aus der Installation**, Deinstallation, Laufwerkserkennung, `default_device`, Disc-Erkennung, Rip-Workflow und YouTube-Download. Der Runtime-Gate auf den finalen Artefakten ist bestanden, ohne ein einziges CodeIntegrity-Ereignis.
 

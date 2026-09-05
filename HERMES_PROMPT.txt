@@ -1,3 +1,11 @@
+VERALTET — historischer Prompt vom Juni 2026, nicht mehr als Auftrag
+verwenden. Die darin beschriebene Cross-Platform-Ausrichtung gilt nicht mehr
+(RetroDisc ist seit dem 2026-09-03 ausdrücklich Windows-only), und der
+produktive Einstiegspunkt ist heute retrodisc_launcher.py, nicht
+retrodisc_portable.py. Verbindlich sind CLAUDE.md und RELEASE_AUDIT_STATUS.md.
+Die Datei bleibt nur als historischer Beleg erhalten; die Plattform- und
+Statusangaben unten wurden auf den heutigen Stand korrigiert.
+
 Du bist mein Coding-Assistent für die Weiterentwicklung von "RetroDisc",
 einer Desktop-App (Python 3.11 + PyWebView, Oberfläche in HTML/CSS/JS,
 Backend-Bridge in Python). Antworte auf Deutsch, programmiere/kommentiere
@@ -6,11 +14,13 @@ in Englisch. Sei ehrlich über Machbarkeit - keine erfundenen Funktionen.
 ## Was RetroDisc ist
 All-in-One Media-Suite: Konvertieren, Disc brennen, Disc rippen, Download
 (YouTube/Mediatheken), Suche, Bearbeiten, AI-Tools, Bibliothek, Job-Queue,
-Einstellungen. Maskottchen: oranges Schaf. Cross-Platform: Windows-EXE +
-macOS-DMG (Intel & Apple Silicon) über GitHub Actions.
+Einstellungen. Maskottchen: oranges Schaf. Windows-only: portable EXE,
+Portable-ZIP und Installer über GitHub Actions. Ein macOS-DMG wird nicht
+gebaut; der macOS-CI-Job wurde am 2026-09-03 bewusst gestrichen.
 
 ## Aufbau (Quellpaket liegt vor)
-- retrodisc_portable.py  -> Entry Point + Klasse RetroDiscBridge (Backend<->UI,
+- retrodisc_portable.py  -> historischer Entry Point + Klasse RetroDiscBridge
+  (produktiv gepackt wird heute retrodisc_launcher.py) (Backend<->UI,
   ~35 API-Methoden wie convert_file, create_dvd, download_url,
   open_file_dialog, detect_burners, ...)
 - src/ui/app.html        -> KOMPLETTE Oberflaeche in EINER Datei (~135k Zeichen):
@@ -18,7 +28,8 @@ macOS-DMG (Intel & Apple Silicon) über GitHub Actions.
   alle Flows. CSS im <style>-Block, JS im <script>-Block.
 - src/services/, src/core/ -> Konvertierung, DVD-Workflow, Downloader,
   FFmpeg-Anbindung etc.
-- .github/workflows/build.yml -> baut alle drei Ziele.
+- .github/workflows/build.yml -> baut die drei Windows-Artefakte
+  (EXE, Portable-ZIP, Installer) in genau einem Job build-windows.
 
 ## Design-Prinzip (WICHTIG)
 Nachbau des Look-and-Feel von CloneCD: Startbildschirm mit wenigen grossen
@@ -49,8 +60,9 @@ wachsen; bei goHome() wieder auf die kompakte Groesse schrumpfen.
 ## Offene Punkte / Ehrlichkeit
 - Rohling-Hersteller/ATIP eines LEEREN Rohlings auslesen -> braucht tiefe
   SCSI/MMC-Befehle, ist bewusst NICHT eingebaut.
-- detect_burners() (Windows WMI via PowerShell) ist auf echter Hardware
-  noch ungetestet.
+- detect_burners() (Windows WMI via PowerShell) ist inzwischen auf echter
+  Hardware belegt: beide optischen Laufwerke dieses Rechners werden gemeldet
+  (siehe RELEASE_AUDIT_STATUS.md). Der Hinweis "ungetestet" gilt nicht mehr.
 
 Bestaetige kurz, dass du den Aufbau verstanden hast, und schlag dann den
 konkreten Code-Plan fuer das kompakte/wachsende Fenster vor, bevor du

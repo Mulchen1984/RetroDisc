@@ -28,6 +28,12 @@ Output/
 # Downloaded/generated third-party runtimes and ML models
 vendor/
 
+# Portable runtime data written next to the app (settings.json, library.db, ...)
+RetroDisc_Data/
+
+# Machine-local agent settings (project settings stay versioned)
+.claude/settings.local.json
+
 # IDE and OS metadata
 .vscode/
 .idea/

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import shutil
+import tempfile
 import structlog
 from pathlib import Path
 from typing import Optional
@@ -409,13 +411,25 @@ class FFmpeg:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         staging_path = staging_output_path(output_path)
 
-        # Concat-Datei erstellen
-        concat_file = output_path.parent / f"_concat_{output_path.stem}.txt"
-        with open(concat_file, "w") as f:
-            for p in input_paths:
-                f.write(f"file '{Path(p).resolve()}'\n")
+        # Eindeutige, ausschliesslich dieser Operation gehoerende Concat-Liste.
+        # Ein deterministischer Name (_concat_<stem>.txt) kollidiert bei
+        # Paralleljobs und wuerde im finally eine fremde Datei ueberschreiben
+        # und loeschen. mkstemp legt die Datei exklusiv an; der Deskriptor wird
+        # vor dem FFmpeg-Start sicher geschlossen.
+        concat_fd, concat_name = tempfile.mkstemp(
+            prefix=f".{output_path.stem}.retrodisc-concat-",
+            suffix=".txt",
+            dir=output_path.parent,
+        )
+        concat_file = Path(concat_name)
 
         try:
+            with os.fdopen(concat_fd, "w", encoding="utf-8") as handle:
+                for p in input_paths:
+                    # Innerhalb von file '...' wird ein echtes ' als '\'' notiert.
+                    safe = str(Path(p).resolve()).replace("'", "'\\''")
+                    handle.write(f"file '{safe}'\n")
+
             cmd = [
                 self.ffmpeg_path, "-y",
                 "-f", "concat", "-safe", "0",
@@ -445,6 +459,7 @@ class FFmpeg:
 
             return output_path
         finally:
+            # Beide Pfade sind eindeutig und gehoeren nur dieser Operation.
             staging_path.unlink(missing_ok=True)
             concat_file.unlink(missing_ok=True)
 

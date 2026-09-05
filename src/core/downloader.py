@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import shutil
+import tempfile
 import structlog
 from pathlib import Path
 from typing import Optional
@@ -74,10 +76,17 @@ class Downloader:
         audio_quality: str,
         subtitles: bool,
         subtitle_langs: str,
+        dest_dir: Optional[Path] = None,
     ) -> list[str]:
         """Erstellt den reproduzierbaren yt-dlp-Aufruf."""
+        base_dir = Path(dest_dir) if dest_dir is not None else self.output_dir
         template = output_template or "%(title).180B [%(id)s].%(ext)s"
-        output_path = self.output_dir / template
+        template_path = Path(template)
+        if template_path.anchor or ".." in template_path.parts:
+            raise DownloadError("Das Ausgabe-Template muss ein relativer Pfad ohne '..' sein.")
+        output_path = base_dir / template
+        if not output_path.resolve().is_relative_to(base_dir.resolve()):
+            raise DownloadError("Das Ausgabe-Template verlässt das Download-Arbeitsverzeichnis.")
         format_map = {
             "480p": "bestvideo[height<=480]+bestaudio/best[height<=480]",
             "720p": "bestvideo[height<=720]+bestaudio/best[height<=720]",
@@ -167,35 +176,39 @@ class Downloader:
             Pfad zur heruntergeladenen Datei
         """
         url = self.validate_url(url)
-        before = {
-            path.resolve(): (path.stat().st_mtime_ns, path.stat().st_size)
-            for path in self.output_dir.rglob("*")
-            if path.is_file()
-        }
-        cmd = self._build_download_command(
-            url=url,
-            format=format,
-            output_template=output_template,
-            extract_audio=extract_audio,
-            audio_format=audio_format,
-            audio_quality=audio_quality,
-            subtitles=subtitles,
-            subtitle_langs=subtitle_langs,
-        )
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        log.info("Download gestartet", url=url, format=format)
-
-        proc = await create_hidden_subprocess(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        if job:
-            job._process = proc
-
-        final_path = None
+        # Jeder Aufruf laedt in ein eigenes, eindeutiges Arbeitsverzeichnis.
+        # Parallele Downloads sehen dadurch die Teildateien der anderen nicht,
+        # und ein Fehler-Cleanup kann ausschliesslich die eigenen Reste
+        # entfernen, statt den gesamten Ausgabebaum abzusuchen.
+        work_dir = Path(tempfile.mkdtemp(prefix=".retrodisc-dl-", dir=self.output_dir))
+        proc = None
+        reported_path: Optional[Path] = None
         output_lines: list[str] = []
         try:
+            cmd = self._build_download_command(
+                url=url,
+                format=format,
+                output_template=output_template,
+                extract_audio=extract_audio,
+                audio_format=audio_format,
+                audio_quality=audio_quality,
+                subtitles=subtitles,
+                subtitle_langs=subtitle_langs,
+                dest_dir=work_dir,
+            )
+
+            log.info("Download gestartet", url=url, format=format)
+
+            proc = await create_hidden_subprocess(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            if job:
+                job._process = proc
+
             async for record in iter_stream_records(proc.stdout):
                 line_str = decode_console_output(record).strip()
                 output_lines.append(line_str)
@@ -213,46 +226,165 @@ class Downloader:
 
                 # Von --print after_move ausgegebener endgültiger Dateiname.
                 if line_str.startswith("__RETRODISC_FILE__:"):
-                    final_path = Path(line_str.split(":", 1)[1].strip())
+                    reported_path = Path(line_str.split(":", 1)[1].strip())
 
             await proc.wait()
             if proc.returncode != 0:
                 details = "\n".join(output_lines)[-1200:]
                 raise DownloadError(f"Download fehlgeschlagen: {details}")
 
-            # Wenn wir den finalen Pfad nicht aus dem Output bekommen haben,
-            # suche die neueste Datei im Output-Ordner
-            if final_path is None or not final_path.exists():
-                files = []
-                for path in self.output_dir.iterdir():
-                    if not path.is_file() or path.suffix.lower() in {".part", ".ytdl", ".tmp"}:
-                        continue
-                    signature = (path.stat().st_mtime_ns, path.stat().st_size)
-                    if before.get(path.resolve()) != signature:
-                        files.append(path)
-                files.sort(key=lambda f: f.stat().st_mtime_ns, reverse=True)
-                if files:
-                    final_path = files[0]
-                else:
-                    raise DownloadError("Download-Datei nicht gefunden")
+            final_path = self._publish_downloads(work_dir, reported_path)
+            if final_path is None:
+                raise DownloadError("Download-Datei nicht gefunden")
 
             log.info("Download abgeschlossen", path=str(final_path))
             return final_path
         except BaseException:
-            await terminate_process(proc)
-            for path in self.output_dir.rglob("*"):
-                if not path.is_file() or path.resolve() in before:
-                    continue
-                lower_name = path.name.lower()
-                if (
-                    path.suffix.lower() in {".part", ".ytdl", ".tmp", ".temp", ".frag"}
-                    or ".part-frag" in lower_name
-                ):
-                    path.unlink(missing_ok=True)
+            if proc is not None:
+                await terminate_process(proc)
             raise
         finally:
-            if job and getattr(job, "_process", None) is proc:
+            if proc is not None and job and getattr(job, "_process", None) is proc:
                 job._process = None
+            # Nur das eigene Arbeitsverzeichnis entfernen — nie den Ausgabebaum.
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+    # Transiente yt-dlp-Zwischendateien, die nie veroeffentlicht werden.
+    _TRANSIENT_SUFFIXES = frozenset(
+        {".part", ".ytdl", ".tmp", ".temp", ".frag", ".aria2"}
+    )
+    # Begleitdateien neben dem eigentlichen Medium (Untertitel, Thumbnails …).
+    _SIDECAR_SUFFIXES = frozenset(
+        {".srt", ".vtt", ".ass", ".ssa", ".lrc", ".json",
+         ".ttml", ".dfxp", ".srv1", ".srv2", ".srv3", ".sbv", ".sami",
+         ".scc", ".stl", ".sub", ".smi", ".xml", ".description",
+         ".jpg", ".jpeg", ".png", ".webp", ".gif"}
+    )
+
+    def _publish_downloads(
+        self, work_dir: Path, reported_path: Optional[Path]
+    ) -> Optional[Path]:
+        """Verschiebt die fertigen Dateien aus dem privaten Arbeitsordner.
+
+        Es werden ausschliesslich Dateien dieses Aufrufs angefasst. Eine bereits
+        vorhandene Datei im Zielordner wird nie ueberschrieben; ein Namenskonflikt
+        bekommt einen Zaehler-Suffix. Zurueckgegeben wird der veroeffentlichte
+        Pfad der Hauptdatei.
+        """
+        work_root = work_dir.resolve()
+        reported_resolved = (
+            reported_path.resolve() if reported_path is not None else None
+        )
+
+        finished: list[Path] = []
+        for path in sorted(work_dir.rglob("*")):
+            if not path.is_file():
+                continue
+            if not path.resolve().is_relative_to(work_root):
+                raise DownloadError("Download-Datei liegt außerhalb des Arbeitsverzeichnisses.")
+            name = path.name.lower()
+            if path.suffix.lower() in self._TRANSIENT_SUFFIXES or ".part-frag" in name:
+                continue
+            finished.append(path)
+
+        media_like = [
+            p for p in finished if p.suffix.lower() not in self._SIDECAR_SUFFIXES
+        ]
+        if not media_like:
+            return None
+
+        primary_source = next(
+            (p for p in media_like
+             if reported_resolved is not None and p.resolve() == reported_resolved),
+            None,
+        )
+        if primary_source is None:
+            # Ohne verlaessliche Meldung die groesste Nicht-Begleitdatei waehlen.
+            primary_source = max(media_like, key=lambda p: p.stat().st_size)
+
+        # Medien mit demselben Basisnamen teilen auch ihre Begleitdateien.
+        # Bei Titeln wie "Film" und "Film.Teil2" gewinnt der längere Treffer.
+        groups: dict[tuple[Path, str], list[Path]] = {}
+        for source in media_like:
+            groups.setdefault((source.parent, source.stem), []).append(source)
+        for source in finished:
+            if source.suffix.lower() not in self._SIDECAR_SUFFIXES:
+                continue
+            matches = [
+                key for key in groups
+                if key[0] == source.parent and source.name.startswith(key[1] + ".")
+            ]
+            key = max(matches, key=lambda item: len(item[1])) if matches else (
+                source.parent, source.stem
+            )
+            groups.setdefault(key, []).append(source)
+
+        owned_targets: list[Path] = []
+        publication: list[tuple[Path, Path]] = []
+        primary_target: Optional[Path] = None
+        try:
+            for (_, stem), sources in groups.items():
+                wanted = [self.output_dir / p.relative_to(work_dir) for p in sources]
+                for target in wanted:
+                    if not target.parent.resolve().is_relative_to(self.output_dir.resolve()):
+                        raise DownloadError("Download-Ziel liegt außerhalb des Ausgabeordners.")
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                targets = self._claim_target_group(wanted, stem)
+                owned_targets.extend(targets)
+                publication.extend(zip(sources, targets))
+
+            for source, target in publication:
+                os.replace(source, target)
+                if source == primary_source:
+                    primary_target = target
+        except BaseException:
+            self._remove_claimed_targets(owned_targets)
+            raise
+
+        return primary_target
+
+    @staticmethod
+    def _remove_claimed_targets(targets: list[Path]) -> None:
+        for target in reversed(targets):
+            try:
+                target.unlink(missing_ok=True)
+            except OSError as exc:
+                # Auch bei einem gesperrten Ziel die übrigen eigenen Dateien aufräumen.
+                log.warning("Download-Cleanup fehlgeschlagen", path=str(target), error=str(exc))
+
+    @staticmethod
+    def _claim_target_group(targets: list[Path], stem: str) -> list[Path]:
+        """Reserviert alle Gruppennamen exklusiv mit demselben Kollisionszähler."""
+        for counter in range(10_000):
+            suffix = f" ({counter})" if counter else ""
+            candidates = [
+                p.with_name(f"{stem}{suffix}{p.name[len(stem):]}") for p in targets
+            ]
+            claimed: list[Path] = []
+            try:
+                for candidate in candidates:
+                    with open(candidate, "xb"):
+                        claimed.append(candidate)
+                return claimed
+            except FileExistsError:
+                Downloader._remove_claimed_targets(claimed)
+            except BaseException:
+                Downloader._remove_claimed_targets(claimed)
+                raise
+        raise DownloadError(f"Zu viele Namenskollisionen für {targets[0].name}")
+
+    @staticmethod
+    def _claim_unique_target(target: Path) -> Path:
+        """Reserviert atomar einen freien Zielpfad und weicht Kollisionen mit ' (n)' aus.
+
+        Ein blosses ``exists()``-Check gefolgt von ``os.replace`` ist eine
+        Wettlaufbedingung: zwei echt parallele Publishes (verschiedene Prozesse,
+        oder ein kuenftiger Wechsel auf echte Threads) koennten denselben freien
+        Namen sehen und der zweite ``os.replace`` wuerde den ersten Download
+        klanglos ueberschreiben. Das exklusive ``x``-Open ist ein einziger
+        atomarer Syscall (``O_CREAT | O_EXCL``) und schliesst dieses Fenster.
+        """
+        return Downloader._claim_target_group([target], target.stem)[0]
 
     async def search_youtube(
         self,

@@ -277,10 +277,11 @@ class RetroDiscBridge:
         )
         self.search = MediaSearch(downloader=self.downloader)
         dvd_bin = BUNDLE_DIR / "vendor" / "dvdtools"
+        disc_paths = self._resolve_disc_tool_paths(self.settings.tools)
         self.disc = DiscTools(
-            dvdauthor_path=str(dvd_bin / "dvdauthor.exe") if (dvd_bin / "dvdauthor.exe").is_file() else self.settings.tools.dvdauthor,
-            mkisofs_path=str(dvd_bin / "mkisofs.exe") if (dvd_bin / "mkisofs.exe").is_file() else self.settings.tools.mkisofs,
-            growisofs_path=str(dvd_bin / "growisofs.exe") if (dvd_bin / "growisofs.exe").is_file() else self.settings.tools.growisofs,
+            dvdauthor_path=disc_paths["dvdauthor"],
+            mkisofs_path=disc_paths["mkisofs"],
+            growisofs_path=disc_paths["growisofs"],
             cdrecord_path=self.settings.tools.cdrecord,
             mediainfo_path=str(dvd_bin / "dvd+rw-mediainfo.exe") if (dvd_bin / "dvd+rw-mediainfo.exe").is_file() else None,
         )
@@ -548,6 +549,30 @@ class RetroDiscBridge:
                 merged[key] = value
         return merged
 
+    @staticmethod
+    def _resolve_disc_tool_paths(tools) -> dict[str, str]:
+        """Resolve DVD tools for this run; keep extraction paths out of settings."""
+        resolved = {}
+        dvd_bin = BUNDLE_DIR / "vendor" / "dvdtools"
+        for name in ("dvdauthor", "mkisofs", "growisofs"):
+            configured = getattr(tools, name)
+            path = Path(configured)
+            bundled = dvd_bin / f"{name}.exe"
+            # Migrate paths saved by older launchers, including an extraction
+            # directory that still exists while another instance is running.
+            legacy_bundle = (
+                path.parent.name.lower() == "dvdtools"
+                and path.parent.parent.name.lower() == "vendor"
+                and path.parent.parent.parent.name.lower().startswith("_mei")
+            )
+            if path == bundled or legacy_bundle:
+                configured = name
+                setattr(tools, name, configured)
+            resolved[name] = (
+                str(bundled) if configured == name and bundled.is_file() else configured
+            )
+        return resolved
+
     def _apply_runtime_settings(self) -> None:
         """Apply persisted paths/directories to already-created services."""
         tools = self.settings.tools
@@ -558,9 +583,8 @@ class RetroDiscBridge:
         self.downloader.ytdlp_path = tools.ytdlp
         self.downloader.ffmpeg_path = tools.ffmpeg
         self.downloader.output_dir = directories.download_dir
-        self.disc.dvdauthor = tools.dvdauthor
-        self.disc.mkisofs = tools.mkisofs
-        self.disc.growisofs = tools.growisofs
+        for name, path in self._resolve_disc_tool_paths(tools).items():
+            setattr(self.disc, name, path)
         self.disc.cdrecord = tools.cdrecord
         self.pipeline.max_concurrent = self.settings.conversion.max_concurrent_jobs
 
@@ -574,6 +598,7 @@ class RetroDiscBridge:
                 self.settings.model_dump(mode="json"), updates
             )
             new_settings = AppSettings.model_validate(merged)
+            self._resolve_disc_tool_paths(new_settings.tools)
             new_settings.save()
             self.settings = new_settings
             self._apply_runtime_settings()

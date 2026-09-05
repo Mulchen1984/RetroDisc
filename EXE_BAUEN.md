@@ -1,5 +1,15 @@
 # RetroDisc — EXE Bauen (Schritt für Schritt)
 
+> **VERALTET — nicht mehr befolgen.** Diese Anleitung beschreibt den alten
+> `retrodisc_onefile.spec`-Weg über `BUILD_EXE.bat`. Er ist nicht der
+> produktive Bauweg und an keinem Gate belegt. Auch die Größen- und
+> Laufzeitangaben unten stimmen nicht mehr: Die produktive EXE bündelt FFmpeg,
+> FFprobe, yt-dlp, die DVD-Werkzeuge und das Whisper-Basismodell und ist rund
+> 480 MB groß (gemessen: 502901640 Bytes); sie lädt beim ersten Start nichts
+> nach. Der gültige Bauweg steht in `README.md` und `CLAUDE.md`:
+> `python build.py --clean`. Die Datei bleibt nur als historischer Beleg
+> erhalten.
+
 ## Was entsteht
 
 Eine **einzige Datei**: `dist\RetroDisc.exe` (~30–40 MB)

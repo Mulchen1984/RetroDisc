@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 import shutil
+import tempfile
 import structlog
 from pathlib import Path
 from typing import Optional
@@ -158,14 +159,20 @@ class VideoUpscaler:
                 f"scale=iw*{scale}:ih*{scale}:flags=lanczos",
                 job, f"Hochskalierung {scale}x (Lanczos) ...")
 
-        # Temp-Verzeichnisse
-        temp_dir = output_path.parent / f"_upscale_temp_{output_path.stem}"
+        # Eindeutiges, ausschliesslich diesem Lauf gehoerendes Temp-Verzeichnis.
+        # Ein deterministischer Name kollidiert bei Paralleljobs und wuerde beim
+        # abschliessenden rmtree die Zwischendateien fremder Laeufe loeschen.
+        temp_dir = Path(tempfile.mkdtemp(
+            prefix=f".{output_path.stem}.retrodisc-upscale-",
+            dir=output_path.parent,
+        ))
         frames_in = temp_dir / "frames_in"
         frames_out = temp_dir / "frames_out"
-        frames_in.mkdir(parents=True, exist_ok=True)
-        frames_out.mkdir(parents=True, exist_ok=True)
 
         try:
+            frames_in.mkdir()
+            frames_out.mkdir()
+
             # 1. Frames extrahieren
             if job:
                 job.update_progress(5, "Frames werden extrahiert...")
@@ -288,7 +295,7 @@ class VideoUpscaler:
             staging_path.unlink(missing_ok=True)
             raise
         finally:
-            # Temp aufräumen
+            # Nur das eigene, eindeutige Temp-Verzeichnis entfernen.
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     async def interpolate(
@@ -328,13 +335,19 @@ class VideoUpscaler:
                 input_path, output_path, vf, job,
                 f"Frame-Interpolation auf {target_fps:g} fps ...")
 
-        temp_dir = output_path.parent / f"_interpolate_temp_{output_path.stem}"
+        # Eigenes, eindeutiges Temp-Verzeichnis (siehe upscale()): schuetzt vor
+        # Kollisionen und dem Loeschen fremder Zwischendateien bei Paralleljobs.
+        temp_dir = Path(tempfile.mkdtemp(
+            prefix=f".{output_path.stem}.retrodisc-interpolate-",
+            dir=output_path.parent,
+        ))
         frames_in = temp_dir / "frames_in"
         frames_out = temp_dir / "frames_out"
-        frames_in.mkdir(parents=True, exist_ok=True)
-        frames_out.mkdir(parents=True, exist_ok=True)
 
         try:
+            frames_in.mkdir()
+            frames_out.mkdir()
+
             # FPS ermitteln und Multiplikator berechnen
             source_fps = await self._get_fps(input_path)
             if source_fps <= 0:
@@ -427,6 +440,7 @@ class VideoUpscaler:
             staging_path.unlink(missing_ok=True)
             raise
         finally:
+            # Nur das eigene, eindeutige Temp-Verzeichnis entfernen.
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     async def _get_fps(self, video_path: Path) -> float:

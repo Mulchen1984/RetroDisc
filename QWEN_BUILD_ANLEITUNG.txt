@@ -1,5 +1,15 @@
 RETRODISC — PORTABLE WINDOWS APP BAUEN
 ========================================
+
+VERALTET — NICHT MEHR BEFOLGEN.
+Diese Anleitung beschreibt den alten retrodisc_onefile.spec-Weg, nennt das
+inzwischen ersetzte openai-whisper (produktiv ist faster-whisper mit
+gebündeltem Basismodell) und gibt eine Größe von 120-150 MB an. Die
+produktive EXE ist rund 480 MB groß (gemessen: 502901640 Bytes) und bündelt
+FFmpeg, FFprobe, yt-dlp, die DVD-Werkzeuge und das Whisper-Modell.
+Gültiger Bauweg: python build.py --clean (siehe README.md und CLAUDE.md).
+Die Datei bleibt nur als historischer Beleg erhalten.
+
 Dieses Paket enthält den kompletten Quellcode für RetroDisc.
 Deine Aufgabe: Daraus eine portable RetroDisc.exe für Windows bauen.
 
