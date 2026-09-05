@@ -804,3 +804,61 @@ Kein Release-Build und kein physischer Medienwechsel/Brennvorgang ausgefuehrt.
 Die neuen optischen Verhaltenstests simulieren die Hardwareantworten; fruehere
 Artefakt-Hashes sind kein Nachweis fuer diesen geaenderten Source. Die bekannten
 Signatur- und Hardware-Gates bleiben unveraendert offen.
+
+
+### 2026-09-05 19:54 CEST — Vorhandenen Disc-Copy-Fix kontrolliert geprueft und Rohling-Freigabe gehaertet
+
+Ausgangslage und Zusammenarbeit:
+
+- Zu Beginn HEAD `8b4392b`, mit den vier angekuendigten lokalen Dateien:
+  `retrodisc_launcher.py`, `src/ui/app.html`, `tests/test_disc_copy_flow.py`
+  und der neuen `tests/test_drive_detection_ui.py`. Der gesamte vorhandene
+  Diff wurde zuerst lesend geprueft; nichts verworfen oder neu implementiert.
+- Brauchbar und uebernommen: Job-ID im ISO-Namen, exklusive Dateireservierung,
+  korrekter `job_type=`-Aufruf, Medienwechsel-Event mit Queue-Bestaetigung,
+  Fehler-/Abbruchbehandlung sowie Session-Cache fuer erfolgreiche leere Scans.
+  Die bereits vorhandenen fokussierten Tests bestanden: 33 passed in 6.27 s.
+- Waehrend dieser Sitzung hat eine andere Sitzung diesen Ausgangsdiff samt
+  Journal als `120619ba6596f467787cf8afe6de0ddfbcfd2819` committet und gepusht.
+  Reflog, Commit-Diff und Remote wurden geprueft: derselbe Ausgangsdiff,
+  kein Konflikt mit den folgenden Ergaenzungen. Kein Pull, Rebase oder
+  Ueberschreiben fremder Aenderungen war erforderlich. Wiederholte Fetches
+  bestaetigten lokalen HEAD und Remote identisch auf `120619b`.
+
+Bestaetigte Restluecke und gezielte Ergaenzung:
+
+- `present` und `blank` allein sind kein Beschreibbarkeitsbeleg: Der bestehende
+  Windows-Dateisystem-Fallback kann ein leeres eingebundenes Volume als blank
+  melden. Die Copy-Bestaetigung verlangt jetzt zusaetzlich ein beschreibbares
+  DVD-/Blu-ray-Profil fuer den vorhandenen growisofs-Brennpfad. Unbekannte
+  Profile, ROMs und CDs werden abgewiesen; eine gemeldete Kapazitaet kleiner
+  als das Image ebenso. Beschriebene RW-Medien werden weiterhin nicht geloescht.
+- Negative Gegenprobe vor dem Produktfix: sechs neue Verhaltenstests schlugen
+  fehl, weil unbekannte/ROM-/CD-Profile und zu kleine Medien freigegeben wurden.
+  Nach dem Fix sind diese Faelle gruen. Weitere Tests sichern unterstuetzte
+  Profile, erneute Pruefung nach einer Probe-Ausnahme und die Entfernung der
+  reservierten Teil-ISO beim Abbruch waehrend des Rippens ab.
+- Zusaetzliche Produktaenderung nur in `retrodisc_launcher.py` (13 Zeilen).
+  `src/ui/app.html` und der vorhandene Drive-Cache-Test blieben unveraendert;
+  keine Startseiten-, Design- oder anderen UI-Arbeiten.
+
+Eigene Verifikation nach der Ergaenzung, alle Exitcodes 0:
+
+- `pytest -q tests/test_disc_copy_flow.py tests/test_drive_detection_ui.py`:
+  **45 passed in 7.08 s**.
+- Vollstaendiges `pytest -q`: **330 passed in 32.57 s**.
+- `compileall` ueber src, tests und beide Launcher: PASS.
+- `scripts/verify_ui_bridge.py`: PASS, 0 Befunde, 49 Aufrufstellen,
+  38 verschiedene UI-Methoden, 41 API- und 43 Bridge-Methoden.
+- `node --check build/ui-audit/inline.js` und `git diff --check`: PASS.
+- `.hermes/verify_core.py`: PASS, echter MP3-Job done, 402328 Bytes, Codec mp3.
+- `scripts/release_smoke.py`: PASS, `build/e2e-smoke-20260905-195311`;
+  Upscale 2560x1440, Interpolation 50 fps, deutsche SRT 199 Bytes,
+  DVD-ISO 2627584 Bytes.
+- Runtime: freigegebenes `C:\Users\marco\.local\bin\python3.11.exe` mit
+  PYTHONPATH auf die vorhandenen Site-Packages des RetroDisc-Hauptworktrees;
+  keine Ausfuehrung der blockierten venv-EXE.
+
+Kein Release-Build und kein physischer Brenn-/Medienwechseltest. Die optischen
+Verhaltenstests simulieren Hardwareantworten; sie ersetzen keine physische
+Validierung. Die bestehenden Signatur- und Hardware-Release-Gates bleiben offen.

@@ -898,6 +898,19 @@ class RetroDiscBridge:
         if not info.get("blank"):
             detail = " Wiederbeschreibbare Medien müssen vorher geleert werden." if info.get("rewritable") else ""
             return {"error": "Bitte die Quelldisc entfernen und einen leeren Rohling einlegen." + detail}
+        # A filesystem-only fallback can label an empty mounted volume as
+        # blank. Require a writable optical profile supported by burn_iso's
+        # growisofs path; never treat an unknown profile or a ROM as a blank.
+        profile = str(info.get("profile") or "").upper().split()
+        writable_profiles = {"DVD-R", "DVD-RW", "DVD+R", "DVD+RW", "DVD-RAM", "BD-R", "BD-RE"}
+        if not profile or profile[0] not in writable_profiles:
+            return {"error": "Kein geeigneter beschreibbarer DVD-/Blu-ray-Rohling erkannt."}
+        try:
+            capacity = info.get("capacity_bytes")
+            if capacity is not None and capacity < job.output_path.stat().st_size:
+                return {"error": "Der Rohling ist zu klein für das kopierte Abbild."}
+        except (OSError, TypeError) as exc:
+            return {"error": f"Abbild oder Medienkapazität konnte nicht geprüft werden: {exc}"}
         # Cancellation or another confirmation may have completed during the probe.
         if job.state != JobState.RUNNING or getattr(job, "_copy_media_ready", None) is not event or event.is_set():
             return {"error": "Der Kopierjob wartet nicht mehr auf einen Medienwechsel."}

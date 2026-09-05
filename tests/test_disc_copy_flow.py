@@ -262,7 +262,7 @@ def copy_runtime(disc_bridge, monkeypatch):
     calls = []
     waiting = asyncio.Event()
     completed = asyncio.Event()
-    info = {"present": True, "blank": True, "rewritable": False}
+    info = {"present": True, "blank": True, "rewritable": False, "profile": "DVD+R"}
 
     def submit(job, handler):
         submitted.append((job, handler))
@@ -341,7 +341,7 @@ async def test_single_drive_waits_until_confirmed_blank_medium(copy_runtime, mon
             assert not any(c[0] == "burn" for c in r.calls)
             assert job.params["awaiting_copy_medium"] is True
         r.info.clear()
-        r.info.update(present=True, blank=True, rewritable=True)
+        r.info.update(present=True, blank=True, rewritable=True, profile="DVD+RW")
         from retrodisc_launcher import RetroDiscApi
         loop = asyncio.get_running_loop()
         monkeypatch.setattr(r.bridge, "_async", lambda coro: asyncio.run_coroutine_threadsafe(coro, loop))
@@ -423,7 +423,7 @@ async def test_cancel_during_medium_probe_cannot_resume_burning(copy_runtime, mo
     async def probe(device):
         entered.set()
         await release.wait()
-        return {"present": True, "blank": True}
+        return {"present": True, "blank": True, "profile": "DVD+R"}
     monkeypatch.setattr(r.bridge.disc, "get_disc_info", probe)
     job, runner = await start_copy(r, "D:", "D:")
     try:
@@ -436,4 +436,84 @@ async def test_cancel_during_medium_probe_cannot_resume_burning(copy_runtime, mo
         assert not any(c[0] == "burn" for c in r.calls)
     finally:
         release.set()
+        await stop_copy(r, runner)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("profile,capacity", [
+    ("", None), ("unknown", None), ("DVD-ROM", None),
+    ("BD-ROM", None), ("CD-R", None), ("DVD+R", 1),
+])
+async def test_blank_but_unsuitable_medium_never_releases_copy(copy_runtime, profile, capacity):
+    r = copy_runtime
+    r.info.update(profile=profile)
+    if capacity is not None:
+        r.info["capacity_bytes"] = capacity
+    job, runner = await start_copy(r, "D:", "D:")
+    try:
+        await asyncio.wait_for(r.waiting.wait(), 2)
+        result = await r.bridge._confirm_copy_medium(job.id)
+        assert "error" in result
+        assert not job._copy_media_ready.is_set()
+        assert [call[0] for call in r.calls] == ["rip", "probe"]
+    finally:
+        await stop_copy(r, runner)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("profile", ["DVD-R Sequential", "DVD+R Double Layer", "BD-R", "BD-RE"])
+async def test_supported_blank_profile_allows_burn(copy_runtime, profile):
+    r = copy_runtime
+    r.info.update(profile=profile, rewritable=profile == "BD-RE")
+    job, runner = await start_copy(r, "D:", "D:")
+    try:
+        await asyncio.wait_for(r.waiting.wait(), 2)
+        assert await r.bridge._confirm_copy_medium(job.id) == {"ok": True}
+        await asyncio.wait_for(r.completed.wait(), 2)
+        assert job.state == JobState.DONE
+        assert [call[0] for call in r.calls] == ["rip", "probe", "burn"]
+    finally:
+        await stop_copy(r, runner)
+
+
+@pytest.mark.asyncio
+async def test_probe_exception_keeps_copy_waiting_and_allows_retry(copy_runtime, monkeypatch):
+    r = copy_runtime
+    original_probe = r.bridge.disc.get_disc_info
+    async def fail(device):
+        raise OSError("drive temporarily unavailable")
+    monkeypatch.setattr(r.bridge.disc, "get_disc_info", fail)
+    job, runner = await start_copy(r, "D:", "D:")
+    try:
+        await asyncio.wait_for(r.waiting.wait(), 2)
+        result = await r.bridge._confirm_copy_medium(job.id)
+        assert "drive temporarily unavailable" in result["error"]
+        assert not job._copy_media_ready.is_set()
+        assert [call[0] for call in r.calls] == ["rip"]
+        monkeypatch.setattr(r.bridge.disc, "get_disc_info", original_probe)
+        assert await r.bridge._confirm_copy_medium(job.id) == {"ok": True}
+        await asyncio.wait_for(r.completed.wait(), 2)
+        assert job.state == JobState.DONE
+    finally:
+        await stop_copy(r, runner)
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_rip_removes_partial_reserved_image(copy_runtime, monkeypatch):
+    r = copy_runtime
+    entered = asyncio.Event()
+    async def rip(self, source, output, fmt, job=None):
+        output.write_bytes(b"partial copy")
+        entered.set()
+        await asyncio.Event().wait()
+    monkeypatch.setattr(DiscRipper, "rip", rip)
+    job, runner = await start_copy(r, "D:", "D:")
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        assert await r.bridge.pipeline.cancel_job(job.id)
+        await r.bridge.pipeline.shutdown()
+        assert job.state == JobState.CANCELLED
+        assert not job.output_path.exists()
+        assert not r.calls
+    finally:
         await stop_copy(r, runner)
