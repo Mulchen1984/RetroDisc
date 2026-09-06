@@ -43,7 +43,7 @@ const api=()=>({detect_burners:async()=>JSON.stringify(responses[calls++])});
 def test_queue_exposes_medium_confirmation_and_calls_bridge():
     code = """
 const S={jobs:[]};
-const nodes={jlist:{},curjob:{style:{}},nojob:{style:{}},cjname:{},cjbar:{style:{}},cjpct:{}};
+const nodes={jlist:{},curjob:{style:{}},nojob:{style:{}},cjname:{},cjbar:{style:{}},cjpct:{},cjstatus:{}};
 const document={getElementById:id=>nodes[id]};
 let confirmed=[], alerts=[];
 const updateJobBadge=()=>{};
@@ -52,7 +52,7 @@ const api=()=>({
  get_queue:async()=>JSON.stringify([{id:'copy123',name:'Disc copy',state:'running',progress:50,awaiting_copy_medium:true}]),
  confirm_copy_medium:async id=>{confirmed.push(id);return JSON.stringify({error:'Insert blank disc'});}
 });
-""" + function("refreshQueue") + function("renderJobs") + function("confirmCopyMedium")
+""" + "function escHtml(s){return String(s)}; function escAttr(s){return String(s)};" + function("refreshQueue") + function("renderJobs") + function("confirmCopyMedium")
     code += """
 (async()=>{
  await refreshQueue();

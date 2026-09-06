@@ -41,8 +41,19 @@ APPDATA = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "RetroDisc"
 APPDATA.mkdir(parents=True, exist_ok=True)
 TOOLS_DIR = APPDATA / "tools"
 TOOLS_DIR.mkdir(exist_ok=True)
-LOG_DIR = APPDATA / "logs"
-LOG_DIR.mkdir(exist_ok=True)
+from src import __version__ as APP_VERSION
+from src.config.settings import AppSettings, data_root
+from src.core.output import claim_unique_target, remove_claimed_targets, timestamped
+
+# Der Logordner folgt dem eingestellten Medienordner. Dafuer muessen die
+# Einstellungen schon hier gelesen werden - vor jedem Logging-Handler. Das ist
+# ein reiner Dateizugriff; AppSettings.load faengt eine unlesbare Datei selbst
+# ab und liefert dann die Vorgaben, der Start bleibt also in jedem Fall moeglich.
+try:
+    LOG_DIR = AppSettings.load().directories.log_dir
+except Exception:  # pragma: no cover - Start darf hieran nie scheitern
+    LOG_DIR = data_root() / "Logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Logging ───────────────────────────────────────────────────────────
 # Zuerst die Standardstroeme UTF-8-sicher machen. Windows liefert sie mit der
@@ -52,14 +63,35 @@ LOG_DIR.mkdir(exist_ok=True)
 # erscheinen lassen. Muss vor den Handlern laufen, die die Stroeme einsammeln.
 from src.utils.logging_setup import configure_console_encoding, configure_structlog
 
+def log_file_for(day=None) -> Path:
+    """Logdatei des Tages: ``Logs/retrodisc_YYYY-MM-DD.log``.
+
+    Eine einzige, seit Juni fortgeschriebene ``retrodisc.log`` machte jeden
+    Supportfall zur Suche: die Datei enthielt Tracebacks aus alten Laeufen, und
+    das Eingrenzen auf den aktuellen Lauf war Handarbeit. Ein Tag pro Datei
+    macht den relevanten Ausschnitt am Namen erkennbar.
+    """
+    import datetime
+
+    day = day or datetime.date.today()
+    return LOG_DIR / f"retrodisc_{day.isoformat()}.log"
+
+
+LOG_FILE = log_file_for()
+
 _STDOUT, _STDERR = configure_console_encoding()
-configure_structlog(_STDOUT)
+# structlog bekommt die Logdatei ausdruecklich mit. Die ausgelieferte Anwendung
+# ist windowed gebaut, dort ist _STDOUT None - ohne diesen zweiten Weg landete
+# die gesamte Protokollierung der Medienpipeline auf os.devnull und das Logfile
+# enthielt allein die stdlib-Zeilen von hier. Genau das war im Supportfall
+# nicht nachvollziehbar.
+configure_structlog(_STDOUT, logfile=LOG_FILE)
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
-        logging.FileHandler(LOG_DIR / "retrodisc.log", encoding="utf-8"),
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
         logging.StreamHandler(_STDOUT) if _STDOUT is not None else logging.NullHandler(),
     ],
 )
@@ -255,6 +287,8 @@ class RetroDiscBridge:
             self.settings.tools.ytdlp = tool_paths["ytdlp"]
 
         self.settings.ensure_directories()
+        from src.services.job_history import JobHistory
+        self.job_history = JobHistory(data_root() / "jobs.sqlite3")
 
         # Core-Module
         from src.core.ffmpeg import FFmpeg
@@ -274,6 +308,7 @@ class RetroDiscBridge:
             max_concurrent=self.settings.conversion.max_concurrent_jobs,
             play_sound=False,  # Wir spielen selbst
         )
+        self.pipeline.history = self.job_history
         self.pipeline.on_job_complete = self._on_complete
         self.pipeline.on_job_failed = self._on_failed
         self.downloader = Downloader(
@@ -300,11 +335,37 @@ class RetroDiscBridge:
             disc_tools=self.disc,
             temp_dir=self.settings.directories.temp_dir,
         )
-        self.library = MediaLibrary(ffmpeg=self.ffmpeg)
+        # Die Bibliothek legte ihre Datenbank selbst nach ~/.retrodisc - ein
+        # Unix-Punktordner auf einem Windows-Produkt und die einzige Komponente,
+        # die ihren Pfad nicht aus den Einstellungen bezog. Jetzt kommt er von
+        # dort, und eine vorhandene alte Datenbank wird einmalig uebernommen.
+        self._migrate_legacy_library(self.settings.directories.library_db)
+        self.library = MediaLibrary(
+            ffmpeg=self.ffmpeg,
+            db_path=self.settings.directories.library_db,
+        )
         self.library.open()
         self._watch = None
 
         log.info("Bridge initialisiert")
+
+    @staticmethod
+    def _migrate_legacy_library(target: Path) -> None:
+        """Uebernimmt eine Bibliothek aus ~/.retrodisc einmalig an den neuen Ort.
+
+        Kopieren statt verschieben: schlaegt etwas fehl, ist die alte Datei
+        unversehrt und der Nutzer verliert seinen Bestand nicht.
+        """
+        legacy = Path.home() / ".retrodisc" / "library.db"
+        if target.exists() or not legacy.is_file():
+            return
+        try:
+            import shutil
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(legacy, target)
+            log.info("Bibliothek uebernommen: %s -> %s", legacy, target)
+        except OSError as exc:
+            log.warning("Bibliothek konnte nicht uebernommen werden: %s", exc)
 
     def _async(self, coro):
         return asyncio.run_coroutine_threadsafe(coro, self._loop)
@@ -328,6 +389,7 @@ class RetroDiscBridge:
             "type": job.job_type.value,
             "output": str(job.output_path) if job.output_path else None,
             "elapsed": round(job.elapsed_seconds, 1),
+            "warning": job.params.get("cleanup_warning", ""),
         })
         if self.settings.sound.play_on_complete:
             threading.Thread(target=play_completion_sound, daemon=True).start()
@@ -346,6 +408,7 @@ class RetroDiscBridge:
             "name": job.params.get("display_name", job.id),
             "progress": progress,
             "status": status,
+            "output": str(job.output_path) if job.output_path else None,
         })
 
     # ── Window sizing (CloneCD style: compact home, larger work flows) ──
@@ -501,16 +564,21 @@ class RetroDiscBridge:
                     "subtitles": bool(subtitles),
                     "display_name": f"Download: {url[:50]}"},
         )
+        from src.core.downloader import Downloader
+        from src.services.converter import Converter
+        from src.services.download_workflow import run_download_workflow
+        # Capture destinations now: settings changes must not redirect queued work.
+        download_dir = self.settings.directories.download_dir / job.id
+        job.params["download_dir"] = str(download_dir)
+        job.params["stage"] = "Quelle erkannt"
+        try:
+            downloader = Downloader(self.downloader.ytdlp_path, download_dir,
+                                    self.downloader.ffmpeg_path)
+            converter = Converter(self.ffmpeg, self.settings.directories.output_dir)
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
         async def _handler(j):
-            result = await self.downloader.download(
-                url=j.params["url"],
-                format=j.params["format"],
-                extract_audio=j.params["audio_only"],
-                audio_format=j.params["audio_format"],
-                subtitles=j.params["subtitles"],
-                job=j,
-            )
-            j.output_path = result
+            await run_download_workflow(j, downloader, converter, self.job_history)
 
         return self._submit_job(job, _handler)
 
@@ -531,23 +599,175 @@ class RetroDiscBridge:
 
     # ── Queue ─────────────────────────────────────────────────────────
     def get_queue(self) -> str:
-        jobs = []
-        for j in list(self.pipeline._queue) + self.pipeline._running:
-            jobs.append({"id": j.id,
-                         "name": j.params.get("display_name", j.id),
-                         "state": j.state.value,
-                         "progress": j.progress,
-                         "awaiting_copy_medium": j.params.get("awaiting_copy_medium", False)})
-        for j in self.pipeline.completed_jobs[-20:]:
-            jobs.append({"id": j.id,
-                         "name": j.params.get("display_name", j.id),
-                         "state": j.state.value,
-                         "progress": j.progress})
-        return json.dumps(jobs)
+        from src.services.job_history import job_record
+        records = {r["id"]: r for r in self.job_history.recent()}
+        for job in list(self.pipeline._queue) + self.pipeline._running + self.pipeline.completed_jobs:
+            records[job.id] = job_record(job)
+        return json.dumps(sorted(records.values(), key=lambda r: r["created"], reverse=True)[:100])
+
+    def open_job_folder(self, job_id: str, kind: str) -> str:
+        try:
+            rows = json.loads(self.get_queue())
+            row = next(r for r in rows if r["id"] == job_id)
+            if kind == "download":
+                path = Path(row["download"])
+            elif kind == "output" and row.get("output"):
+                path = Path(row["output"]).parent
+            else:
+                raise ValueError("Für diesen Auftrag ist noch kein Ausgabeordner verfügbar.")
+            if not path.is_dir():
+                raise FileNotFoundError(f"Ordner nicht mehr vorhanden: {path}")
+            os.startfile(str(path))
+            return json.dumps({"ok": True})
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+    def open_job_file(self, job_id: str) -> str:
+        """Öffnet die fertige Datei eines Auftrags im Standardprogramm."""
+        try:
+            rows = json.loads(self.get_queue())
+            row = next(r for r in rows if r["id"] == job_id)
+            if not row.get("output"):
+                raise ValueError("Für diesen Auftrag ist noch keine Datei vorhanden.")
+            path = Path(row["output"])
+            if not path.is_file():
+                raise FileNotFoundError(f"Datei nicht mehr vorhanden: {path}")
+            os.startfile(str(path))
+            return json.dumps({"ok": True})
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+    def _latest_output_dir(self) -> Path:
+        """Ausgabeordner des juengsten Auftrags mit Ergebnis, sonst die Einstellung.
+
+        ``get_queue`` liefert bereits nach Erstellungszeit absteigend sortiert;
+        Livejobs ueberschreiben dabei den Historieneintrag derselben Id.
+        """
+        try:
+            for row in json.loads(self.get_queue()):
+                if not row.get("output"):
+                    continue
+                candidate = Path(row["output"]).parent
+                if candidate.is_dir():
+                    return candidate
+        except Exception as exc:
+            log.warning("Juengster Ausgabeordner nicht ermittelbar: %s", exc)
+        return self.settings.directories.output_dir
 
     # ── Settings ──────────────────────────────────────────────────────
     def get_settings(self) -> str:
-        return self.settings.model_dump_json()
+        data = self.settings.model_dump(mode="json")
+        # Die Angaben kommen aus den Einstellungen, nicht aus fest verdrahteten
+        # Pfaden: der Logordner folgt dem Medienordner, und die Bibliothek stand
+        # hier noch auf ~/.retrodisc, obwohl sie laengst woanders liegen konnte.
+        directories = self.settings.directories
+        data["storage_info"] = {
+            "logs": str(directories.log_dir),
+            "logfile": str(LOG_FILE),
+            "config": str(self.settings._default_config_path()),
+            "tools": str(TOOLS_DIR),
+            "library": str(directories.library_db),
+            "history": str(data_root() / "jobs.sqlite3"),
+        }
+        return json.dumps(data)
+
+    def get_environment(self) -> str:
+        """Echte Angaben zu Anwendung, Laufzeit und Werkzeugen.
+
+        Die Statusleiste und die Werkzeugleiste trugen diese Angaben fest im
+        Markup - "FFmpeg 6.1", "Python 3.12", "Windows 11". In einem
+        Supportfall sind das falsche Auskuenfte: sie stimmen mit nichts
+        ueberein, was auf dem Rechner des Nutzers laeuft.
+
+        Die Werkzeugversionen kosten je einen kurzen, fensterlosen Aufruf.
+        Sie werden nach dem ersten Mal gehalten, damit die Angabe nicht bei
+        jedem Blick in die Einstellungen erneut Prozesse startet.
+        """
+        cached = getattr(self, "_environment_cache", None)
+        if cached is not None:
+            return cached
+
+        import platform as _platform
+
+        info = {
+            "app": APP_VERSION,
+            "python": _platform.python_version(),
+            "os": f"{_platform.system()} {_platform.release()}",
+            "logfile": str(LOG_FILE),
+            "tools": {},
+        }
+        probes = {
+            "ffmpeg": (self.settings.tools.ffmpeg, ["-version"]),
+            "ffprobe": (self.settings.tools.ffprobe, ["-version"]),
+            "ytdlp": (self.settings.tools.ytdlp, ["--version"]),
+        }
+        for name, (executable, args) in probes.items():
+            info["tools"][name] = self._probe_tool_version(executable, args)
+
+        self._environment_cache = json.dumps(info)
+        return self._environment_cache
+
+    @staticmethod
+    def _probe_tool_version(executable: str, args: list) -> dict:
+        """Liest die Version eines Werkzeugs, ohne ein Konsolenfenster zu zeigen."""
+        from src.utils.subprocesses import decode_console_output, run_hidden
+
+        if not executable:
+            return {"available": False, "version": "", "path": ""}
+        try:
+            result = run_hidden([executable, *args], capture_output=True, timeout=10)
+        except Exception as exc:
+            # Ein blockiertes oder fehlendes Werkzeug ist eine Auskunft, kein
+            # Fehler der Anwendung - die Oberflaeche zeigt es als "unbekannt".
+            log.info("Version von %s nicht lesbar: %s", executable, exc)
+            return {"available": False, "version": "", "path": str(executable)}
+        if result.returncode != 0:
+            return {"available": False, "version": "", "path": str(executable)}
+        first_line = decode_console_output(result.stdout or b"").splitlines()
+        raw = first_line[0].strip() if first_line else ""
+        # "ffmpeg version 6.1.1-full_build ..." -> "6.1.1-full_build"
+        parts = raw.split()
+        version = parts[2] if len(parts) > 2 and parts[1] == "version" else raw
+        return {"available": True, "version": version[:40], "path": str(executable)}
+
+    def open_log_folder(self) -> str:
+        """Oeffnet den Ordner mit den Protokolldateien.
+
+        Ohne diesen Weg kann ein Nutzer im Supportfall nichts liefern: das
+        Protokoll liegt unter dem Medienordner und war aus der Anwendung
+        heraus nicht erreichbar.
+        """
+        try:
+            LOG_DIR.mkdir(parents=True, exist_ok=True)
+            os.startfile(str(LOG_DIR))
+            return json.dumps({"ok": True, "path": str(LOG_DIR)})
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+    def set_media_root(self, folder: str) -> str:
+        """Setzt den Medienordner und legt Downloads/Videos/Temp/Logs an.
+
+        Ein ausdruecklicher Schritt: die vier Ordner werden dabei neu aus dem
+        gewaehlten Stamm abgeleitet und ersetzen einzeln eingestellte Pfade.
+        """
+        try:
+            from src.config.settings import DirectorySettings
+
+            candidate = DirectorySettings.derived(folder)
+            new_settings = self.settings.model_copy(deep=True)
+            new_settings.directories = candidate
+            new_settings.ensure_directories()
+            new_settings.save()
+            self.settings = new_settings
+            self._apply_runtime_settings()
+            log.info("Medienordner gesetzt: %s", candidate.media_root)
+            return json.dumps({
+                "ok": True,
+                "media_root": str(candidate.media_root),
+                "created": [str(p) for p in candidate.managed_directories()],
+            })
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
 
     @staticmethod
     def _deep_merge_settings(current: dict, updates: dict) -> dict:
@@ -598,6 +818,20 @@ class RetroDiscBridge:
             setattr(self.disc, name, path)
         self.disc.cdrecord = tools.cdrecord
         self.pipeline.max_concurrent = self.settings.conversion.max_concurrent_jobs
+        # Diese beiden fehlten: der DVD-Workflow schrieb seine Zwischendateien
+        # weiter in den alten Temp-Ordner, und die Bibliothek blieb auf ihrer
+        # alten Datenbank stehen, nachdem der Nutzer den Medienordner geaendert
+        # hatte. Beides ist genau der Fall "Komponente umgeht die Settings".
+        self.dvd_workflow.temp_dir = directories.temp_dir
+        if Path(self.library.db_path) != Path(directories.library_db):
+            try:
+                self.library.close()
+            except Exception as exc:
+                log.warning("Bibliothek konnte nicht geschlossen werden: %s", exc)
+            self._migrate_legacy_library(directories.library_db)
+            self.library.db_path = directories.library_db
+            self.library.thumb_dir = directories.library_db.parent / "thumbnails"
+            self.library.open()
 
     def save_settings(self, data: str) -> str:
         try:
@@ -610,6 +844,7 @@ class RetroDiscBridge:
             )
             new_settings = AppSettings.model_validate(merged)
             self._resolve_disc_tool_paths(new_settings.tools)
+            new_settings.ensure_directories()
             new_settings.save()
             self.settings = new_settings
             self._apply_runtime_settings()
@@ -648,17 +883,27 @@ class RetroDiscBridge:
         return self.open_folder_dialog()
 
     def open_output_folder(self) -> str:
+        """Oeffnet den Ordner, in dem zuletzt wirklich etwas entstanden ist.
+
+        Der feste Griff auf ``output_dir`` fuehrte nach einem Download in den
+        falschen Baum: Downloads liegen unter ``download_dir``. Massgeblich ist
+        deshalb der Ausgabeordner des juengsten Auftrags mit Ergebnis; erst ohne
+        einen solchen Auftrag greift wieder die Einstellung.
+        """
         try:
-            import os
-            path = self.settings.directories.output_dir
+            path = self._latest_output_dir()
+            path.mkdir(parents=True, exist_ok=True)
             os.startfile(str(path))
-            return json.dumps({"ok": True})
+            return json.dumps({"ok": True, "path": str(path)})
         except Exception as e:
             return json.dumps({"error": str(e)})
 
     def clear_completed(self) -> str:
         try:
             self.pipeline.clear_completed()
+            self.job_history.clear_completed()
+            for job in list(self.pipeline._queue) + self.pipeline._running:
+                self.job_history.save(job)
             return json.dumps({"ok": True})
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -712,6 +957,37 @@ class RetroDiscBridge:
             return json.dumps(info)
         except Exception as exc:
             return json.dumps({"error": str(exc), "device": device})
+
+    @staticmethod
+    def _with_reserved_output(handler):
+        """Reserviert ``job.output_path`` erst zur Ausfuehrungszeit.
+
+        Die betroffenen Ziele setzen ihren Namen fest aus der Quelldatei
+        zusammen - ``film_4x.mp4``, ``film.srt``, ``film_highlights.mp4``.
+        Zweimal derselbe Auftrag traf damit denselben Namen: einmal mit einem
+        harten ``FileExistsError``, einmal mit stillem Ueberschreiben. Die
+        Reservierung macht daraus in beiden Faellen eine zweite Datei.
+
+        Reserviert wird bewusst nicht beim Einreihen, sondern hier: ein Job,
+        der in der Queue abgebrochen wird, soll keine leere Datei hinterlassen.
+        """
+        async def _wrapped(job):
+            claimed = claim_unique_target(job.output_path)
+            job.output_path = claimed
+            try:
+                await handler(job)
+            except BaseException:
+                remove_claimed_targets([claimed])
+                raise
+            # Hat der Handler woanders hin geschrieben, bleibt sonst die leere
+            # Reservierung als Geisterdatei im Ausgabeordner zurueck.
+            if job.output_path != claimed:
+                try:
+                    if claimed.is_file() and claimed.stat().st_size == 0:
+                        claimed.unlink()
+                except OSError as exc:
+                    log.warning("Leere Reservierung blieb liegen: %s (%s)", claimed, exc)
+        return _wrapped
 
     # ── Gemeinsame Queue-Hilfe ─────────────────────────────────────────
     def _submit_job(self, job, handler) -> str:
@@ -845,24 +1121,15 @@ class RetroDiscBridge:
 
             # Reserve exclusively at execution time, including against files
             # created after submission. Never truncate a pre-existing image.
-            requested = j.output_path
-            requested.parent.mkdir(parents=True, exist_ok=True)
-            suffix = 0
-            while True:
-                candidate = requested if not suffix else requested.with_stem(f"{requested.stem}_{suffix}")
-                try:
-                    with candidate.open("xb"):
-                        pass
-                    break
-                except FileExistsError:
-                    suffix += 1
+            # Dieselbe Reservierung wie ueberall sonst - siehe src/core/output.py.
+            candidate = claim_unique_target(j.output_path)
             j.output_path = candidate
             ripper = DiscRipper(self.ffmpeg, self.disc)
             try:
                 image_path = await ripper.rip(
                     j.params["source"], j.output_path, "iso", job=j)
             except BaseException:
-                candidate.unlink(missing_ok=True)
+                remove_claimed_targets([candidate])
                 raise
             j.output_path = image_path
             # Compare Windows drive aliases such as D:, d:/ and D:\.
@@ -937,7 +1204,13 @@ class RetroDiscBridge:
         if not device:
             return json.dumps({"error": "Kein Disc-Laufwerk ausgewählt."})
         safe_device = device.replace(":", "").replace("\\", "").replace("/", "") or "disc"
-        output = self.settings.directories.output_dir / f"Disc_{safe_device}_Rip{extensions[output_format]}"
+        # Der Name kommt allein aus dem Laufwerksbuchstaben und war damit bei
+        # jedem Lauf derselbe. Ein Zeitstempel macht die Disc unterscheidbar,
+        # die Reservierung im Handler schliesst den Rest.
+        output = timestamped(
+            self.settings.directories.output_dir
+            / f"Disc_{safe_device}_Rip{extensions[output_format]}"
+        )
         job = Job(
             job_type=JobType.RIP_DVD, output_path=output,
             params={"device": device, "format": output_format,
@@ -946,11 +1219,213 @@ class RetroDiscBridge:
 
         async def _handler(j):
             from src.services.ripper import DiscRipper
+            # Erst zur Ausfuehrungszeit reservieren, auch gegen Dateien, die
+            # nach dem Einreihen entstanden sind. Nie eine fremde Datei kuerzen.
+            j.output_path = claim_unique_target(j.output_path)
+            j.params["display_name"] = f"Disc {j.params['device']} -> {j.output_path.name}"
             ripper = DiscRipper(self.ffmpeg, self.disc)
-            j.output_path = await ripper.rip(
-                j.params["device"], j.output_path, j.params["format"], job=j)
+            try:
+                j.output_path = await ripper.rip(
+                    j.params["device"], j.output_path, j.params["format"], job=j)
+            except BaseException:
+                remove_claimed_targets([j.output_path])
+                raise
 
         return self._submit_job(job, _handler)
+
+    # ── Media AI Pipeline ──────────────────────────────────────────────
+    # Die Dienste werden je Auftrag gebaut, nicht im Konstruktor gehalten:
+    # sie sind zustandslos, und so gilt ohne Zutun immer der aktuelle
+    # Werkzeug- und Ordnerstand aus den Einstellungen.
+    def _media_ai_services(self):
+        from src.services.media_ai import MediaDownloader, MediaSplitter
+
+        return (
+            MediaDownloader(
+                ytdlp_path=self.settings.tools.ytdlp,
+                ffmpeg_path=self.settings.tools.ffmpeg,
+            ),
+            MediaSplitter(ffmpeg=self.ffmpeg),
+        )
+
+    def _media_ai_workspace(self, folder: str):
+        """Oeffnet eine Mappe und stellt sicher, dass sie unter uns liegt."""
+        from src.services.media_ai import WorkspaceError, open_workspace
+
+        base = self.settings.directories.download_dir.resolve()
+        candidate = Path(folder).resolve()
+        if not candidate.is_relative_to(base):
+            raise WorkspaceError(
+                "Diese Arbeitsmappe liegt ausserhalb des Downloadordners.")
+        return open_workspace(candidate)
+
+    def media_ai_import(self, url: str, quality: str = "best",
+                        extract_video: bool = True,
+                        extract_audio: bool = True) -> str:
+        """Laedt ein Medium und trennt Video- und Audiospur."""
+        from src.models.media import Job, JobType
+        from src.services.media_ai import run_media_ai_import
+
+        try:
+            from src.core.downloader import Downloader
+            url = Downloader.validate_url(url)
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+        downloader, splitter = self._media_ai_services()
+        base_dir = self.settings.directories.download_dir
+        job = Job(
+            job_type=JobType.MEDIA_AI_IMPORT,
+            params={"url": url, "quality": quality or "best",
+                    "stage": "Quelle wird gelesen",
+                    "display_name": f"Media AI: {url[:50]}"},
+        )
+
+        async def _handler(j):
+            await run_media_ai_import(
+                j, downloader, splitter, base_dir,
+                quality=j.params["quality"],
+                want_video=bool(extract_video),
+                want_audio=bool(extract_audio),
+                history=self.job_history,
+            )
+
+        return self._submit_job(job, _handler)
+
+    def media_ai_extract_audio(self, folder: str) -> str:
+        """Erzeugt audio.wav (PCM, 16 kHz, mono) fuer eine vorhandene Mappe."""
+        from src.models.media import Job, JobType
+
+        try:
+            workspace = self._media_ai_workspace(folder)
+            source = workspace.original()
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+        if source is None:
+            return json.dumps({"error": "In dieser Mappe liegt keine Quelldatei."})
+
+        _, splitter = self._media_ai_services()
+        job = Job(job_type=JobType.MEDIA_AI_AUDIO, input_files=[source],
+                  params={"workspace": str(workspace.root),
+                          "stage": "Audiospur wird extrahiert",
+                          "display_name": f"Audio: {workspace.name}"})
+
+        async def _handler(j):
+            j.output_path = await splitter.extract_audio(source, workspace, job=j)
+            state = workspace.load_job()
+            state.record("Audiospur wird extrahiert")
+            workspace.save_job(state)
+
+        return self._submit_job(job, _handler)
+
+    def media_ai_extract_video(self, folder: str) -> str:
+        """Trennt die Videospur einer vorhandenen Mappe ohne Neukodierung."""
+        from src.models.media import Job, JobType
+
+        try:
+            workspace = self._media_ai_workspace(folder)
+            source = workspace.original()
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+        if source is None:
+            return json.dumps({"error": "In dieser Mappe liegt keine Quelldatei."})
+
+        _, splitter = self._media_ai_services()
+        job = Job(job_type=JobType.MEDIA_AI_VIDEO, input_files=[source],
+                  params={"workspace": str(workspace.root),
+                          "stage": "Videospur wird getrennt",
+                          "display_name": f"Video: {workspace.name}"})
+
+        async def _handler(j):
+            j.output_path = await splitter.extract_video(source, workspace, job=j)
+            state = workspace.load_job()
+            state.record("Videospur wird getrennt")
+            workspace.save_job(state)
+
+        return self._submit_job(job, _handler)
+
+    def media_ai_transcribe(self, folder: str, language: str = "") -> str:
+        """Schreibt transcript.txt aus audio.wav ueber das Whisper-Backend."""
+        from src.models.media import Job, JobType
+
+        try:
+            workspace = self._media_ai_workspace(folder)
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+        job = Job(job_type=JobType.MEDIA_AI_TRANSCRIBE,
+                  params={"workspace": str(workspace.root),
+                          "language": language or "",
+                          "stage": "Transkription läuft",
+                          "display_name": f"Transkript: {workspace.name}"})
+
+        async def _handler(j):
+            from src.services.media_ai import AudioProcessor, WhisperTranscription
+
+            processor = AudioProcessor(
+                ffmpeg=self.ffmpeg,
+                transcription=WhisperTranscription(
+                    model=self.settings.ai.whisper_model),
+            )
+            j.output_path = await processor.transcribe(
+                workspace, language=j.params["language"] or None, job=j)
+            state = workspace.load_job()
+            state.record("Transkription läuft")
+            workspace.save_job(state)
+
+        return self._submit_job(job, _handler)
+
+    def media_ai_extract_frames(self, folder: str, fps: float = 1.0) -> str:
+        """Legt Einzelbilder unter frames/ ab."""
+        from src.models.media import Job, JobType
+
+        try:
+            workspace = self._media_ai_workspace(folder)
+            rate = float(fps)
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+        if rate <= 0:
+            return json.dumps({"error": "Die Bildrate muss groesser als 0 sein."})
+
+        job = Job(job_type=JobType.MEDIA_AI_FRAMES,
+                  params={"workspace": str(workspace.root), "fps": rate,
+                          "stage": "Einzelbilder werden erzeugt",
+                          "display_name": f"Frames: {workspace.name}"})
+
+        async def _handler(j):
+            from src.services.media_ai import VideoProcessor
+
+            processor = VideoProcessor(ffmpeg=self.ffmpeg)
+            frames = await processor.extract_frames(
+                workspace, fps=j.params["fps"], job=j)
+            j.output_path = frames[0].parent
+            state = workspace.load_job()
+            state.record("Einzelbilder werden erzeugt")
+            workspace.save_job(state)
+
+        return self._submit_job(job, _handler)
+
+    def media_ai_list(self) -> str:
+        """Alle Arbeitsmappen, neueste zuerst."""
+        try:
+            from src.services.media_ai import list_workspaces
+
+            base = self.settings.directories.download_dir
+            return json.dumps({
+                "base": str(base),
+                "workspaces": [w.describe() for w in list_workspaces(base)],
+            })
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+    def media_ai_open(self, folder: str) -> str:
+        """Oeffnet eine Arbeitsmappe im Explorer."""
+        try:
+            workspace = self._media_ai_workspace(folder)
+            os.startfile(str(workspace.root))
+            return json.dumps({"ok": True, "path": str(workspace.root)})
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
 
     # ── KI/Medienwerkzeuge ─────────────────────────────────────────────
     def create_highlights(self, input_path: str, duration_seconds: int = 300) -> str:
@@ -970,7 +1445,7 @@ class RetroDiscBridge:
             j.output_path = await editor.create_highlights(
                 j.input_files[0], j.output_path, cfg, j)
 
-        return self._submit_job(job, _handler)
+        return self._submit_job(job, self._with_reserved_output(_handler))
 
     def generate_subtitles(self, input_path: str, language: str = "",
                            model: str = "base", fmt: str = "srt") -> str:
@@ -993,7 +1468,7 @@ class RetroDiscBridge:
                 j.input_files[0], j.output_path,
                 language=j.params["language"], format=j.params["format"], job=j)
 
-        return self._submit_job(job, _handler)
+        return self._submit_job(job, self._with_reserved_output(_handler))
 
     def upscale_video(self, input_path: str, scale: int = 4) -> str:
         from src.models.media import Job, JobType
@@ -1011,7 +1486,7 @@ class RetroDiscBridge:
             j.output_path = await up.upscale(
                 j.input_files[0], j.output_path, scale=j.params["scale"], job=j)
 
-        return self._submit_job(job, _handler)
+        return self._submit_job(job, self._with_reserved_output(_handler))
 
     def interpolate_video(self, input_path: str, target_fps: float = 60.0) -> str:
         from src.models.media import Job, JobType
@@ -1031,7 +1506,7 @@ class RetroDiscBridge:
                 j.input_files[0], j.output_path,
                 target_fps=j.params["target_fps"], job=j)
 
-        return self._submit_job(job, _handler)
+        return self._submit_job(job, self._with_reserved_output(_handler))
 
     def run_assistant(self, prompt: str) -> str:
         prompt = (prompt or "").strip()
@@ -1103,9 +1578,10 @@ class RetroDiscBridge:
         async def _handler(j):
             j.output_path = await self.ffmpeg.trim(
                 j.input_files[0], j.output_path,
-                j.params["start"], j.params["end"], job=j)
+                j.params["start"], j.params["end"], job=j,
+                overwrite=True)  # Das Ziel ist die eigene Reservierung.
 
-        return self._submit_job(job, _handler)
+        return self._submit_job(job, self._with_reserved_output(_handler))
 
     def preview_trim(self, input_path: str, start: float, end: float) -> str:
         """Creates a short temporary clip and opens it with the Windows default player."""
@@ -1149,7 +1625,7 @@ class RetroDiscBridge:
         async def _handler(j):
             j.output_path = await self.ffmpeg.merge(j.input_files, j.output_path, job=j)
 
-        return self._submit_job(job, _handler)
+        return self._submit_job(job, self._with_reserved_output(_handler))
 
     def convert_batch(self, paths_json: str, preset: str,
                       output_path: str = "", overwrite: bool = False) -> str:
@@ -1344,6 +1820,19 @@ class RetroDiscApi:
     def download_url(self, url, format="best", audio_only=False, subtitles=False): return self._bridge.download_url(url, format, audio_only, subtitles)
     def search_media(self, query, sources="[]", max_results=15): return self._bridge.search_media(query, sources, max_results)
     def get_queue(self): return self._bridge.get_queue()
+    def open_job_folder(self, job_id, kind): return self._bridge.open_job_folder(job_id, kind)
+    def open_job_file(self, job_id): return self._bridge.open_job_file(job_id)
+    def set_media_root(self, folder): return self._bridge.set_media_root(folder)
+    def get_environment(self): return self._bridge.get_environment()
+    def open_log_folder(self): return self._bridge.open_log_folder()
+    def media_ai_import(self, url, quality="best", extract_video=True, extract_audio=True):
+        return self._bridge.media_ai_import(url, quality, extract_video, extract_audio)
+    def media_ai_extract_audio(self, folder): return self._bridge.media_ai_extract_audio(folder)
+    def media_ai_extract_video(self, folder): return self._bridge.media_ai_extract_video(folder)
+    def media_ai_transcribe(self, folder, language=""): return self._bridge.media_ai_transcribe(folder, language)
+    def media_ai_extract_frames(self, folder, fps=1.0): return self._bridge.media_ai_extract_frames(folder, fps)
+    def media_ai_list(self): return self._bridge.media_ai_list()
+    def media_ai_open(self, folder): return self._bridge.media_ai_open(folder)
     def clear_completed(self): return self._bridge.clear_completed()
     def get_settings(self): return self._bridge.get_settings()
     def save_settings(self, data): return self._bridge.save_settings(data)

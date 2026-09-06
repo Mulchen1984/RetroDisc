@@ -34,6 +34,7 @@ class Pipeline:
     def __init__(self, max_concurrent: int = 1, play_sound: bool = True):
         self.max_concurrent = max_concurrent
         self.play_sound = play_sound
+        self.history = None
         self._queue: deque[Job] = deque()
         self._running: list[Job] = []
         self._completed: list[Job] = []
@@ -61,6 +62,8 @@ class Pipeline:
     async def submit(self, job: Job, handler: Optional[Callable] = None) -> str:
         """Fügt einen Job zur Queue hinzu."""
         async with self._lock:
+            if self.history:
+                self.history.save(job)
             if handler is not None:
                 self._job_handlers[job.id] = handler
             self._queue.append(job)
@@ -126,6 +129,9 @@ class Pipeline:
                     self._queue.remove(job)
                     self._job_handlers.pop(job.id, None)
                     job.mark_cancelled()
+                    self._completed.append(job)
+                    if self.history:
+                        self.history.save(job)
                     log.info("Job aus Queue entfernt", job_id=job_id)
                     return True
 
@@ -194,6 +200,11 @@ class Pipeline:
                         )
 
         finally:
+            if self.history:
+                try:
+                    self.history.save(job)
+                except Exception as exc:
+                    log.error("Jobhistorie konnte nicht gespeichert werden", error=str(exc))
             self._job_handlers.pop(job.id, None)
             self._tasks.pop(job.id, None)
             async with self._lock:

@@ -41,6 +41,13 @@ class JobType(Enum):
     SMART_EDIT = "smart_edit"
     TRIM = "trim"
     MERGE = "merge"
+    # Media AI Pipeline. Eigene Typen, damit Jobhistorie und Oberflaeche einen
+    # Import von einem gewoehnlichen Download unterscheiden koennen.
+    MEDIA_AI_IMPORT = "media_ai_import"
+    MEDIA_AI_AUDIO = "media_ai_audio"
+    MEDIA_AI_VIDEO = "media_ai_video"
+    MEDIA_AI_TRANSCRIBE = "media_ai_transcribe"
+    MEDIA_AI_FRAMES = "media_ai_frames"
 
 
 class MediaType(Enum):
@@ -164,7 +171,7 @@ class ConversionPreset:
 @dataclass
 class Job:
     """Ein Verarbeitungs-Job in der Pipeline."""
-    id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
     job_type: JobType = JobType.CONVERT
     state: JobState = JobState.PENDING
     input_files: list[Path] = field(default_factory=list)

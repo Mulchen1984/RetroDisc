@@ -188,7 +188,8 @@ def case_unicode_download(ctx: Context) -> tuple[dict, list[str]]:
     findings: list[str] = []
     out_dir = ctx.work_dir / "download"
     out_dir.mkdir(parents=True, exist_ok=True)
-    ctx.bridge.downloader.output_dir = out_dir
+    ctx.bridge.settings.directories.download_dir = out_dir
+    ctx.bridge.settings.directories.output_dir = ctx.work_dir / "Videos"
     metrics: dict = {"url": UNICODE_URL, "output_dir": str(out_dir)}
 
     probe = run_hidden(
@@ -238,7 +239,7 @@ def case_unicode_download(ctx: Context) -> tuple[dict, list[str]]:
         metrics["output_bytes"] = output.stat().st_size
         if output.stat().st_size <= 0:
             findings.append("Ausgabedatei ist leer")
-        if output.parent.resolve() != out_dir.resolve():
+        if output.parent.resolve() != ctx.bridge.settings.directories.output_dir.resolve():
             findings.append("Ausgabedatei liegt nicht im konfigurierten Ordner")
         if not not_cp1252_encodable(output.name):
             findings.append("Dateiname ohne undarstellbares Zeichen - beweist nichts")
@@ -247,7 +248,7 @@ def case_unicode_download(ctx: Context) -> tuple[dict, list[str]]:
         p.name for p in out_dir.rglob("*")
         if p.is_file() and p.suffix.lower() in TRANSIENT_SUFFIXES
     ]
-    dirs = [p.name for p in out_dir.iterdir() if p.is_dir()]
+    dirs = [p.name for p in out_dir.rglob(".retrodisc-dl-*") if p.is_dir()]
     metrics["transient_leftovers"] = [ascii(n) for n in leftovers]
     metrics["leftover_dirs"] = [ascii(n) for n in dirs]
     if leftovers:

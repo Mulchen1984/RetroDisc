@@ -1,6 +1,7 @@
 """Optical-disc ripping for unprotected DVD/Blu-ray/data media."""
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -114,7 +115,12 @@ class DiscRipper:
 
             if output_format == "mkv_copy":
                 if source.suffix.lower() == ".mkv":
-                    shutil.move(str(source), str(output_path))
+                    # ``os.replace`` statt ``shutil.move``: der Aufrufer hat den
+                    # Zielnamen bereits als leere Datei reserviert, und
+                    # ``shutil.move`` wuerde darauf unter Windows in den
+                    # langsamen Kopierzweig fallen. Quelle und Ziel liegen im
+                    # selben Verzeichnisbaum, das Umbenennen bleibt atomar.
+                    os.replace(source, output_path)
                     return output_path
                 return await self.ffmpeg.convert(
                     source, output_path, video_codec="copy", audio_codec="copy",
