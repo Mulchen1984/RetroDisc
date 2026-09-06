@@ -385,8 +385,14 @@ class FFmpeg:
         start_seconds: float,
         end_seconds: float,
         job: Optional[Job] = None,
+        overwrite: bool = False,
     ) -> Path:
-        """Schneidet ein Video auf den angegebenen Zeitbereich."""
+        """Schneidet ein Video auf den angegebenen Zeitbereich.
+
+        ``overwrite`` reicht der Aufrufer durch, wenn er den Zielnamen vorher
+        selbst reserviert hat: dort liegt dann seine eigene leere Datei, und
+        die Existenzpruefung in ``convert`` waere ein Fehlalarm.
+        """
         duration = end_seconds - start_seconds
         return await self.convert(
             input_path=input_path,
@@ -398,6 +404,7 @@ class FFmpeg:
                 "-t", str(duration),
             ],
             job=job,
+            overwrite=overwrite,
         )
 
     async def merge(

@@ -13,7 +13,13 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
+from src.core.output import (
+    OutputError,
+    claim_target_group,
+    remove_claimed_targets,
+)
 from src.models.media import Job, SearchResult
+from src.config.settings import DirectorySettings, resolve_user_path, ensure_writable_directory
 from src.utils.subprocesses import (
     create_hidden_subprocess,
     decode_console_output,
@@ -53,9 +59,9 @@ class Downloader:
         ffmpeg_path: Optional[str] = None,
     ):
         self.ytdlp_path = ytdlp_path or shutil.which("yt-dlp") or "yt-dlp"
-        self.output_dir = Path(output_dir) if output_dir else Path.home() / "Downloads" / "RetroDisc"
+        self.output_dir = resolve_user_path(output_dir) if output_dir else DirectorySettings().download_dir
         self.ffmpeg_path = ffmpeg_path or shutil.which("ffmpeg")
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        ensure_writable_directory(self.output_dir)
 
     @staticmethod
     def validate_url(url: str) -> str:
@@ -176,7 +182,9 @@ class Downloader:
             Pfad zur heruntergeladenen Datei
         """
         url = self.validate_url(url)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        if job:
+            job.update_progress(0, f"Download gestartet | Downloadziel: {self.output_dir}")
+        ensure_writable_directory(self.output_dir)
 
         # Jeder Aufruf laedt in ein eigenes, eindeutiges Arbeitsverzeichnis.
         # Parallele Downloads sehen dadurch die Teildateien der anderen nicht,
@@ -222,7 +230,10 @@ class Downloader:
                         progress = float(progress_match.group(1))
                         speed_match = re.search(r"at\s+(\S+)", line_str)
                         speed = speed_match.group(1) if speed_match else ""
-                        job.update_progress(progress, f"Download: {speed}")
+                        job.update_progress(min(progress, 99), f"Download: {speed} | Downloadziel: {self.output_dir}")
+
+                if job and line_str.startswith(("[Merger]", "[ExtractAudio]", "[Metadata]", "[EmbedThumbnail]")):
+                    job.update_progress(99, f"Verarbeitung gestartet (Download aufbereiten) | Ausgabeziel: {self.output_dir}")
 
                 # Von --print after_move ausgegebener endgültiger Dateiname.
                 if line_str.startswith("__RETRODISC_FILE__:"):
@@ -245,7 +256,12 @@ class Downloader:
             if proc is not None and job and getattr(job, "_process", None) is proc:
                 job._process = None
             # Nur das eigene Arbeitsverzeichnis entfernen — nie den Ausgabebaum.
-            shutil.rmtree(work_dir, ignore_errors=True)
+            try:
+                shutil.rmtree(work_dir)
+            except OSError as exc:
+                if job:
+                    job.params["cleanup_warning"] = f"Temporäre Dateien konnten nicht entfernt werden: {work_dir}: {exc}"
+                log.warning("Download-Cleanup fehlgeschlagen", path=str(work_dir), error=str(exc))
 
         # Der Erfolgs-Log steht bewusst ausserhalb des try/except. Die Datei ist
         # hier bereits veroeffentlicht. Ein Problem beim Schreiben der Logzeile -
@@ -263,6 +279,9 @@ class Downloader:
                 "Download abgeschlossen; Pfad im Ausgabekanal nicht darstellbar",
                 path_ascii=ascii(str(final_path)),
             )
+        if job:
+            job.output_path = final_path
+            job.update_progress(100, f"Fertig | Download: {final_path}")
         return final_path
 
     # Transiente yt-dlp-Zwischendateien, die nie veroeffentlicht werden.
@@ -359,35 +378,19 @@ class Downloader:
 
         return primary_target
 
-    @staticmethod
-    def _remove_claimed_targets(targets: list[Path]) -> None:
-        for target in reversed(targets):
-            try:
-                target.unlink(missing_ok=True)
-            except OSError as exc:
-                # Auch bei einem gesperrten Ziel die übrigen eigenen Dateien aufräumen.
-                log.warning("Download-Cleanup fehlgeschlagen", path=str(target), error=str(exc))
+    # Die Reservierung selbst steht in ``src/core/output.py``. Sie war hier
+    # entstanden und war lange der einzige Pfad, der sie hatte; seit RD-03
+    # benutzen alle Ausgabewege dieselbe Technik. Die beiden Namen hier bleiben
+    # als duenne Weiterleitung erhalten - Verhalten unveraendert.
+    _remove_claimed_targets = staticmethod(remove_claimed_targets)
 
     @staticmethod
     def _claim_target_group(targets: list[Path], stem: str) -> list[Path]:
         """Reserviert alle Gruppennamen exklusiv mit demselben Kollisionszähler."""
-        for counter in range(10_000):
-            suffix = f" ({counter})" if counter else ""
-            candidates = [
-                p.with_name(f"{stem}{suffix}{p.name[len(stem):]}") for p in targets
-            ]
-            claimed: list[Path] = []
-            try:
-                for candidate in candidates:
-                    with open(candidate, "xb"):
-                        claimed.append(candidate)
-                return claimed
-            except FileExistsError:
-                Downloader._remove_claimed_targets(claimed)
-            except BaseException:
-                Downloader._remove_claimed_targets(claimed)
-                raise
-        raise DownloadError(f"Zu viele Namenskollisionen für {targets[0].name}")
+        try:
+            return claim_target_group(targets, stem)
+        except OutputError as exc:
+            raise DownloadError(str(exc)) from exc
 
     @staticmethod
     def _claim_unique_target(target: Path) -> Path:
@@ -400,7 +403,7 @@ class Downloader:
         klanglos ueberschreiben. Das exklusive ``x``-Open ist ein einziger
         atomarer Syscall (``O_CREAT | O_EXCL``) und schliesst dieses Fenster.
         """
-        return Downloader._claim_target_group([target], target.stem)[0]
+        return Downloader._claim_target_group([Path(target)], Path(target).stem)[0]
 
     async def search_youtube(
         self,

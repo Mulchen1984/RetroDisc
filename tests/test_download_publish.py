@@ -170,7 +170,10 @@ def test_reservation_failure_releases_current_and_previous_groups(tmp_path, monk
             raise OSError("simulated reservation failure")
         return real_open(path, mode)
 
-    monkeypatch.setattr("src.core.downloader.open", failing_open, raising=False)
+    # Die Reservierung selbst wohnt seit RD-03 in src/core/output.py; der
+    # Downloader leitet nur noch dorthin weiter. Geprueft wird unveraendert,
+    # dass ein Fehlschlag die eigene *und* die zuvor belegte Gruppe freigibt.
+    monkeypatch.setattr("src.core.output.open", failing_open, raising=False)
     with pytest.raises(OSError, match="simulated reservation"):
         downloader._publish_downloads(work, work / "B.mp4")
 
