@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.core.ffmpeg import FFmpeg
+from src.config.settings import DirectorySettings, resolve_user_path, ensure_writable_directory
 from src.config.presets import get_preset, ConversionPreset
 from src.models.media import Job, JobType, MediaFile
 
@@ -37,7 +38,7 @@ class Converter:
 
     def __init__(self, ffmpeg: Optional[FFmpeg] = None, output_dir: Optional[Path] = None):
         self.ffmpeg = ffmpeg or FFmpeg()
-        self.output_dir = output_dir
+        self.output_dir = resolve_user_path(output_dir) if output_dir else DirectorySettings().output_dir
 
     async def convert_file(
         self,
@@ -69,6 +70,8 @@ class Converter:
             output_path = out_dir / f"{input_path.stem}_{p.name}.{p.container}"
         else:
             output_path = Path(output_path)
+            if not output_path.is_absolute():
+                output_path = self.output_dir / output_path
             if (output_path.exists() and output_path.is_dir()) or not output_path.suffix:
                 output_path = output_path / f"{input_path.stem}_{p.name}.{p.container}"
         output_path = Path(output_path)
@@ -80,6 +83,11 @@ class Converter:
                 f"Zieldatei existiert bereits: {output_path}. "
                 "Zum Ersetzen 'Vorhandene Dateien überschreiben' aktivieren."
             )
+
+        ensure_writable_directory(output_path.parent)
+        if job:
+            job.output_path = output_path
+            job.update_progress(0, f"Verarbeitung gestartet | Ausgabeziel: {output_path}")
 
         log.info("Konvertierung",
                  input=input_path.name,
@@ -126,7 +134,7 @@ class Converter:
             Liste der Output-Pfade
         """
         input_dir = Path(input_dir)
-        output_dir = Path(output_dir) if output_dir else input_dir / "converted"
+        output_dir = resolve_user_path(output_dir) if output_dir else self.output_dir
         output_dir.mkdir(parents=True, exist_ok=True)
 
         allowed = extensions or self.ALL_EXTENSIONS
