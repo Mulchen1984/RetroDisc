@@ -2,10 +2,11 @@
 
 Ein Blick auf die Frage: **kann das ausgeliefert werden?**
 
-Kurze Antwort: nein, und zwar aus vier Gründen, von denen nur einer im Code
-liegt. Der Quellstand ist so weit; belegt ist er am Artefakt nicht.
+Kurze Antwort: nein, und zwar aus drei Gründen, von denen **keiner** im Code
+liegt. Der Quellstand ist so weit und seit dem 06.09. eingefroren; belegt ist
+er am Artefakt nicht.
 
-Stand: 2026-09-06 · Branch `release-signing` · letzter Commit `949fccc`
+Stand: 2026-09-06 · Branch `release-signing` · letzter Commit `24c87ca`
 
 ---
 
@@ -61,7 +62,8 @@ Belegt durch Test oder Messung. Die Nachweise stehen in
 
 ## BLOCKIERT
 
-Diese vier verhindern die Freigabe. Drei davon sind nicht durch Code lösbar.
+Diese drei verhindern die Freigabe. **Keiner davon ist durch Code lösbar.**
+B4 ist am 06.09. entfallen und bleibt unten als Nachweis stehen.
 
 ### B1 — Vendor-Binaries von der Anwendungssteuerungsrichtlinie blockiert
 
@@ -94,14 +96,34 @@ vertraut wird — auf jedem anderen System liest dieselbe Datei als
 Kein Rohling vorhanden. Die physischen Disc-Pfade gelten als **nicht
 hardwareverifiziert** und sind so zu kennzeichnen.
 
-### B4 — Arbeitsbaum nicht eingefroren
+### ~~B4 — Arbeitsbaum nicht eingefroren~~ — **erledigt am 2026-09-06**
 
-Der gesamte Stand aus vier Arbeitsdurchläufen liegt uncommittet im
-Arbeitsbaum: **19 geänderte, 16 neue Dateien**. `CLAUDE.md` verlangt, nur aus
-einem eingefrorenen Commit zu bauen.
+Der Plan wurde in acht Commits umgesetzt; der Arbeitsbaum ist sauber. Damit
+ist die Voraussetzung aus `CLAUDE.md` erfüllt, nur aus einem eingefrorenen
+Commit zu bauen.
 
-Der Commit-Plan steht unten. Bis er ausgeführt ist, kostet ein Absturz oder
-eine parallel arbeitende Sitzung die gesamte Arbeit.
+| # | Hash | Inhalt |
+|---|------|--------|
+| 1 | `d33c414` | Reserve every output name in one place |
+| 2 | `b412d3e` | Keep job state across restarts |
+| 3 | `2132e36` | Show every step of the download pipeline |
+| 4 | `bff5002` | Derive every media folder from one media root |
+| 5 | `bce715a` | Write pipeline logs from the windowed build |
+| 6 | `62e37ec` | Add the media AI pipeline as a separate service layer |
+| 7 | `76977f1` | Surface results, real environment data and media AI in the UI |
+| 8 | `24c87ca` | Document architecture, decisions, requirements and release status |
+
+44 Dateien, 6523 Einfügungen, 162 Löschungen gegenüber `949fccc`.
+
+Der Branch liegt **8 Commits vor `origin/release-signing`**. Es wurde nicht
+gepusht.
+
+**Einschränkung, die zum Schnitt gehört:** die Commits 1–6 sind fachlich
+abgegrenzt, aber nicht einzeln grün. Die Tests der unteren Schichten greifen
+teilweise auf `retrodisc_launcher.RetroDiscBridge` zu, das erst mit Commit 7
+kommt — die Bridge ist eine einzelne große Datei und lässt sich nicht sinnvoll
+aufteilen. Grün ist der Stand ab `76977f1`; ein `git bisect` über diesen
+Bereich braucht deshalb `HEAD` als Referenz.
 
 ---
 
@@ -148,7 +170,9 @@ Der Nachweis ist ein Lauf der gepackten EXE, dessen Logfile Zeilen aus
 
 Am 05.09. hat eine fremde Sitzung den Branch gewechselt; am 06.09. lag
 uncommittete Fremdarbeit im Baum (Jobhistorie, Download-Workflow). Beides ging
-gut aus. Solange B4 offen ist, bleibt das ein Datenverlustrisiko.
+gut aus. Mit dem Einfrieren (B4) ist das Datenverlustrisiko deutlich kleiner,
+aber nicht null: der Branch ist **nicht gepusht**, alles liegt weiterhin nur
+auf diesem Rechner.
 
 ### R5 — Die EXE liegt bei rund 500 MB
 
@@ -196,14 +220,15 @@ Reservierung liegt zuunterst, weil alles Weitere sie benutzt.
    → "Document architecture, decisions, requirements and release status"
 ```
 
-**Nicht ausgeführt.** Der Commit ist vorbereitet, aber nicht gesetzt — dafür
-fehlt die ausdrückliche Freigabe.
+**Ausgeführt am 2026-09-06.** Die Hashes stehen oben unter B4.
 
 ---
 
 ## Was als Nächstes den größten Unterschied macht
 
-1. **B4 auflösen** — committen. Kostet Minuten, sichert vier Durchläufe.
-2. **B1 auflösen** — einen Host, auf dem die Vendor-Binaries laufen. Erst
-   danach lassen sich B6, D3, F12 und R3 überhaupt belegen.
-3. **P2-3** — die letzten Werkzeug-Rohtexte aus der Oberfläche.
+1. **B1 auflösen** — einen Host, auf dem die Vendor-Binaries laufen. Erst
+   danach lassen sich B6, D3, F12 und R3 überhaupt belegen. Das ist jetzt der
+   einzige Punkt, der weitere Arbeit am Code blockiert.
+2. **P2-3** — die letzten Werkzeug-Rohtexte aus der Oberfläche.
+3. **P2-8** — das Artefakt-Gate soll melden, wenn die Artefakte älter sind als
+   die jüngste Quelldatei (siehe R1).

@@ -18,7 +18,7 @@ sie nicht:
 Ein Ticket verschwindet hier erst, wenn es **belegt** erledigt ist. Der Beleg
 steht im Journal, nicht hier.
 
-Stand: 2026-09-06 (nach Durchlauf 5)
+Stand: 2026-09-06 (nach Durchlauf 6)
 
 ---
 
@@ -32,14 +32,9 @@ Diese drei verhindern ein Release unabhängig vom Code.
 | B2 | **Keine öffentlich vertrauenswürdige Code-Signatur.** Das lokale Development-Zertifikat belegt die Pipeline, nicht die Weitergabefähigkeit. | Beschaffung | — |
 | B3 | **Physischer Brenn- und Rücklesetest fehlt.** Kein Rohling vorhanden. | Hardware | — |
 
-**B4 — Arbeitsbaum nicht eingefroren.** Der aktuelle Stand liegt vollständig
-uncommittet im Arbeitsbaum (Stand 2026-09-06: 17 geänderte, 10 neue Dateien).
-`CLAUDE.md` verlangt, nur aus einem eingefrorenen Commit zu bauen. Solange
-nicht committet ist, ist **kein** Release möglich, und ein Absturz oder ein
-paralleler Zugriff kostet die gesamte Arbeit.
-
-Der ausgearbeitete Commit-Plan mit acht Schnitten steht in
-`docs/RELEASE_STATUS.md`. Er ist vorbereitet, aber nicht ausgeführt.
+**~~B4 — Arbeitsbaum nicht eingefroren~~ — erledigt am 2026-09-06.** In acht
+Commits umgesetzt (`d33c414` … `24c87ca`), Arbeitsbaum sauber. Hashes und
+die Einschränkung zum Schnitt stehen in `docs/RELEASE_STATUS.md`.
 
 ---
 
