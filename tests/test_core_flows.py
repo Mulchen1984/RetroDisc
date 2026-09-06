@@ -194,11 +194,14 @@ def test_whisper_runtime_dependency_is_declared_packaged_and_importable():
     assert importlib.import_module("faster_whisper")
 
 
-def test_bridge_dynamic_jobs_submit_distinct_per_job_handlers():
+def test_bridge_dynamic_jobs_submit_distinct_per_job_handlers(tmp_path):
     bridge = object.__new__(RetroDiscBridge)
     captured = []
     bridge.converter = SimpleNamespace()
-    bridge.downloader = SimpleNamespace(validate_url=lambda url: url)
+    from src.config.settings import AppSettings
+    bridge.settings = AppSettings(directories={"download_dir": tmp_path / "Downloads", "output_dir": tmp_path / "Videos"})
+    bridge.ffmpeg = SimpleNamespace()
+    bridge.downloader = SimpleNamespace(validate_url=lambda url: url, ytdlp_path="yt-dlp", ffmpeg_path="ffmpeg")
     bridge._submit_job = lambda job, handler: (
         captured.append((job, handler)) or json.dumps({"job_id": job.id})
     )
@@ -237,6 +240,16 @@ def test_bridge_save_settings_merges_and_applies_runtime_dependencies(tmp_path):
         growisofs="old-growisofs", cdrecord="old-cdrecord",
     )
     bridge.pipeline = SimpleNamespace(max_concurrent=99)
+    # Diese beiden zogen geaenderte Einstellungen frueher nicht nach: der
+    # DVD-Workflow schrieb weiter in den alten Temp-Ordner, und die Bibliothek
+    # blieb auf ihrer alten Datenbank stehen.
+    bridge.dvd_workflow = SimpleNamespace(temp_dir=tmp_path / "alt-temp")
+    bridge.library = SimpleNamespace(
+        db_path=tmp_path / "alt" / "library.db",
+        thumb_dir=tmp_path / "alt" / "thumbnails",
+        open=lambda: None,
+        close=lambda: None,
+    )
 
     payload = {
         "tools": {
@@ -248,6 +261,8 @@ def test_bridge_save_settings_merges_and_applies_runtime_dependencies(tmp_path):
         "directories": {
             "output_dir": str(tmp_path / "output"),
             "download_dir": str(tmp_path / "downloads"),
+            "temp_dir": str(tmp_path / "temp"),
+            "library_db": str(tmp_path / "neu" / "library.db"),
         },
     }
     with patch.object(AppSettings, "save", autospec=True) as save_mock:
@@ -264,6 +279,11 @@ def test_bridge_save_settings_merges_and_applies_runtime_dependencies(tmp_path):
     assert bridge.downloader.output_dir == tmp_path / "downloads"
     assert bridge.disc.dvdauthor == "new-dvdauthor"
     assert bridge.disc.mkisofs == "preserve-mkisofs"
+    # Keine Komponente darf an den Einstellungen vorbei auf einem alten Pfad
+    # stehen bleiben.
+    assert bridge.dvd_workflow.temp_dir == tmp_path / "temp"
+    assert bridge.library.db_path == tmp_path / "neu" / "library.db"
+    assert bridge.library.thumb_dir == tmp_path / "neu" / "thumbnails"
 
 
 def test_startup_branding_is_embedded_and_bridge_can_finish_splash():

@@ -20,6 +20,7 @@ from typing import Optional
 
 from src.core.ffmpeg import FFmpeg
 from src.core.disc import DiscTools, DiscError
+from src.core.output import claim_unique_target, remove_claimed_targets
 from src.models.media import DiscType, Job, JobType
 from src.utils.subprocesses import create_hidden_subprocess
 
@@ -162,15 +163,22 @@ class DVDWorkflow:
             # ── Schritt 4: ISO erstellen ─────────────────────────────
             self._step(job, 4, 75, "ISO-Image wird erstellt...")
             safe_title = safe_name[:32].upper()
-            iso_path = out_dir / f"{safe_name}.iso"
+            # Der Name kommt aus dem Projekttitel, dessen Vorgabe fuer jedes
+            # Projekt dieselbe ist. ``mkisofs -o`` haette das Abbild des
+            # vorigen Laufs kommentarlos ueberschrieben, deshalb reservieren.
+            claimed_iso = claim_unique_target(out_dir / f"{safe_name}.iso")
 
-            iso_path = await self.disc.create_iso(
-                source_dir=dvd_dir,
-                output_path=iso_path,
-                volume_label=safe_title,
-                disc_type=DiscType.DVD,
-                job=job,
-            )
+            try:
+                iso_path = await self.disc.create_iso(
+                    source_dir=dvd_dir,
+                    output_path=claimed_iso,
+                    volume_label=safe_title,
+                    disc_type=DiscType.DVD,
+                    job=job,
+                )
+            except BaseException:
+                remove_claimed_targets([claimed_iso])
+                raise
 
             # ── Schritt 5: Brennen (optional) ──────────────────────
             if project.burn_to_disc and not project.only_iso:
