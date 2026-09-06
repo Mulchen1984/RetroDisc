@@ -18,7 +18,7 @@ sie nicht:
 Ein Ticket verschwindet hier erst, wenn es **belegt** erledigt ist. Der Beleg
 steht im Journal, nicht hier.
 
-Stand: 2026-09-06 (nach Durchlauf 6)
+Stand: 2026-09-06 (nach Durchlauf 7, gepusht)
 
 ---
 

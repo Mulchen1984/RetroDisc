@@ -6,7 +6,7 @@ Kurze Antwort: nein, und zwar aus drei Gründen, von denen **keiner** im Code
 liegt. Der Quellstand ist so weit und seit dem 06.09. eingefroren; belegt ist
 er am Artefakt nicht.
 
-Stand: 2026-09-06 · Branch `release-signing` · letzter Commit `24c87ca`
+Stand: 2026-09-06 · Branch `release-signing` · letzter Commit `5b6f1de` · gepusht
 
 ---
 
@@ -166,13 +166,28 @@ ist. Genau dort ist es nicht nachgemessen, weil nicht gebaut werden kann (B1).
 Der Nachweis ist ein Lauf der gepackten EXE, dessen Logfile Zeilen aus
 `src.core.pipeline` enthält.
 
-### R4 — Zwei Sitzungen im selben Arbeitsbaum
+### ~~R4 — Der eingefrorene Stand liegt nur auf einem Rechner~~ — **geschlossen am 2026-09-06**
 
 Am 05.09. hat eine fremde Sitzung den Branch gewechselt; am 06.09. lag
 uncommittete Fremdarbeit im Baum (Jobhistorie, Download-Workflow). Beides ging
-gut aus. Mit dem Einfrieren (B4) ist das Datenverlustrisiko deutlich kleiner,
-aber nicht null: der Branch ist **nicht gepusht**, alles liegt weiterhin nur
-auf diesem Rechner.
+gut aus, war aber Zufall.
+
+Der Branch `release-signing` ist nach `origin` gepusht
+(`949fccc..5b6f1de`, Fast-Forward). Der Stand liegt damit nicht mehr nur auf
+diesem Rechner.
+
+Vor dem Push geprüft: keine uncommitteten Änderungen; Historie durchgesehen;
+Mustersuche nach Zugangsdaten in allen hinzugefügten Zeilen ohne Treffer;
+**null** neue Personenbezüge (`CLAUDE.md` enthielt schon vor dem Push acht
+Pfade mit dem Benutzernamen); `dist/`, `Output/`, `build/`, `vendor/`,
+`.venv/`, `RetroDisc_Data/` und `__pycache__/` sind über `.gitignore`
+ausgeschlossen und mit **0** Dateien getrackt.
+
+**Was offen bleibt:** die Sichtbarkeit des Repositorys konnte nicht geprüft
+werden — `gh` ist auf diesem Rechner nicht angemeldet. Ist
+`Mulchen1984/RetroDisc` öffentlich, dann sind die Pfade mit dem Benutzernamen
+in `CLAUDE.md` öffentlich; das war schon vor diesem Push so und ist keine neue
+Preisgabe, aber eine bewusste Entscheidung wert.
 
 ### R5 — Die EXE liegt bei rund 500 MB
 
@@ -182,10 +197,11 @@ weiter treiben; ein Nachladen widerspricht dem lokalen Betrieb.
 
 ---
 
-## Commit-Plan zu B4
+## Commit-Plan zu B4 — ausgeführt
 
-Sieben Commits, jeder für sich prüfbar. Reihenfolge ist Absicht: die
-Reservierung liegt zuunterst, weil alles Weitere sie benutzt.
+Acht Commits, jeder fachlich für sich prüfbar, dazu ein neunter, der den
+Freeze dokumentiert. Reihenfolge ist Absicht: die Reservierung liegt
+zuunterst, weil alles Weitere sie benutzt.
 
 ```
 1  src/core/output.py  src/core/downloader.py  src/core/ffmpeg.py
