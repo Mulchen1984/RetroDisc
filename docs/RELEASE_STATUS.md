@@ -2,11 +2,12 @@
 
 Ein Blick auf die Frage: **kann das ausgeliefert werden?**
 
-Kurze Antwort: nein — aber deutlich näher als heute früh. B1 ist am 06.09.
-entfallen, damit laufen alle Gates wieder. Es fehlt der **Build aus dem
-eingefrorenen Stand**; die vorhandenen Artefakte sind vom 05.09.
+Kurze Antwort: technisch ja, rechtlich nein. Der Build aus dem eingefrorenen
+Stand ist erzeugt und an allen Gates belegt. Was fehlt, ist ein öffentlich
+vertrauenswürdiges Zertifikat (B2) und der physische Disc-Test (B3) —
+beides Beschaffung, nicht Code.
 
-Stand: 2026-09-06 · Branch `release-signing` · letzter Commit `ca99a05` · gepusht
+Stand: 2026-09-06 · Branch `release-signing` · Build aus `c773367` · gepusht
 
 ---
 
@@ -87,15 +88,23 @@ Dass diese Hashes jetzt starten, sagt nichts über andere — insbesondere nicht
 Ein erneuter Block beim nächsten Build ist möglich und wäre kein Rückschritt
 im Code.
 
-### B5 — Kein Build aus dem eingefrorenen Stand
+### ~~B5 — Kein Build aus dem eingefrorenen Stand~~ — **erledigt am 2026-09-06**
 
-Mit B1 ist der Bauweg wieder offen, aber noch nicht gefahren. Solange das
-nicht geschehen ist, gilt für den ausgelieferten Zustand nur, was am
-Quellstand belegt ist. Das betrifft D3/R3 (Logging im windowed Build), F12
-(Media AI am Artefakt) und R1 (die Artefakte selbst).
+Gebaut aus `c773367` mit `build.py --clean --sign`, signiert mit dem
+Entwicklungszertifikat `CN=RetroDisc Development`.
 
-Nächster Schritt: `python build.py --clean --sign`, danach
-`scripts/verify_release_artifacts.py --require-signed` und ein Runtime-Gate.
+| Artefakt | Bytes | SHA-256 | Signatur |
+|---|---|---|---|
+| `dist\RetroDisc.exe` | 503 110 992 | `2A75102C540E715CECF930585EB8ADE104F71745E128885D34D4E312D6745DCD` | Valid |
+| `Output\RetroDisc_1.0.0_Portable.zip` | 501 638 445 | `E65855A21E091B652466B5AB1D1AEE1C0B3D892CB954472E7924A1FDD9B692D9` | — (ZIP) |
+| `Output\RetroDisc_Setup_1.0.0.exe` | 509 700 696 | `46C107D893DEAA0995FA2646789E49AA8506D24A730BF8872E8EF40F1FFB855F` | Valid |
+
+Die Signatur ist mit dem **Entwicklungszertifikat** erzeugt und belegt allein,
+dass die Pipeline in der richtigen Reihenfolge arbeitet — bauen, signieren,
+prüfen, **dann** verpacken. Für eine Weitergabe zählt sie nicht (B2).
+
+**Der erste Anlauf brach ab** und ist als eigener Befund festgehalten, siehe
+R6.
 
 ### B2 — Keine öffentlich vertrauenswürdige Code-Signatur
 
@@ -144,28 +153,22 @@ Bereich braucht deshalb `HEAD` als Referenz.
 
 Dinge, die heute nicht wehtun und beim Release wehtun würden.
 
-### R1 — Die vorhandenen Artefakte sind veraltet, das Artefakt-Gate ist trotzdem grün
+### ~~R1 — Das Artefakt-Gate zeigt auf eine veraltete EXE~~ — **geschlossen am 2026-09-06**
 
-`scripts/verify_release_artifacts.py` meldet **PASS, 0 Befunde**. Es prüft
-aber die Dateien, die im Baum liegen:
+Die alten Artefakte vom 05.09. (`DA9AC5A2…`, `02BDDBA3…`, `E3EC838E…`) hat
+`--clean` gelöscht; an ihre Stelle ist der Build aus `c773367` getreten. Das
+Gate misst damit den aktuellen Stand:
 
-| Artefakt | Datum | SHA-256 |
-|---|---|---|
-| `dist\RetroDisc.exe` | 05.09.2026 22:08 | `DA9AC5A2…` |
-| `Output\RetroDisc_1.0.0_Portable.zip` | 05.09.2026 22:08 | `02BDDBA3…` |
-| `Output\RetroDisc_Setup_1.0.0.exe` | 05.09.2026 22:09 | `E3EC838E…` |
+`verify_release_artifacts.py --require-signed`: **PASS, 0 Befunde** — alle drei
+Artefakte `Valid`, EXE im ZIP byteidentisch zur `dist`-EXE, installierte EXE
+byteidentisch und gültig signiert, Installation und Deinstallation vollständig,
+beide Verknüpfungen beziehen ihr Icon aus der installierten EXE.
 
-Die neueste Quelldatei stammt vom **06.09.2026 13:03**. Diese Artefakte
-enthalten **nichts** aus den vier Arbeitsdurchläufen — kein Output Management,
-kein Release-Logging, keine Media AI Pipeline.
+`run_acceptance.py`: **PASS** auf beiden Ebenen gegen die neue EXE.
 
-**Das Risiko ist die Fehldeutung**, nicht das Gate: „Artefakt-Gate grün" darf
-nicht als „Release ist fertig" gelesen werden. Nach dem nächsten Build sind
-diese drei Hashes ungültig.
-
-Dasselbe gilt für die **packaged**-Ebene von `run_acceptance.py`: sie meldet
-7/7, fährt dabei aber genau diese alte EXE. Der Nachweis gilt für den Stand
-vom 05.09., nicht für die Arbeit danach.
+**Was daran ungeprüft bleibt:** Die Media AI Pipeline ist im Artefakt
+enthalten — alle sechs Module stehen in der PYZ — aber von keinem
+Artefakt-Test *gefahren*. Der Acceptance-Harness kennt sie nicht. Siehe F12.
 
 ### R2 — Ein grüner Testlauf belegt die Medienstrecke nicht
 
@@ -184,12 +187,21 @@ Behoben in `ca99a05`; die Kopie ist durch `WORKFLOW_STAGES` ersetzt.
 Skips sehen, nicht nur auf die Farbe — und ein Skip, der lange steht, gehört
 in einer Umgebung nachgeholt, in der er nicht greift.
 
-### R3 — Das Release-Logging ist nur am Quellstand belegt
+### ~~R3 — Das Release-Logging ist nur am Quellstand belegt~~
 
-Der ganze Punkt von P1-4 ist der windowed Build, in dem `sys.stdout` `None`
-ist. Genau dort ist es nicht nachgemessen. Mit B1 ist das jetzt **prüfbar**
-und nur noch nicht geprüft: es braucht einen Build (B5) und danach einen Lauf
-der gepackten EXE, dessen Logfile Zeilen aus `src.core.pipeline` enthält.
+**Geschlossen am 2026-09-06.** Isoliert gemessen: die gepackte EXE allein
+(`dist\RetroDisc.exe --acceptance-selftest`) schrieb **52 Zeilen** in
+`%USERPROFILE%\RetroDisc\Logsetrodisc_2026-09-06.log`, davon **39** aus
+Pipeline, Converter und FFmpeg — `Pipeline gestartet`, `Job gestartet`,
+`FFmpeg Konvertierung abgeschlossen`, `Job abgeschlossen`, dazu die sieben
+Schritte der Downloadstrecke.
+
+Zum Vergleich: das Runtime-Gate vom 05.09. maß **19 Zeilen für einen
+vollständigen Anwendungsstart**, weil die structlog-Ausgabe auf `os.devnull`
+lief.
+
+Nebenbei am Artefakt belegt: der koreanische Titel steht korrekt in der
+Logdatei — die cp1252-Falle greift auch im windowed Build nicht mehr.
 
 ### ~~R4 — Der eingefrorene Stand liegt nur auf einem Rechner~~ — **geschlossen am 2026-09-06**
 
@@ -213,6 +225,31 @@ werden — `gh` ist auf diesem Rechner nicht angemeldet. Ist
 `Mulchen1984/RetroDisc` öffentlich, dann sind die Pfade mit dem Benutzernamen
 in `CLAUDE.md` öffentlich; das war schon vor diesem Push so und ist keine neue
 Preisgabe, aber eine bewusste Entscheidung wert.
+
+### R6 — Ein abgebrochener Build ist nicht diagnostizierbar
+
+Der erste Anlauf am 06.09. brach mitten in der PyInstaller-Analyse ab,
+Exitcode 1, **ohne Traceback und ohne Fehlertext**. Ursache der
+Undiagnostizierbarkeit ist gefunden: in eine Datei umgeleitet puffert Python
+`stdout` blockweise, während die Unterprozesse direkt auf den Dateideskriptor
+schreiben. Bei einem harten Abbruch überlebt deshalb genau die fremde Ausgabe.
+Gemessen: **0 von 12** eigenen `build.py`-Zeilen im Log des ersten Laufs, 12
+von 12 im zweiten (mit `-u`).
+
+Behoben durch Zeilenpufferung in `build.py` (`_make_output_diagnosable`).
+
+**Die Ursache des Abbruchs selbst ist nicht ermittelt.** Kein
+CodeIntegrity-Ereignis, kein Application-Error, 7,7 GB freier Speicher, und
+der zweite Lauf mit denselben Optionen ging durch. Es bleibt ein einmaliger,
+nicht reproduzierter Abbruch. Sollte er wiederkommen, ist er ab jetzt lesbar.
+
+### R7 — Ein `[ERROR]` im Log eines erfolgreichen Laufs
+
+Beim Herunterfahren der gepackten EXE erscheint
+`[ERROR] asyncio: Task was destroyed but it is pending!` aus
+`Pipeline.start()`. Der Lauf ist erfolgreich, das Ergebnis stimmt — aber wer
+im Supportfall nach `ERROR` sucht, findet einen Fehlalarm. Gehört zu P3-3
+(die Pipeline-Schleife pollt, statt auf ein Ereignis zu warten).
 
 ### R5 — Die EXE liegt bei rund 500 MB
 
@@ -267,10 +304,9 @@ zuunterst, weil alles Weitere sie benutzt.
 
 ## Was als Nächstes den größten Unterschied macht
 
-1. **B5 — bauen.** `python build.py --clean --sign` aus dem eingefrorenen
-   Stand, dann `verify_release_artifacts.py --require-signed` und ein
-   Runtime-Gate. Das schließt R1 und R3 und belegt D3 und F12. Der mit
-   Abstand größte Einzelschritt, jetzt wo B1 weg ist.
-2. **P2-8** — das Artefakt-Gate soll melden, wenn die Artefakte älter sind als
-   die jüngste Quelldatei; genau diese Falle hat heute zugeschlagen.
-3. **P2-3** — die letzten Werkzeug-Rohtexte aus der Oberfläche.
+1. **B2 — Zertifikat beschaffen.** Der einzige Punkt, der zwischen diesem
+   Build und einer Weitergabe steht. Keine Codearbeit.
+2. **F12 — Media AI am Artefakt fahren.** Der Code ist in der EXE, aber kein
+   Artefakt-Test berührt ihn. Ein Fall im Acceptance-Harness würde das
+   schließen.
+3. **B3** — physischer Brenn- und Rücklesetest, sobald ein Rohling da ist.

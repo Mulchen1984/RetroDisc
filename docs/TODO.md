@@ -18,7 +18,7 @@ sie nicht:
 Ein Ticket verschwindet hier erst, wenn es **belegt** erledigt ist. Der Beleg
 steht im Journal, nicht hier.
 
-Stand: 2026-09-06 (nach Durchlauf 8; gepusht, B1 entfallen)
+Stand: 2026-09-06 (nach Durchlauf 9; Build aus c773367 erzeugt und geprüft)
 
 ---
 
@@ -29,7 +29,7 @@ Diese drei verhindern ein Release unabhängig vom Code.
 | # | Blocker | Art | Zuständig |
 |---|---------|-----|-----------|
 | ~~B1~~ | ~~Vendor-Binaries von Smart App Control blockiert~~ — **entfallen 06.09.** Alle Gates laufen wieder; SAC entscheidet je Datei, ein neuer Build kann erneut blockiert werden. | Umgebung | — |
-| **B5** | **Kein Build aus dem eingefrorenen Stand.** Der Bauweg ist wieder offen, aber nicht gefahren. Bis dahin gilt nur, was am Quellstand belegt ist. | Build | offen |
+| ~~B5~~ | ~~Kein Build aus dem eingefrorenen Stand~~ — **erledigt 06.09.** Gebaut aus `c773367`, signiert, alle Gates grün. Hashes in `docs/RELEASE_STATUS.md`. | Build | — |
 | B2 | **Keine öffentlich vertrauenswürdige Code-Signatur.** Das lokale Development-Zertifikat belegt die Pipeline, nicht die Weitergabefähigkeit. | Beschaffung | — |
 | B3 | **Physischer Brenn- und Rücklesetest fehlt.** Kein Rohling vorhanden. | Hardware | — |
 

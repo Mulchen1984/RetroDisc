@@ -9,7 +9,7 @@ Verwandte Dokumente: `CLAUDE.md` (Arbeitsweise, verbindlich),
 `docs/TODO.md` (Backlog), `docs/RELEASE_STATUS.md` (Freigabereife),
 `RELEASE_AUDIT_STATUS.md` (Messungen).
 
-Stand: 2026-09-06
+Stand: 2026-09-06 (nach dem Build aus c773367)
 
 ---
 
@@ -49,9 +49,9 @@ Releaseblocker, unabhängig von seiner Größe.
 | B4 | Disc rippen (ungeschützte Medien) | erfüllt | `test_ripper_iso_types.py` |
 | B5 | Disc kopieren über Abbild | erfüllt | `test_disc_copy_flow.py` |
 | B6 | Brennen auf Rohling | **nicht hardwareverifiziert** | kein Rohling — Blocker B3 |
-| B7 | Untertitel per Whisper | erfüllt (Quellstand) | `release_smoke.py` — derzeit blockiert |
+| B7 | Untertitel per Whisper | erfüllt | `release_smoke.py` Exitcode 0 |
 | B8 | Videoschnitt: Trim, Merge, Highlights | erfüllt | `test_core_flows.py` |
-| B9 | Upscaling und Interpolation | erfüllt (Quellstand) | `release_smoke.py` — derzeit blockiert |
+| B9 | Upscaling und Interpolation | erfüllt | `release_smoke.py` Exitcode 0 |
 | B10 | Mediathek mit Suche | erfüllt | `test_library_search.py` |
 
 ---
@@ -76,7 +76,7 @@ Releaseblocker, unabhängig von seiner Größe.
 |----|-------------|--------|----------|
 | D1 | Sieben Schritte der Downloadstrecke sichtbar | erfüllt | `test_pipeline_visibility.py` |
 | D2 | Jobstatus überlebt einen Neustart | erfüllt | `job_history.py`, `test_download_workflow.py` |
-| D3 | Gepackte EXE schreibt Pipeline-Logs | **Quellstand belegt, Artefakt offen** | `test_release_logging.py`; Blocker B1 |
+| D3 | Gepackte EXE schreibt Pipeline-Logs | **erfüllt, am Artefakt belegt** | 52 Zeilen aus dem isolierten EXE-Lauf, davon 39 aus der Pipeline |
 | D4 | Eine Logdatei je Tag unter `Logs/` | erfüllt | `test_media_root_and_logs.py` |
 | D5 | Logordner aus der Anwendung erreichbar | erfüllt | `test_environment_and_support.py` |
 | D6 | Keine erfundenen Versions- oder Pfadangaben | erfüllt | dito |
@@ -114,7 +114,7 @@ Releaseblocker, unabhängig von seiner Größe.
 | F9 | Oberflächenbereich „Media AI" | erfüllt | `test_media_ai_bridge.py` |
 | F10 | Transkript in der Oberfläche sichtbar | **offen** | Ticket MA-8 |
 | F11 | Playlist-Verhalten benannt | **offen** | Ticket MA-9 |
-| F12 | Echtlauf der Medienstrecke belegt | **blockiert** | Blocker B1 |
+| F12 | Media AI am Artefakt belegt | **teilweise** | alle 6 Module in der PYZ; von keinem Artefakt-Test gefahren |
 
 ---
 
@@ -126,8 +126,8 @@ Releaseblocker, unabhängig von seiner Größe.
 | G2 | RetroDisc-Icon in Titelbalken und Taskleiste | erfüllt | `verify_app_icon.py` |
 | G3 | Fünf Startaktionen bei 100/125/150 % sichtbar | erfüllt | `verify_home_layout.py` — Gate unzuverlässig → P2-7 |
 | G4 | WebView-History verlässt die App nicht | erfüllt | `test_webview_navigation.py` |
-| G5 | Artefakte signiert | **Development-Zertifikat** | Blocker B2 |
-| G6 | Build aus eingefrorenem Commit | **offen** | Blocker B4 |
+| G5 | Artefakte signiert | **Development-Zertifikat** | `--require-signed` PASS; für Weitergabe unzureichend (B2) |
+| G6 | Build aus eingefrorenem Commit | erfüllt | gebaut aus `c773367` |
 | G7 | Eine Versionsquelle | erfüllt | `test_environment_and_support.py` |
 
 ---

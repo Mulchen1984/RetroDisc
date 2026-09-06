@@ -233,7 +233,29 @@ def build_setup_exe() -> None:
     print(f"OK: {SETUP_EXE} ({SETUP_EXE.stat().st_size / 1024 / 1024:.1f} MB)")
 
 
+def _make_output_diagnosable() -> None:
+    """Eigene Ausgaben zeilenweise schreiben, nicht blockweise puffern.
+
+    In eine Datei umgeleitet puffert Python ``stdout`` blockweise. Die
+    Unterprozesse -- PyInstaller, pytest, prepare_vendor -- schreiben dagegen
+    direkt auf den Dateideskriptor. Wird der Build hart beendet, ueberlebt
+    deshalb genau die fremde Ausgabe, waehrend **jede** eigene Zeile verloren
+    geht: kein Schritt, kein Fehlertext, kein Traceback.
+
+    Am 2026-09-06 sah ein abgebrochener Build dadurch aus, als sei PyInstaller
+    grundlos mitten in der Analyse gestorben. Im Log standen 0 von 12 eigenen
+    Zeilen. Zeilenpufferung kostet nichts und macht den naechsten Abbruch
+    lesbar.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(line_buffering=True)
+        except (AttributeError, OSError, ValueError):
+            pass
+
+
 def main() -> int:
+    _make_output_diagnosable()
     parser = argparse.ArgumentParser(description="Build RetroDisc for Windows")
     parser.add_argument("--clean", action="store_true", help="Build-Ausgaben vorher loeschen")
     parser.add_argument("--install-deps", action="store_true", help="Python-Pakete vorher installieren/aktualisieren")

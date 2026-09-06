@@ -2041,3 +2041,107 @@ committet.
 Der Quellstand ist stabilisiert und dokumentiert. Freigabereif ist er nicht:
 B1 (blockierte Binaries), B2 (Signatur), B3 (Rohling) und B4 (nicht
 eingefrorener Arbeitsbaum) stehen unveraendert.
+
+---
+
+### 2026-09-06 (6) — Release-Build aus dem eingefrorenen Stand
+
+Gebaut aus `c773367` (Arbeitsbaum sauber, mit `origin` synchron).
+
+#### Erster Anlauf: Abbruch, und warum er nicht lesbar war
+
+`build.py --clean --sign` brach mit Exitcode 1 mitten in der
+PyInstaller-Analyse ab — **ohne Traceback und ohne Fehlertext**.
+
+Die Undiagnostizierbarkeit ist geklaert und gemessen: in eine Datei umgeleitet
+puffert Python `stdout` blockweise, waehrend die Unterprozesse
+(prepare_vendor, pytest, PyInstaller) direkt auf den Dateideskriptor
+schreiben. Bei einem harten Abbruch ueberlebt deshalb genau die fremde
+Ausgabe. Im Log des ersten Laufs standen **0 von 12** eigenen
+`build.py`-Zeilen, im zweiten (mit `-u`) **12 von 12**.
+
+Behoben durch `_make_output_diagnosable()` in `build.py` — Zeilenpufferung
+fuer `stdout` und `stderr`, sonst nichts. Gegengeprueft: eine umgeleitete
+Ausgabe ohne `-u` enthaelt die eigene Zeile jetzt.
+
+**Die Ursache des Abbruchs selbst ist nicht ermittelt.** Kein
+CodeIntegrity-Ereignis, kein Application-Error, 7,7 GB freier Speicher; der
+zweite Lauf mit denselben Optionen ging durch. Einmalig, nicht reproduziert.
+Als **R6** festgehalten statt eine Erklaerung zu erfinden.
+
+**Nebenwirkung, die genannt gehoert:** `--clean` hat die Artefakte vom 05.09.
+geloescht, bevor der Build scheiterte. Zwischen den beiden Laeufen existierte
+kein einziges Artefakt. Die alten Hashes stehen weiterhin im Block vom 05.09.
+
+#### Artefakte
+
+Signiert mit dem Entwicklungszertifikat `CN=RetroDisc Development`
+(Thumbprint ausschliesslich ueber `RETRODISC_SIGN_THUMBPRINT` in der
+Prozessumgebung, nirgends in einer Datei).
+
+- `dist\RetroDisc.exe`: **503 110 992 Bytes**,
+  SHA-256 `2A75102C540E715CECF930585EB8ADE104F71745E128885D34D4E312D6745DCD`
+- `Output\RetroDisc_1.0.0_Portable.zip`: **501 638 445 Bytes**,
+  SHA-256 `E65855A21E091B652466B5AB1D1AEE1C0B3D892CB954472E7924A1FDD9B692D9`
+- `Output\RetroDisc_Setup_1.0.0.exe`: **509 700 696 Bytes**,
+  SHA-256 `46C107D893DEAA0995FA2646789E49AA8506D24A730BF8872E8EF40F1FFB855F`
+
+#### Gates auf diesen Bytes
+
+- `verify_release_artifacts.py --require-signed`: **PASS, 0 Befunde.**
+  `RetroDisc.exe` **Valid**, Installer **Valid**, **EXE ausgepackt aus dem ZIP
+  Valid**, **installierte EXE Valid** und byteidentisch zur `dist`-EXE;
+  Installation und Deinstallation vollstaendig; beide Verknuepfungen beziehen
+  ihr Icon aus der installierten EXE.
+- `run_acceptance.py`: **PASS** auf beiden Ebenen gegen die neue EXE.
+- `release_smoke.py` Exitcode **0**, `.hermes/verify_core.py` Exitcode **0**.
+- `pytest -q`: **589 passed**. `compileall`, `verify_ui_bridge` (PASS/0),
+  `verify_home_layout` (PASS 10/10), `node --check`, `git diff --check`: 0.
+
+#### R1 geschlossen
+
+Das Artefakt-Gate misst nicht mehr den Stand vom 05.09., sondern diesen Build.
+
+#### R3 und D3 geschlossen — am Artefakt, isoliert gemessen
+
+Nicht ueber `run_acceptance` (das faehrt beide Ebenen in dieselbe Logdatei und
+beweist damit nichts ueber den windowed Build), sondern durch einen isolierten
+Lauf: `dist\RetroDisc.exe --acceptance-selftest`, Exitcode 0.
+
+Delta in `%USERPROFILE%\RetroDisc\Logs\retrodisc_2026-09-06.log`: **52 Zeilen**,
+davon **39** aus Pipeline, Converter und FFmpeg — `Pipeline gestartet`,
+`Job gestartet`, `FFmpeg Konvertierung abgeschlossen`, `Job abgeschlossen`,
+dazu die sieben Schritte der Downloadstrecke.
+
+Zum Vergleich: das Runtime-Gate vom 05.09. mass **19 Zeilen fuer einen
+vollstaendigen Anwendungsstart**, weil die structlog-Ausgabe auf `os.devnull`
+lief.
+
+Nebenbei am Artefakt belegt: der koreanische Titel steht korrekt in der
+Logdatei. Die cp1252-Falle greift auch im windowed Build nicht mehr.
+
+#### F12 nur teilweise — und das bleibt so vermerkt
+
+Die Media AI Pipeline ist **im Artefakt enthalten**: alle sechs Module stehen
+in `build/retrodisc_final/PYZ-00.toc` (`src.services.media_ai`, `.downloader`,
+`.processors`, `.splitter`, `.workflow`, `.workspace`), ebenso
+`src.core.output`, `src.services.job_history` und
+`src.services.download_workflow`.
+
+**Gefahren wird sie von keinem Artefakt-Test.** Der Acceptance-Harness kennt
+sie nicht. „Enthalten" ist nicht „belegt"; F12 steht deshalb auf *teilweise*.
+
+#### Neuer Befund R7
+
+Beim Herunterfahren der gepackten EXE erscheint
+`[ERROR] asyncio: Task was destroyed but it is pending!` aus
+`Pipeline.start()`. Der Lauf ist erfolgreich. Aber wer im Supportfall nach
+`ERROR` sucht, findet einen Fehlalarm — und das Runtime-Gate zaehlt
+`ERROR`-Treffer. Gehoert zu P3-3.
+
+#### Stand
+
+Technisch ist dieser Build freigabefaehig: gebaut aus einem eingefrorenen,
+gepushten Commit, signiert, an allen Gates belegt. Was fehlt, ist kein Code:
+ein oeffentlich vertrauenswuerdiges Zertifikat (B2) und der physische
+Disc-Test (B3).
