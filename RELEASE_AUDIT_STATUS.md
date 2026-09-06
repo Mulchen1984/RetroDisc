@@ -1494,3 +1494,550 @@ Reihenfolge belegt — auch an der EXE im ZIP und an der installierten EXE.
 Der physische Brenn- und Rueckleseteset bleibt offen (kein Rohling), und fuer
 eine oeffentliche Weitergabe fehlt weiterhin ein oeffentlich vertrauenswuerdiges
 Zertifikat; das lokale Development-Zertifikat ersetzt es nicht.
+
+---
+
+### 2026-09-06 — RD-01 bis RD-05 aus dem Claude-Review
+
+Auftrag: die fuenf Tickets aus dem UX-/Architekturreview abarbeiten, ohne
+Rewrite und unter Beibehaltung der bestehenden Architektur.
+
+#### Ausgangslage: der Arbeitsbaum war nicht sauber
+
+Beim Start lagen uncommittete Aenderungen einer anderen Sitzung im Baum
+(`git status`: 10 geaenderte Dateien, dazu neu `src/services/job_history.py`,
+`src/services/download_workflow.py`, `tests/test_download_workflow.py`).
+Nichts davon wurde zurueckgenommen; die Tickets bauen darauf auf. Die
+Job-Historie und der Per-Auftrag-Ordner aus dieser Arbeit decken Teile von
+RD-01/RD-02 bereits ab.
+
+`pytest -q` auf diesem Stand **vor** jeder eigenen Aenderung: **2 failed,
+374 passed**. Beide Fehlschlaege sind vorbestehend:
+
+1. `test_acceptance_harness.py::test_unicode_case_fails_when_the_title_proves_nothing`
+   — `src/acceptance.py` greift seit der fremden Aenderung auf
+   `ctx.bridge.settings.directories`, der Teststub kannte nur `downloader`.
+   Hier behoben, indem der Stub die neue Form nachbildet.
+2. `test_download_workflow.py::test_complete_real_download_processing_restart_and_ui`
+   — `OSError: [WinError 4551]`, Smart App Control. Nicht behoben, siehe unten.
+
+#### RD-01 — Ausgabepfad vollstaendig in der Oberflaeche
+
+`job_done` lieferte `output` schon immer; die Jobzeile zeigte es nicht. Jetzt
+steht pro fertigem Auftrag **Dateiname** (aus dem Pfad abgeleitet, `baseName()`),
+**vollstaendiger Pfad**, und daneben **📂 Ordner oeffnen** und **▶ Datei oeffnen**.
+Neu: `RetroDiscBridge.open_job_file` plus Proxy in `RetroDiscApi`.
+Test: `tests/test_job_output_access.py`.
+
+#### RD-02 — „Output oeffnen" folgt dem Auftrag
+
+`open_output_folder` griff fest auf `settings.directories.output_dir`. Nach
+einem Download stand der Nutzer damit im falschen Baum, weil Downloads unter
+`download_dir` liegen. Neu ist `_latest_output_dir()`: Ausgabeordner des
+juengsten Auftrags mit Ergebnis, Ordner uebersprungen wenn nicht mehr
+vorhanden, Rueckfall auf die Einstellung wenn es keinen solchen Auftrag gibt.
+Der Downloadfall ist als eigener Test festgehalten.
+
+#### RD-03 — Zielnamen reservieren
+
+Neu `src/core/output.py`. Die Technik ist **nicht neu geschrieben**, sondern
+aus `Downloader._claim_target_group` herausgezogen — exklusives `x`-Open,
+`O_CREAT | O_EXCL`, Ausweichen auf `" (n)"`. Der Downloader leitet nur noch
+dorthin weiter und wirft weiterhin `DownloadError`.
+
+Umgestellt: `rip_disc` (zusaetzlich Zeitstempel im Namen, weil er sonst allein
+aus dem Laufwerksbuchstaben besteht), `copy_disc` (eigene Reservierungsschleife
+abgeloest), die ISO im `DVDWorkflow` (Name kam aus dem Vorgabetitel), sowie
+ueber den neuen Wrapper `_with_reserved_output` die sechs Wege
+`create_highlights`, `generate_subtitles`, `upscale_video`,
+`interpolate_video`, `trim_video`, `merge_videos`.
+
+`FFmpeg.trim` bekam ein `overwrite`-Argument: es ist der einzige dieser Wege,
+der ueber `convert(overwrite=False)` laeuft und an der eigenen Reservierung
+sonst mit `FileExistsError` scheitern wuerde. `DiscRipper` benutzt im
+`mkv_copy`-Zweig `os.replace` statt `shutil.move`, weil `shutil.move` auf einen
+bereits reservierten Namen unter Windows in den Kopierzweig faellt.
+
+**Bewusst unveraendert:** `convert_file`. Dort steuert der Nutzer das
+Ueberschreiben ueber eine Checkbox, und die Fehlermeldung nennt die Loesung.
+Das ist gewolltes Verhalten, kein Befund.
+
+Test: `tests/test_output_reservation.py` (24 Faelle), darunter der genannte
+Fall — zweimal `Disc_D_Rip.mkv` ergibt zwei Dateien, die erste bleibt byteweise
+unangetastet.
+
+#### RD-04 — Release-Logging repariert
+
+Der eigentliche Befund: `retrodisc_final.spec` baut mit `console=False`, dort
+ist `sys.stdout` `None`, und `configure_structlog` wich auf `os.devnull` aus.
+Damit verwarf die ausgelieferte Anwendung **saemtliche** structlog-Ausgabe —
+Pipeline, Downloader, Converter, Disc, Ripper. Im Logfile standen nur die
+stdlib-Zeilen des Launchers. Das Runtime-Gate hatte das gemessen und nicht als
+Befund gelesen: „19 Logzeilen" fuer einen vollstaendigen Start ist der Beleg.
+
+`configure_structlog` nimmt jetzt ein `logfile` entgegen und schreibt bei
+vorhandener Konsole ueber `FanoutStream` auf beide Ziele. Ein blockierter oder
+geschlossener Strom reisst die anderen nicht mit. Die UTF-8-Zusicherung gilt
+auch fuer den Dateistrom, damit die charmap-Lektion nicht auf dem neuen Weg
+zurueckkehrt; ein eigener Test deckt genau das ab.
+Test: `tests/test_release_logging.py`.
+
+**Noch nicht belegt:** Der Nachweis am gebauten Artefakt steht aus, weil auf
+diesem Host derzeit nicht gebaut/gefahren werden kann (siehe unten). Die
+Aussage gilt bis dahin nur fuer den Quellstand.
+
+#### RD-05 — Konvertieren-Tab ohne Platzhalterpfad
+
+Das Feld `#outdir` trug einen fest im Markup stehenden Platzhalter auf einen
+Ordner direkt unter dem Laufwerksbuchstaben — ein Pfad, den es nicht gibt; der
+Standard liegt unter dem Benutzerprofil. Der Platzhalter ist entfernt, das Feld
+wird aus den Einstellungen befuellt und beim Oeffnen des Bereichs ueber
+`refreshOutputDirField()` aufgefrischt. Eine eigene Eingabe des Nutzers wird
+dabei nicht ueberschrieben (`dataset.userEdited`).
+Test: `tests/test_convert_tab_config.py`.
+
+#### Gates auf diesem Stand
+
+- `pytest -q`: **427 passed, 1 failed**. Der Fehlschlag ist der oben genannte
+  vorbestehende SAC-Fall.
+- `compileall`: 0. `scripts/verify_ui_bridge.py`: **PASS, 0 Befunde**.
+  `scripts/verify_home_layout.py`: **PASS, 10/10** (noetig, weil `app.html`
+  geaendert wurde). `node --check`: 0. `git diff --check`: 0.
+- Eine Regression durch den eigenen Refactor wurde dabei gefunden und behoben:
+  `test_download_publish.py::test_reservation_failure_releases_current_and_previous_groups`
+  patchte `src.core.downloader.open`; die Naht liegt jetzt in
+  `src.core.output`. Die gepruefte Eigenschaft ist unveraendert.
+
+#### Nicht lauffaehig auf diesem Host — Smart App Control
+
+`.hermes/verify_core.py` und `scripts/release_smoke.py` brechen beide mit
+`OSError: [WinError 4551] Eine Anwendungssteuerungsrichtlinie hat diese Datei
+blockiert` ab. Ursache ist **`vendor/ffmpeg.exe` selbst**: ein direkter Aufruf
+scheitert genauso. Damit sind alle Gates, die echte Medienarbeit fahren,
+derzeit blockiert — unabhaengig von den Aenderungen dieses Blocks und schon
+vor ihnen. Die Richtlinie wurde nicht umgangen und nicht veraendert.
+
+**Konsequenz fuer den Status:** RD-01 bis RD-05 sind am Quellstand belegt.
+Ein Nachweis am gebauten Artefakt — insbesondere fuer RD-04, dessen ganzer
+Punkt der windowed Build ist — steht aus, bis die Vendor-Binaries auf einem
+Host wieder ausfuehrbar sind. Ohne diesen Nachweis ist kein 100-%-Status und
+kein Release gerechtfertigt.
+
+---
+
+### 2026-09-06 (2) — P1 #2/#4 und P2 #6/#7
+
+Fortsetzung des vorigen Blocks. P1 #1 (Output Management), #3 (Ueberschreiben)
+und #5 (falsche Pfade) waren dort bereits erledigt; hier kamen die vier
+offenen Punkte dazu.
+
+#### P1 #2 — Download-Pipeline sichtbar
+
+Die sieben geforderten Schritte stehen jetzt als Konstanten in
+`src/services/download_workflow.py` und sind ueber `WORKFLOW_STAGES`
+pruefbar: Quelle erkannt, Download gestartet, Download abgeschlossen,
+Verarbeitung gestartet, Konvertierung laeuft, Datei erstellt, Fertig.
+
+Drei Aenderungen am vorhandenen Ablauf, kein neuer Aufbau:
+
+- `stage()` nimmt `progress=None` an. Der Konvertierungsschritt beschriftet
+  damit nur, ohne den Balken zurueckzusetzen — FFmpeg liefert den Fortschritt
+  dort selbst.
+- Der Konvertierungsschritt nennt die entstehende Datei und die Position in
+  der Liste (`Konvertierung laeuft (1/3): Name.mp4`).
+- `stage()` schreibt jeden Schritt zusaetzlich ins Logfile. Vorher standen die
+  Schritte nur in Oberflaeche und Jobhistorie; ein Supportfall ohne laufende
+  Anwendung war damit nicht lesbar.
+
+Beim Audio-Download fehlte `Datei erstellt` in der Kette — ergaenzt.
+
+Ausserdem reserviert der Workflow seinen MP4-Zielnamen jetzt ueber
+`claim_unique_target` und uebergibt `overwrite=True`. Der Name enthielt zwar
+schon die Job-Id, war aber gegen alles ungeschuetzt, was zwischen zwei Laeufen
+im Ausgabeordner entstand.
+
+#### P1 #4 — Logdatei pro Tag
+
+`retrodisc_launcher.log_file_for()` liefert `Logs/retrodisc_YYYY-MM-DD.log`.
+Beide Protokollsysteme — stdlib und structlog — schreiben in dieselbe Datei
+des Tages. Die frueher fortgeschriebene `retrodisc.log` enthielt Tracebacks
+seit Juni; das Eingrenzen auf den aktuellen Lauf war Handarbeit.
+
+Der Logordner kommt jetzt aus den Einstellungen statt aus einem festen
+`data_root()/"Logs"` und folgt damit dem Medienordner. Dafuer liest der
+Launcher die Einstellungen einmal vor dem Aufsetzen der Handler; der Aufruf
+ist abgesichert, ein unlesbares Settings-File kann den Start nicht blockieren.
+
+#### P2 #6 — Wer umging die Einstellungen
+
+Gefunden und behoben:
+
+1. **`MediaLibrary`** legte ihre Datenbank selbst nach `~/.retrodisc` — ein
+   Unix-Punktordner auf einem Windows-Produkt und die einzige Komponente ganz
+   ohne Settings-Bezug. Der Pfad steht jetzt als `directories.library_db` in
+   der Konfiguration. Eine vorhandene alte Datenbank wird beim ersten Start
+   einmalig **kopiert** (nicht verschoben), damit der Bestand bei einem
+   Fehlschlag erhalten bleibt.
+2. **`DVDWorkflow.temp_dir`** wurde nur im Konstruktor gesetzt. Nach einer
+   Aenderung des Ausgabeordners schrieb der DVD-Workflow weiter in den alten
+   Temp-Ordner. `_apply_runtime_settings` zieht ihn jetzt nach, ebenso die
+   Bibliothek (inklusive Schliessen und Neuoeffnen bei geaendertem Pfad).
+3. **`storage_info`** in `get_settings` nannte `~/.retrodisc/library.db` fest
+   verdrahtet — jetzt aus den Einstellungen, plus die Logdatei des Tages.
+
+`ensure_directories()` legt den Logordner ueber dieselbe Tabelle an wie die
+uebrigen (`MEDIA_SUBFOLDERS`), statt ihn separat fest zu nennen.
+
+#### P2 #7 — Medienordner einmal waehlen
+
+`DirectorySettings.derived(root)` baut die geforderte Struktur ab:
+
+    <Medienordner>
+     ├── Downloads
+     ├── Videos
+     ├── Temp
+     └── Logs
+
+Dazu `AppSettings.set_media_root()`, die Bridge-Methode `set_media_root` samt
+Proxy und in den Einstellungen ein eigener Bereich „Medienordner" mit
+Auswahlknopf. Bewusst **kein** Teil von „Speichern": die Aktion ersetzt die
+einzeln eingestellten Ordner, deshalb fragt die Oberflaeche vorher nach und
+zeigt danach, was angelegt wurde. Wer seine Ordner einzeln gesetzt hat,
+behaelt sie, bis er den Medienordner ausdruecklich neu waehlt — an einem Test
+festgehalten.
+
+Rueckwaertskompatibilitaet an einer echten alten `settings.json` geprueft:
+`~/Videos/RetroDisc` und `_temp` werden auf die neue Struktur gehoben, ein
+bewusst abweichend gesetzter Ordner bleibt unveraendert.
+
+#### Tests
+
+Drei neue Dateien, **36 Faelle**, alle gruen:
+
+- `tests/test_media_root_and_logs.py` (22) — Struktur, Ableitung, Migration
+  der Bibliothek, Logdateiname, Logordner aus den Einstellungen.
+- `tests/test_pipeline_visibility.py` (14) — vollstaendige Schrittkette und
+  ihre Reihenfolge, Schritte in Historie und Logfile, Audio-Sonderfall, und
+  das **Abnahmeszenario**: zwei Discs rippen, Download, Verarbeitung, Datei
+  und Ordner oeffnen. Geprueft werden Existenz der Datei, Uebereinstimmung des
+  angezeigten mit dem tatsaechlichen Pfad, vorhandenes Protokoll und dass die
+  zweite Disc die erste nicht ueberschreibt.
+- Erweitert: `tests/test_core_flows.py` — der Stub kannte `dvd_workflow` und
+  `library` nicht; er bildet sie jetzt nach und der Test sichert zu, dass
+  beide die geaenderten Einstellungen uebernehmen.
+
+Die Medienwerkzeuge sind im Szenariotest durch Doubles ersetzt. Die echten
+Vendor-Binaries sind auf diesem Host blockiert (siehe voriger Block); Ablauf-
+und Pfadlogik sind davon unabhaengig.
+
+#### Gates
+
+- `pytest -q`: **463 passed, 1 failed** (vorher 427/1). Der Fehlschlag ist
+  unveraendert `test_download_workflow.py::test_complete_real_download_...`
+  mit `WinError 4551`.
+- `compileall` 0, `verify_ui_bridge` **PASS/0**, `verify_home_layout`
+  **PASS 10/10**, `node --check` 0, `git diff --check` 0.
+- `.hermes/verify_core.py` und `scripts/release_smoke.py` weiterhin nicht
+  lauffaehig: `vendor/ffmpeg.exe` ist von Smart App Control blockiert.
+
+#### Stand
+
+Alle P1-Punkte und beide P2-Punkte sind am Quellstand umgesetzt und getestet.
+Was fehlt, ist unveraendert der Nachweis am **gebauten Artefakt** — besonders
+fuer das Release-Logging, dessen ganzer Punkt der windowed Build ist. Solange
+die Vendor-Binaries blockiert sind, kann weder gebaut noch echte Medienarbeit
+gefahren werden. Ohne diesen Nachweis kein Release.
+
+---
+
+### 2026-09-06 (3) — Backlog ins Repository, Supportfall belastbar machen
+
+Arbeitsmodus umgestellt: das Repository ist die Wahrheit, nicht die
+Sitzungshistorie. Erste Feststellung dieses Durchlaufs war deshalb, dass es
+**kein Backlog im Repository gab** — `docs/` existierte nicht. Der Stand der
+offenen Punkte lebte in Journalprosa und in der Sitzung.
+
+#### Neu: `docs/TODO.md` und `docs/ARCHITECTURE.md`
+
+`docs/TODO.md` ist ab jetzt das Backlog: Releaseblocker, P1/P2/P3 mit Status
+und Beleg. Es beantwortet die Frage „was ist offen", die das Journal
+chronologisch nicht beantworten kann. Das Journal bleibt unveraendert das
+Dokument der Messungen; das TODO wird umgeschrieben, das Journal nie.
+
+`docs/ARCHITECTURE.md` beschreibt bewusst **nicht** den Modulaufbau — der
+steht in `CLAUDE.md` — sondern die beiden Dinge, an denen die meisten Fehler
+entstanden sind und die man an keiner einzelnen Codestelle sieht: wo Dateien
+liegen (Medienordner, Reservierungsregeln) und wie ein Auftrag durchlaeuft
+(Bridge-Kette, Schrittnamen, die drei Orte, an denen ein Zustand sichtbar
+sein muss). Dazu die zwei Fallen, die bereits zugeschlagen haben: der
+windowed Build ohne Standardstroeme und die cp1252-Falle.
+
+#### B4 aufgenommen: der Arbeitsbaum ist nicht eingefroren
+
+Der gesamte Stand aus drei Durchlaeufen liegt uncommittet im Arbeitsbaum.
+`CLAUDE.md` verlangt, nur aus einem eingefrorenen Commit zu bauen — damit ist
+das ein Releaseblocker eigener Art. Im TODO steht ein Vorschlag fuer sieben
+nachvollziehbare Commits. **Nicht ausgefuehrt**: ohne ausdruecklichen Auftrag
+wird hier nicht committet.
+
+#### P1-8 — erfundene Angaben in Statusleiste und Werkzeugleiste
+
+Im Markup standen fest: „✓ FFmpeg 6.1", „✓ yt-dlp 2024", „FFmpeg 6.1 · Python
+3.12", „Windows 11", „RetroDisc v1.0.0". Keine dieser Angaben wurde je
+gemessen. Sie sehen aus wie echte Auskuenfte und sind in einem Supportfall
+schaedlicher als gar keine.
+
+Neu `RetroDiscBridge.get_environment()`: Anwendungsversion, Python, System,
+Logdatei des Tages und die Werkzeugversionen. Die Versionen kommen aus je
+einem kurzen `run_hidden`-Aufruf — fensterlos, wie es die Produktvorgabe
+verlangt — und werden nach dem ersten Mal gehalten. Was nicht ermittelt
+werden kann, heisst **„unbekannt"**; es wird nie eine Zahl erfunden. Der
+Fall ist auf diesem Host real: die Vendor-Binaries sind blockiert, und der
+Test deckt genau diesen Ausgang ab.
+
+Nebenbefund behoben: `loadToolStatus()` adressierte die Badges ueber ihre
+**Position** im Strip und schrieb den ffprobe-Status ins yt-dlp-Feld. Jetzt
+ueber Ids.
+
+#### P1-9 — Zugriff auf das Protokoll
+
+`open_log_folder()` plus Knopf in den Einstellungen. Ohne diesen Weg konnte
+ein Nutzer im Supportfall nichts liefern: das Protokoll liegt seit dem
+vorigen Durchlauf unter dem Medienordner und war aus der Anwendung heraus
+nicht erreichbar.
+
+#### P2-4 — „Neu suchen" im Rip-Bereich
+
+Brennen und Disc kopieren hatten den Knopf, der Rip-Bereich nicht. Da die
+Laufwerksliste sitzungsweit gehalten wird, kam dort nicht weiter, wer die
+Disc erst nach dem Oeffnen einlegte.
+
+Dabei kippte `test_disc_copy_flow.py::test_refresh_buttons_force_a_fresh_scan`:
+er zaehlte die Knoepfe fest auf zwei. Das prueft den Stand, nicht die
+Eigenschaft. Ersetzt durch die Zusicherung, die wirklich gemeint war — **jeder**
+`onclick="loadBurners(...)"` uebergibt `true`. Der Test haelt damit auch den
+naechsten berechtigten Knopf aus.
+
+#### P3-1 — eine Versionsquelle
+
+`src/__init__.py` sagte `0.1.0`, waehrend Oberflaeche, `build.py`,
+`version_info.txt` und Installer `1.0.0` nannten. `__version__` ist jetzt die
+eine Quelle und steht auf `1.0.0`; Launcher und Oberflaeche lesen von dort.
+Die Artefaktnamen in `build.py` bleiben vorerst eigene Literale — im TODO
+vermerkt, aber nicht in diesem Durchlauf angefasst.
+
+#### Gates
+
+- `pytest -q`: **485 passed, 1 failed** (vorher 463/1). Neu:
+  `tests/test_environment_and_support.py` (22 Faelle). Der Fehlschlag ist
+  unveraendert der SAC-blockierte `test_download_workflow`.
+- `compileall` 0, `verify_ui_bridge` **PASS/0**, `verify_home_layout`
+  **PASS 10/10**, `node --check` 0, `git diff --check` 0.
+- `.hermes/verify_core.py` und `scripts/release_smoke.py` weiterhin durch B1
+  blockiert.
+
+#### Naechster sinnvoller Schritt
+
+P2-3 (verstaendliche Fehlermeldungen) ist der letzte Punkt, der die
+Benutzerfuehrung im Fehlerfall betrifft; danach sind nur noch P2-5, P2-6 und
+die P3-Punkte offen. Der eigentliche Fortschritt haengt aber an B1 und B4:
+ohne lauffaehige Vendor-Binaries kein Artefaktnachweis, ohne eingefrorenen
+Commit kein Release.
+
+---
+
+### 2026-09-06 (4) — Media AI Pipeline
+
+Neue Funktion: Import ueber yt-dlp mit getrennter Audio- und Videoarbeit und
+vorbereiteten KI-Schnittstellen. Additiv, kein bestehender Pfad geaendert.
+
+#### Ablage: eine bewusste Abweichung von der Vorgabe
+
+Gefordert war `RetroDisc\Media\Downloads\<Titel>\`. Umgesetzt ist
+`<media_root>\Downloads\<Titel>\` — gleiche Struktur, gleiche Dateinamen,
+aber **ohne** den Zwischenknoten `Media\`. Ein zweiter Downloadbaum neben dem
+konfigurierten waere genau der Ursprungsbefund dieser Arbeit gewesen: Dateien,
+die der Nutzer dort sucht, wo sie nicht liegen. Die Abweichung ist in
+`docs/ARCHITECTURE.md` und im Modulkopf begruendet.
+
+#### Aufbau
+
+`src/services/media_ai/` mit fuenf Bausteinen, die die vorhandenen **steuern**
+statt sie zu ersetzen:
+
+| Baustein | steuert |
+| --- | --- |
+| `MediaDownloader` | `core.downloader.Downloader` (atomares Publish bleibt) |
+| `MediaSplitter` | `core.ffmpeg.FFmpeg.convert` (Staging bleibt) |
+| `AudioProcessor` | Backend-Protokoll, Vorgabe = vorhandener `SubtitleGenerator` |
+| `VideoProcessor` | ffmpeg fuer Frames, Backend-Protokoll fuer Vision |
+| `MediaWorkspace` / `MediaJob` | Mappe und Zustand in `metadata.json` |
+
+Die Auftraege laufen durch die **bestehende** `Pipeline` — dadurch gelten
+Fortschritt, Abbruch, Jobhistorie und die Ergebnisanzeige aus P1-1/P1-2 ohne
+Zutun. Ein Test haelt das fest.
+
+**Reihenfolge:** erst Titel ermitteln, dann Mappe anlegen, dann laden. Nur so
+heisst der Ordner nach dem Medium und `original.<ext>` traegt die Endung, die
+yt-dlp geliefert hat.
+
+**Formatzusicherungen:** Audio `pcm_s16le` / 16 kHz / mono (Whisper- und
+Voice-Cloning-tauglich), Video `-c:v copy -an` (keine Neukodierung). Beides
+als Konstanten und per Test gegen den ffmpeg-Aufruf geprueft.
+
+**Fehlertoleranz an den Raendern:** nach dem Download ist der Import ein
+Ergebnis. Schlaegt das Trennen einer Spur fehl — etwa weil die Quelle nur Ton
+enthaelt — bleibt der Import erfolgreich, und der Grund steht in
+`metadata.json` unter `errors`.
+
+**KI-Schnittstellen sind vorbereitet, nicht integriert.** Je Faehigkeit ein
+`Protocol`, ein Vorgabe-Backend und ein Prozessor, der nur das Protokoll
+kennt. Keine Modellimporte auf Modulebene — auch der Whisper-Import steht in
+der Methode, damit die gepackte EXE nicht um Torch-Abhaengigkeiten waechst,
+die niemand benutzt. Ein Test sichert das ab.
+
+#### Oberflaeche
+
+Neuer Bereich „Media AI": URL, Qualitaet, zwei Schalter, Mappenliste mit
+Zustandsabzeichen je Artefakt und den Aktionen Audio/Video extrahieren,
+Transkribieren, Einzelbilder, Ordner oeffnen. Pfade gehen ueber
+`data-`-Attribute an die Bridge; ein Pfad mit Anfuehrungszeichen wuerde ein
+inline-Argument sprengen.
+
+Die Bridge weist jede Mappe ausserhalb von `download_dir` ab — sonst liesse
+sich ueber `media_ai_open` ein beliebiger Ordner oeffnen. Als Test festgehalten,
+inklusive `..`-Versuch.
+
+#### Gates
+
+- `pytest -q`: **588 passed, 1 failed** (vorher 485/1). Neu:
+  `test_media_ai_workspace.py` (28), `test_media_ai_pipeline.py` (41),
+  `test_media_ai_bridge.py` (34). Der Fehlschlag ist unveraendert der
+  SAC-blockierte `test_download_workflow`.
+- `compileall` 0, `verify_ui_bridge` **PASS/0** (60 Aufrufstellen, 53 Proxys,
+  55 Bridge-Methoden), `node --check` 0, `git diff --check` 0.
+
+#### Neuer Befund: `verify_home_layout.py` ist nicht verlaesslich
+
+Beim Pruefen dieses Stands ergab das Gate bei **unveraendertem Markup**
+nacheinander PASS / FAIL(4) / PASS / FAIL(8), spaeter 10-mal PASS in Folge.
+Die Fehlschlaege korrelieren mit CPU-Last, nicht mit dem Inhalt.
+
+Der Verdacht, der neue Werkzeugleisten-Knopf koenne der Startseite Hoehe
+nehmen, wurde geprueft und **ausgeraeumt**: die Leiste hat zwar
+`flex-wrap: wrap`, aber `body.home-mode #toolbar { display:none !important; }`
+— auf der Startseite wird sie gar nicht gerendert. Der Knopf haengt per
+DOM-Analyse unter `#toolbar`, nicht unter `#homeview`; gemessen werden
+ausschliesslich `#homeview .cbtn`, und deren Positionen sind unveraendert
+(117/249/382/514/647).
+
+Ursache ist `settle()`: zwei `requestAnimationFrame` ohne Fonts-ready und ohne
+Pruefung auf Layout-Stabilitaet. Ein Gate, das zufaellig fehlschlaegt, ist als
+Freigabekriterium unbrauchbar — aufgenommen als **P2-7** in `docs/TODO.md`.
+
+#### Stand
+
+Die Media AI Pipeline ist am Quellstand vollstaendig und getestet. Der
+Nachweis am gebauten Artefakt fehlt weiterhin (B1), und die echte
+Medienstrecke — yt-dlp und ffmpeg — konnte auf diesem Host nicht gefahren
+werden. Was geprueft ist: die Ablauf-, Pfad- und Aufruflogik, nicht das
+Ergebnis der Werkzeuge selbst.
+
+---
+
+### 2026-09-06 (5) — Stabilisieren, dokumentieren, Commit vorbereiten
+
+Kein neues Feature. Vier Aufgaben: Git-Stand sichern, Dokumentation
+vervollstaendigen, Anforderungen gegen die Releaseziele pruefen, und den
+einen roten Test **bewerten statt uebergehen**.
+
+#### Der rote Test: Infrastrukturproblem, belegt
+
+`tests/test_download_workflow.py::test_complete_real_download_processing_restart_and_ui`.
+Einordnung mit Belegen:
+
+- **Deterministisch, nicht flaky.** Drei Laeufe, dreimal derselbe Fehlschlag
+  an derselben Zeile, jeweils ~5,7 s.
+- **Scheitert vor dem RetroDisc-Code.** Der Abbruch liegt in Zeile 118 - der
+  Test erzeugt sich dort mit `vendor/ffmpeg.exe` ein Testvideo als Fixture.
+- **Ursache ist die Datei selbst.** `vendor/ffmpeg.exe`: 145 852 928 Bytes,
+  SHA-256 `6834A7937E3DEB50C79A4416E5D7C35F9281802E90D5B4456A924E2CE23EDA83`,
+  `Get-AuthenticodeSignature` meldet **NotSigned**. Ein direkter Aufruf aus
+  PowerShell scheitert identisch mit „Eine Anwendungssteuerungsrichtlinie hat
+  diese Datei blockiert".
+
+**Bewertung: Infrastrukturproblem.** Kein Codefehler, kein flakiger Test.
+
+**Behandlung.** Der Test ueberspringt seinen Echtlauf jetzt **ausschliesslich**
+bei `OSError` mit `winerror == 4551` und nur, wenn die Datei vorhanden ist
+(`require_runnable_vendor_tools`). Jeder andere Fehlschlag - fehlendes
+Werkzeug, Absturz, falscher Exitcode - bleibt ein Fehlschlag. Der Skip-Text
+nennt den Grund und verweist auf Blocker B1.
+
+Begruendung als **ADR-006**: eine dauerhaft rote Suite verdeckt die naechste
+echte Regression, weil niemand mehr „1 failed" von „2 failed" unterscheidet.
+Die Richtlinie wird nicht umgangen und nicht veraendert.
+
+Als Risiko **R2** vermerkt: „588 passed" bedeutet seitdem weniger als vorher.
+Wer freigibt, muss auf die Skips sehen, nicht nur auf die Farbe - `pytest -rs`
+macht sie sichtbar.
+
+#### Neuer Befund: das Artefakt-Gate ist gruen gegen Artefakte von gestern
+
+`scripts/verify_release_artifacts.py` meldet **PASS, 0 Befunde**. Gemessen:
+
+| Artefakt | Datum | SHA-256 |
+| --- | --- | --- |
+| `dist\RetroDisc.exe` | 05.09.2026 22:08 | `DA9AC5A2…` |
+| `Output\RetroDisc_1.0.0_Portable.zip` | 05.09.2026 22:08 | `02BDDBA3…` |
+| `Output\RetroDisc_Setup_1.0.0.exe` | 05.09.2026 22:09 | `E3EC838E…` |
+
+Das sind exakt die Hashes aus dem Block vom 05.09. zu Commit `04a3f78`. Die
+juengste Quelldatei stammt vom **06.09.2026 13:03**. Diese Artefakte enthalten
+**nichts** aus den Durchlaeufen 1-4.
+
+Das Gate luegt nicht - es prueft, was da ist. Das Risiko ist die Fehldeutung.
+Aufgenommen als **R1** in `docs/RELEASE_STATUS.md` und als Ticket **P2-8**:
+das Gate sollte melden, wenn die Artefakte aelter sind als die juengste
+Quelldatei.
+
+#### Dokumentation vervollstaendigt
+
+- **`docs/DECISIONS.md`** (neu) - sechs ADRs, jeweils mit Entscheidung,
+  Begruendung und der Folge einer Umkehr: kein zweiter Downloadbaum;
+  `MediaJob` als Zustand statt zweiter Queue; Whisper ueber den vorhandenen
+  `SubtitleGenerator`; injizierte KI-Backends; Reservierung statt Pruefung;
+  Richtlinienblock ist kein Testfehlschlag.
+- **`docs/REQUIREMENTS.md`** (neu) - 7 Gruppen, jede Anforderung mit
+  Nachweis. Erhebungsregel: ohne Test oder Messung gilt eine Anforderung als
+  offen, und ein Nachweis auf einem blockierten Werkzeug gilt als nicht
+  erbracht.
+- **`docs/RELEASE_STATUS.md`** (neu) - FERTIG / IN ARBEIT / BLOCKIERT /
+  RISIKEN plus der Commit-Plan.
+- **`docs/ARCHITECTURE.md`** - um die sieben Media-AI-Schritte und die
+  Fortschrittsabschnitte ergaenzt.
+- **`docs/TODO.md`** - Querverweise auf die neuen Dokumente, P2-8 aufgenommen.
+
+#### Gates
+
+- `pytest -q -rs`: **588 passed, 1 skipped**. Der Skip ist der oben
+  eingeordnete Richtlinienblock.
+- `compileall` 0, `verify_ui_bridge` **PASS/0**, `verify_home_layout`
+  **PASS 10/10**, `node --check` 0.
+- `verify_release_artifacts.py`: **PASS/0** - gilt aber nur fuer die oben
+  genannten alten Hashes, siehe R1.
+- `.hermes/verify_core.py` und `scripts/release_smoke.py`: weiterhin durch B1
+  blockiert.
+
+#### Commit
+
+Vorbereitet, **nicht ausgefuehrt**: acht Schnitte, in `docs/RELEASE_STATUS.md`
+ausformuliert. Reihenfolge ist Absicht - die Reservierung liegt zuunterst,
+weil alles Weitere sie benutzt. Ohne ausdrueckliche Freigabe wird hier nicht
+committet.
+
+#### Stand
+
+Der Quellstand ist stabilisiert und dokumentiert. Freigabereif ist er nicht:
+B1 (blockierte Binaries), B2 (Signatur), B3 (Rohling) und B4 (nicht
+eingefrorener Arbeitsbaum) stehen unveraendert.
