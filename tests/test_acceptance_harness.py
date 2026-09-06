@@ -18,6 +18,7 @@ import ast
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -93,6 +94,13 @@ def test_unicode_case_fails_when_the_title_proves_nothing(tmp_path, monkeypatch)
         class downloader:
             ytdlp_path = "yt-dlp"
             output_dir = None
+
+        # case_unicode_download setzt seine Ordner ueber die Settings, seit der
+        # Download in einen eigenen Auftragsordner laeuft und die Ausgabe
+        # getrennt davon liegt. Der Stub bildet genau diese Form nach.
+        settings = SimpleNamespace(
+            directories=SimpleNamespace(download_dir=None, output_dir=None)
+        )
 
         def download_url(self, *a, **k):  # pragma: no cover - darf nie laufen
             raise AssertionError("Der Download haette nicht starten duerfen")

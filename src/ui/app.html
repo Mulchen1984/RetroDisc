@@ -832,6 +832,26 @@ select, input[type="text"], input[type="url"], input[type="number"] {
       <span class="tbtn-label">Download</span>
     </button>
 
+    <!-- Media AI: Wellenform und Bildkader, getrennt - genau das tut der
+         Bereich. Bewusst kein Disc-Symbol: hier ist keine Disc beteiligt. -->
+    <button class="tbtn" onclick="showTab('mediaai',this)" id="tbtn-mediaai">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <rect x="3" y="5" width="17" height="12" rx="2" fill="#2f6fc0" stroke="#1d4e8f" stroke-width="1.4"/>
+        <path d="M8 11 L14 8 L14 14 Z" fill="#ffffff"/>
+        <g stroke="#7a3fb0" stroke-width="2.2" stroke-linecap="round">
+          <line x1="5" y1="27" x2="5" y2="30"/>
+          <line x1="9" y1="24" x2="9" y2="33"/>
+          <line x1="13" y1="26" x2="13" y2="31"/>
+          <line x1="17" y1="22" x2="17" y2="35"/>
+          <line x1="21" y1="25" x2="21" y2="32"/>
+        </g>
+        <path d="M24 9 L31 9 M27.5 5.5 L27.5 12.5" stroke="#c07d12" stroke-width="2.4" stroke-linecap="round"/>
+        <circle cx="27.5" cy="26" r="6" fill="none" stroke="#c07d12" stroke-width="2"/>
+        <circle cx="27.5" cy="26" r="2" fill="#c07d12"/>
+      </svg>
+      <span class="tbtn-label">Media AI</span>
+    </button>
+
     <!-- Suche: Lupe orange -->
     <button class="tbtn" onclick="showTab('search',this)" id="tbtn-search">
       <svg width="36" height="36" viewBox="0 0 36 36">
@@ -926,12 +946,15 @@ select, input[type="text"], input[type="url"], input[type="number"] {
   <!-- TOOL STATUS STRIP -->
   <div id="strip">
     <span style="font-weight:bold;font-size:10px;">Tools:</span>
-    <span class="strip-badge ok">✓ FFmpeg 6.1</span>
-    <span class="strip-badge ok">✓ yt-dlp 2024</span>
+    <!-- Keine Versionsnummern im Markup: sie waren erfunden und stimmten mit
+         nichts ueberein, was auf dem Rechner laeuft. Alle Angaben kommen zur
+         Laufzeit aus get_environment(); siehe loadEnvironment(). -->
+    <span class="strip-badge" id="badge-ffmpeg">FFmpeg …</span>
+    <span class="strip-badge" id="badge-ytdlp">yt-dlp …</span>
     <span class="strip-badge warn">? dvdauthor</span>
     <span class="strip-badge warn">? Ollama</span>
     <span class="strip-badge ok">✓ Whisper</span>
-    <span style="margin-left:auto;font-size:10px;color:#666;">RetroDisc v1.0.0</span>
+    <span style="margin-left:auto;font-size:10px;color:#666;" id="appVersion">RetroDisc</span>
   </div>
 
   <!-- MAIN -->
@@ -1019,7 +1042,14 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 
             <div class="row">
               <label style="width:160px;">Ausgabe-Ordner:</label>
-              <input type="text" style="width:240px;" placeholder="C:\Videos\RetroDisc" id="outdir">
+              <!-- Kein Platzhalterpfad. Hier stand fest im Markup ein
+                   erfundener Ordner direkt unter dem Laufwerksbuchstaben; der
+                   echte Standard liegt unter dem Benutzerprofil, und der
+                   Nutzer las damit ein Ziel, das es nicht gab. Der Wert kommt
+                   jetzt aus den Einstellungen, siehe loadSettingsIntoForm()
+                   und refreshOutputDirField(). -->
+              <input type="text" style="width:240px;" id="outdir"
+                     oninput="this.dataset.userEdited='1'">
               <button class="btn98" style="margin-left:4px;" onclick="openOutputFolderDialog()">Durchsuchen...</button>
             </div>
 
@@ -1200,6 +1230,11 @@ select, input[type="text"], input[type="url"], input[type="number"] {
                 <select style="width:280px;" id="ripDriveSelect">
                   <option>Bitte Laufwerk erkennen</option>
                 </select>
+                <!-- Die Laufwerksliste wird sitzungsweit gehalten. Ohne diesen
+                     Knopf kommt nicht weiter, wer die Disc erst nach dem
+                     Oeffnen des Bereichs einlegt. Brennen und Disc kopieren
+                     haben ihn laengst. -->
+                <button class="btn98" style="margin-left:4px;" onclick="loadBurners(true)">Neu suchen</button>
               </div>
               <div class="row">
                 <label style="width:120px;">Ausgabe-Format:</label>
@@ -1222,6 +1257,8 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 
       <!-- ══ DOWNLOAD ══ -->
       <div class="tabpanel" id="tab-download">
+        <div id="downloadPaths" style="padding:8px;overflow-wrap:anywhere;"></div>
+        <p style="padding:0 8px;">Video: Quelle erkennen → Download → MP4 erstellen → Fertig. Originale bleiben im Auftragsordner. Audio-Downloads bleiben im Downloadordner.</p>
         <div class="sect">
           <div class="sect-title">⬇️ Online Download (YouTube · Mediatheken)</div>
           <div class="sect-body">
@@ -1261,6 +1298,55 @@ select, input[type="text"], input[type="url"], input[type="number"] {
         <div style="display:flex;gap:8px;">
           <button class="btn98 default" onclick="goDL()">⬇ Download starten</button>
           <button class="btn98" onclick="goHome()">Abbrechen</button>
+        </div>
+      </div>
+
+      <!-- ══ MEDIA AI ══ -->
+      <div class="tabpanel" id="tab-mediaai">
+        <div class="sect">
+          <div class="sect-title">🎬 Medium importieren</div>
+          <div class="sect-body">
+            <div class="row">
+              <label style="width:60px;font-weight:bold;">URL:</label>
+              <input type="text" id="maiUrl" style="flex:1;user-select:text;pointer-events:auto;"
+                     autocomplete="off" spellcheck="false"
+                     onkeydown="if(event.key==='Enter'){event.preventDefault();mediaAiImport();}"
+                     placeholder="YouTube-URL, ARD/ZDF/Arte-Link …">
+            </div>
+            <div class="row">
+              <label style="width:160px;">Qualität:</label>
+              <select style="width:220px;" id="maiQuality">
+                <option value="best">Beste verfügbar</option>
+                <option value="1080p">1080p (Full HD)</option>
+                <option value="720p">720p (HD)</option>
+                <option value="480p">480p (SD)</option>
+              </select>
+            </div>
+            <div class="row">
+              <input type="checkbox" id="maiVideo" checked>
+              <label for="maiVideo">Videospur trennen (ohne Neukodierung)</label>
+            </div>
+            <div class="row">
+              <input type="checkbox" id="maiAudio" checked>
+              <label for="maiAudio">Audiospur extrahieren (WAV · PCM · 16 kHz · mono)</label>
+            </div>
+            <div class="row">
+              <span id="maiBase" style="color:#555;"></span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;padding:4px 0;">
+          <button class="btn98 default" onclick="mediaAiImport()">⬇ Importieren</button>
+          <button class="btn98" onclick="loadMediaAiWorkspaces()">🔄 Aktualisieren</button>
+          <button class="btn98" onclick="goHome()">Abbrechen</button>
+        </div>
+
+        <div class="sect">
+          <div class="sect-title">📁 Arbeitsmappen</div>
+          <div id="maiList" style="background:white;border:2px solid;border-color:#808080 #fff #fff #808080;min-height:160px;padding:4px;">
+            <div style="padding:20px;color:#666;font-size:11px;">Noch nichts importiert.</div>
+          </div>
         </div>
       </div>
 
@@ -1512,7 +1598,27 @@ select, input[type="text"], input[type="url"], input[type="number"] {
             <div class="row"><label style="width:180px;">DVD-Standard:</label><select id="settingsDvdStandard" style="width:160px;"><option value="PAL">PAL (Europa)</option><option value="NTSC">NTSC</option></select></div>
             <div class="row"><label style="width:180px;">Whisper-Modell:</label><select id="settingsWhisperModel" style="width:160px;"><option value="base" selected>base (offline)</option><option value="small">small</option><option value="medium">medium</option><option value="large-v3">large-v3</option></select></div>
             <div class="row"><label style="width:180px;">Ollama-Modell:</label><select id="settingsOllamaModel" style="width:160px;"><option>phi3:mini</option><option>llama3.2:3b</option><option>mistral:7b</option></select></div>
-            <div class="row"><label style="width:180px;">Output-Ordner:</label><input id="settingsOutputDir" type="text" style="width:260px;"><button class="btn98" style="margin-left:4px;" onclick="chooseSettingsFolder('settingsOutputDir')">Durchsuchen</button></div>
+            <div class="groupbox">
+              <div class="groupbox-title">Medienordner</div>
+              <div class="row">
+                <label style="width:180px;">Medienordner:</label>
+                <input id="settingsMediaRoot" type="text" style="width:260px;" readonly>
+                <button class="btn98" style="margin-left:4px;" onclick="chooseMediaRoot()">Wählen…</button>
+              </div>
+              <div class="row">
+                <span style="color:#555;">Darunter entstehen automatisch
+                  <strong>Downloads</strong>, <strong>Videos</strong>,
+                  <strong>Temp</strong> und <strong>Logs</strong>. Die drei
+                  Ordner unten werden dabei neu gesetzt.</span>
+              </div>
+            </div>
+            <div id="storageInfo" style="overflow-wrap:anywhere;padding:8px;"></div>
+            <div class="row">
+              <button class="btn98" onclick="openLogFolder()">📂 Logordner öffnen</button>
+              <span style="margin-left:8px;color:#555;">Für einen Supportfall:
+                die Protokolldatei des Tages liegt dort.</span>
+            </div>
+            <div class="row"><label style="width:180px;">Videos / Ausgabeordner:</label><input id="settingsOutputDir" type="text" style="width:260px;"><button class="btn98" style="margin-left:4px;" onclick="chooseSettingsFolder('settingsOutputDir')">Durchsuchen</button></div>
             <div class="row"><label style="width:180px;">Download-Ordner:</label><input id="settingsDownloadDir" type="text" style="width:260px;"><button class="btn98" style="margin-left:4px;" onclick="chooseSettingsFolder('settingsDownloadDir')">Durchsuchen</button></div>
             <div class="row">
               <input type="checkbox" checked id="snd">
@@ -1533,8 +1639,8 @@ select, input[type="text"], input[type="url"], input[type="number"] {
   <!-- STATUS BAR -->
   <div id="statusbar">
     <div class="sbar-cell" id="stxt">Bereit</div>
-    <div class="sbar-cell" style="width:160px;">FFmpeg 6.1 · Python 3.12</div>
-    <div class="sbar-cell" style="width:100px;">Windows 11</div>
+    <div class="sbar-cell" style="width:200px;" id="sbarTools" title="Werkzeuge dieser Installation"></div>
+    <div class="sbar-cell" style="width:130px;" id="sbarSystem" title="Laufzeitumgebung"></div>
   </div>
 
 </div><!-- /win -->
@@ -1678,7 +1784,8 @@ window.onBackendEvent = function(payload) {
       renderJobs(); break;
     case 'job_done':
       const jd = S.jobs.find(j=>j.id===data.id);
-      if(jd){ jd.state='done'; jd.prog=100; }
+      if(jd){ jd.state='done'; jd.prog=100; jd.output=data.output; jd.status='Fertig'; jd.warning=data.warning; }
+      refreshQueue();
       document.getElementById('curjob').style.display='none';
       document.getElementById('nojob').style.display='block';
       setStat('✓ Fertig: '+data.name+(data.elapsed?' ('+data.elapsed+'s)':''));
@@ -1687,7 +1794,8 @@ window.onBackendEvent = function(payload) {
       break;
     case 'job_failed':
       const jf = S.jobs.find(j=>j.id===data.id);
-      if(jf){ jf.state='failed'; }
+      if(jf){ jf.state='failed'; jf.error=data.error; }
+      refreshQueue();
       document.getElementById('curjob').style.display='none';
       document.getElementById('nojob').style.display='block';
       setStat('✗ Fehler: '+(data.error||data.name));
@@ -1910,8 +2018,24 @@ async function openOutputFolderDialog(){
   const a=api();
   if(!a || !a.open_folder_dialog){ alert('Backend noch nicht bereit — Ordnerauswahl nicht möglich.'); return; }
   const r=JSON.parse(await a.open_folder_dialog());
-  if(r.folder) document.getElementById('outdir').value = r.folder;
+  if(r.folder){
+    const outdir=document.getElementById('outdir');
+    outdir.value = r.folder;
+    outdir.dataset.userEdited='1';   // Eigene Wahl schlaegt die Einstellung.
+  }
   else if(r.error) setStat(r.error);
+}
+
+// Beim Oeffnen des Konvertieren-Bereichs den echten Ausgabeordner nachladen:
+// er kann sich seit dem Start in den Einstellungen geaendert haben.
+async function refreshOutputDirField(){
+  const a=api();
+  const outdir=document.getElementById('outdir');
+  if(!a || !outdir || outdir.dataset.userEdited) return;
+  try{
+    const s=JSON.parse(await a.get_settings());
+    outdir.value=s.directories?.output_dir||'';
+  }catch(e){ console.log('Ausgabeordner laden:', e); }
 }
 // Hilfsfunktionen
 function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -2060,6 +2184,28 @@ async function chooseToolPath(inputId){
   if(r.path) document.getElementById(inputId).value=r.path;
   else if(r.error && r.error!=='Abgebrochen') alert(r.error);
 }
+// Medienordner: einmal waehlen, Struktur entsteht darunter. Bewusst ein
+// eigener Knopf und nicht Teil von "Speichern" - die Aktion ersetzt die drei
+// einzeln eingestellten Ordner, und das soll der Nutzer sehen wollen.
+async function chooseMediaRoot(){
+  const a=api();
+  if(!a){ alert('Backend nicht bereit.'); return; }
+  const picked=JSON.parse(await a.open_folder_dialog());
+  if(picked.error){ if(picked.error!=='Abgebrochen') alert(picked.error); return; }
+  if(!picked.folder) return;
+  if(!confirm('Medienordner setzen auf:\n'+picked.folder+
+              '\n\nDownloads, Videos, Temp und Logs werden darunter angelegt '+
+              'und die bisherigen Einzelordner ersetzt.')) return;
+  const r=JSON.parse(await a.set_media_root(picked.folder));
+  if(r.error){ alert('Medienordner konnte nicht gesetzt werden: '+r.error); return; }
+  await loadSettingsIntoForm();
+  const outdir=document.getElementById('outdir');
+  if(outdir) delete outdir.dataset.userEdited;   // Neue Struktur schlaegt die alte Wahl.
+  await refreshOutputDirField();
+  setStat('✓ Medienordner: '+r.media_root);
+  alert('Medienordner gesetzt:\n'+r.media_root+'\n\nAngelegt:\n'+(r.created||[]).join('\n'));
+}
+
 async function chooseSettingsFolder(inputId){
   const a=api();
   if(!a) return;
@@ -2088,6 +2234,7 @@ async function saveSettings() {
   else {
     document.getElementById('dvdStandard').value=current.conversion.dvd_standard;
     document.getElementById('subtitleModel').value=current.ai.whisper_model;
+    await loadSettingsIntoForm();
     setStat('✓ Einstellungen gespeichert');
     alert('Einstellungen gespeichert!');
   }
@@ -2106,6 +2253,14 @@ async function loadSettingsIntoForm() {
     document.getElementById('settingsOllamaHost').value=s.ai?.ollama_host||'http://localhost:11434';
     document.getElementById('settingsOutputDir').value=s.directories.output_dir||'';
     document.getElementById('settingsDownloadDir').value=s.directories.download_dir||'';
+    document.getElementById('downloadPaths').textContent='Download: '+s.directories.download_dir+' (je Auftrag eigener Ordner) | Ausgabe: '+s.directories.output_dir;
+    document.getElementById('settingsMediaRoot').value=s.directories.media_root||'';
+    document.getElementById('storageInfo').textContent='Temp: '+s.directories.temp_dir+' | Logs: '+(s.storage_info?.logs||'')+' | Logdatei heute: '+(s.storage_info?.logfile||'')+' | Einstellungen: '+(s.storage_info?.config||'')+' | Werkzeuge: '+(s.storage_info?.tools||'')+' | Bibliothek: '+(s.storage_info?.library||'')+' | Jobhistorie: '+(s.storage_info?.history||'');
+    // Realer Wert, kein Platzhalter: der Nutzer soll den Zielordner lesen
+    // koennen, bevor er konvertiert. Eine abweichende Eingabe, die er selbst
+    // vorgenommen hat, wird dabei nicht ueberschrieben.
+    const outdir=document.getElementById('outdir');
+    if(outdir && !outdir.dataset.userEdited) outdir.value=s.directories.output_dir||'';
     document.getElementById('settingsDvdStandard').value=s.conversion?.dvd_standard||'PAL';
     document.getElementById('settingsWhisperModel').value=s.ai?.whisper_model||'base';
     document.getElementById('settingsOllamaModel').value=s.ai?.ollama_model||'phi3:mini';
@@ -2115,25 +2270,164 @@ async function loadSettingsIntoForm() {
   } catch(e) { console.log('Settings laden:', e); }
 }
 
+// ── Echte Umgebungsangaben laden ─────────────────────────────────
+// Ersetzt die frueher fest im Markup stehenden Versionsnummern. Was nicht
+// ermittelt werden kann, heisst "unbekannt" - nie eine erfundene Zahl.
+async function loadEnvironment() {
+  const a = api();
+  if (!a || !a.get_environment) return;
+  try {
+    const env = JSON.parse(await a.get_environment());
+    const tool = k => (env.tools?.[k]?.available && env.tools[k].version)
+      ? env.tools[k].version : 'unbekannt';
+    const setText = (id, text) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    };
+    setText('appVersion', 'RetroDisc v' + (env.app || '?'));
+    setText('sbarTools', 'FFmpeg ' + tool('ffmpeg') + ' · yt-dlp ' + tool('ytdlp'));
+    setText('sbarSystem', (env.os || '') + ' · Python ' + (env.python || '?'));
+    [['ffmpeg', 'FFmpeg'], ['ytdlp', 'yt-dlp']].forEach(([key, label]) => {
+      const el = document.getElementById('badge-' + key);
+      if (!el) return;
+      const info = env.tools?.[key];
+      const ok = info && info.available;
+      el.textContent = (ok ? '✓ ' : '✗ ') + label + (ok ? ' ' + info.version : ' fehlt');
+      el.className = 'strip-badge ' + (ok ? 'ok' : 'warn');
+      el.title = info?.path || '';
+      if (ok) el.dataset.versionKnown = '1';   // loadToolStatus nicht überschreiben lassen.
+    });
+  } catch (e) { console.log('Umgebung laden:', e); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MEDIA AI
+// Der Bereich fuehrt nur; gearbeitet wird in der bestehenden Job-Queue.
+// Deshalb gibt es hier keinen eigenen Fortschritt: nach dem Start wechselt
+// die Ansicht in die Queue, die Pfad, Schritte und Fehler ohnehin zeigt.
+// ═══════════════════════════════════════════════════════════════
+
+async function mediaAiImport(){
+  const input=document.getElementById('maiUrl');
+  const url=(input.value||'').trim();
+  if(!/^https?:\/\/\S+$/i.test(url)){
+    alert('Bitte eine gültige HTTP- oder HTTPS-URL eingeben.');
+    input.focus();
+    return;
+  }
+  const a=api();
+  if(!a){ alert('Backend noch nicht bereit.'); return; }
+  const quality=document.getElementById('maiQuality')?.value||'best';
+  const wantVideo=document.getElementById('maiVideo')?.checked!==false;
+  const wantAudio=document.getElementById('maiAudio')?.checked!==false;
+  try{
+    setStat('Import wird eingereiht …');
+    const r=JSON.parse(await a.media_ai_import(url, quality, wantVideo, wantAudio));
+    if(r.error){ alert('Import konnte nicht gestartet werden: '+r.error); setStat('Bereit'); return; }
+    setStat('Import eingereiht.');
+    showTab('queue', document.getElementById('tbtn-queue'));
+  }catch(e){ alert('Import konnte nicht gestartet werden: '+e); }
+}
+
+async function loadMediaAiWorkspaces(){
+  const a=api();
+  const box=document.getElementById('maiList');
+  if(!a || !box) return;
+  try{
+    const data=JSON.parse(await a.media_ai_list());
+    if(data.error){ box.innerHTML='<div style="padding:8px;color:red;font-size:11px;">'+escHtml(data.error)+'</div>'; return; }
+    const base=document.getElementById('maiBase');
+    if(base) base.textContent='Arbeitsmappen unter: '+(data.base||'');
+    const items=data.workspaces||[];
+    if(!items.length){
+      box.innerHTML='<div style="padding:20px;color:#666;font-size:11px;">Noch nichts importiert.</div>';
+      return;
+    }
+    box.innerHTML=items.map(w=>{
+      const art=w.artefacts||{};
+      const mark=(key,label)=>art[key]
+        ? '<span class="strip-badge ok">✓ '+label+'</span> '
+        : '<span class="strip-badge warn">– '+label+'</span> ';
+      const frames=art.frame_count?(' ('+escHtml(art.frame_count)+')'):'';
+      const folder=escAttr(w.root);
+      return `<div class="frow" style="display:block;padding:8px;border-bottom:1px solid #e0e4ea;">
+        <div style="font-weight:bold;font-size:11px;">${escHtml(w.title||w.name)}</div>
+        <div style="font-size:10px;color:#666;overflow-wrap:anywhere;">${escHtml(w.root)}</div>
+        <div style="font-size:10px;color:#666;">${escHtml(w.uploader||'')}${w.imported_at?' · '+escHtml(w.imported_at):''}</div>
+        <div style="padding:4px 0;">
+          ${mark('original','Original')}${mark('video','Video')}${mark('audio','Audio 16 kHz')}${mark('transcript','Transkript')}
+          ${art.frames?'<span class="strip-badge ok">✓ Frames'+frames+'</span>':'<span class="strip-badge warn">– Frames</span>'}
+        </div>
+        ${(w.errors||[]).map(e=>'<div style="font-size:10px;color:#a03020;">'+escHtml(e)+'</div>').join('')}
+        <div style="padding-top:4px;display:flex;gap:4px;flex-wrap:wrap;">
+          <button class="btn98" data-f="${folder}" onclick="mediaAiCall('media_ai_extract_audio',this.dataset.f)">🎵 Audio extrahieren</button>
+          <button class="btn98" data-f="${folder}" onclick="mediaAiCall('media_ai_extract_video',this.dataset.f)">🎬 Video extrahieren</button>
+          <button class="btn98" data-f="${folder}" onclick="mediaAiCall('media_ai_transcribe',this.dataset.f)">📝 Transkribieren</button>
+          <button class="btn98" data-f="${folder}" onclick="mediaAiFrames(this.dataset.f)">🖼 Einzelbilder</button>
+          <button class="btn98" data-f="${folder}" onclick="mediaAiOpen(this.dataset.f)">📂 Ordner öffnen</button>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){ console.log('Media AI laden:', e); }
+}
+
+async function mediaAiCall(method, folder){
+  const a=api();
+  if(!a || !a[method]) { alert('Backend noch nicht bereit.'); return; }
+  try{
+    const r=JSON.parse(await a[method](folder));
+    if(r.error){ alert(r.error); return; }
+    setStat('Auftrag eingereiht.');
+    showTab('queue', document.getElementById('tbtn-queue'));
+  }catch(e){ alert('Auftrag konnte nicht gestartet werden: '+e); }
+}
+
+async function mediaAiFrames(folder){
+  const value=prompt('Einzelbilder pro Sekunde:', '1');
+  if(value===null) return;
+  const fps=Number(value.replace(',', '.'));
+  if(!Number.isFinite(fps) || fps<=0){ alert('Bitte eine Zahl größer als 0 eingeben.'); return; }
+  const a=api();
+  if(!a) return;
+  try{
+    const r=JSON.parse(await a.media_ai_extract_frames(folder, fps));
+    if(r.error){ alert(r.error); return; }
+    setStat('Einzelbilder werden erzeugt.');
+    showTab('queue', document.getElementById('tbtn-queue'));
+  }catch(e){ alert('Einzelbilder konnten nicht erzeugt werden: '+e); }
+}
+
+async function mediaAiOpen(folder){
+  const a=api();
+  if(!a) return;
+  const r=JSON.parse(await a.media_ai_open(folder));
+  if(r.error) alert(r.error);
+}
+
+async function openLogFolder() {
+  const a = api();
+  if (!a) { alert('Backend nicht bereit.'); return; }
+  const r = JSON.parse(await a.open_log_folder());
+  if (r.error) alert('Logordner konnte nicht geöffnet werden: ' + r.error);
+  else setStat('Logordner geöffnet: ' + r.path);
+}
+
 // ── Tool-Status beim Start laden ─────────────────────────────────
 async function loadToolStatus() {
   const a = api();
   if (!a) return;
   try {
+    // Nur noch die Vorhandenheit, und ausschliesslich ueber Ids. Die frueher
+    // hier verwendete Position im Strip traf die falschen Felder, sobald sich
+    // die Reihenfolge aenderte; die Versionen liefert loadEnvironment().
     const tools = JSON.parse(await a.check_tools());
-    const strip = document.getElementById('strip');
-    if (!strip) return;
-    const badges = strip.querySelectorAll('.strip-badge');
-    const map = {ffmpeg: tools.ffmpeg, ffprobe: tools.ffprobe, ytdlp: tools.ytdlp};
-    let i = 0;
-    for (const [name, info] of Object.entries(map)) {
-      if (badges[i]) {
-        const ok = info && info.available;
-        badges[i].textContent = ok ? '✓ ' + name : '✗ ' + name + ' fehlt';
-        badges[i].className = 'strip-badge ' + (ok ? 'ok' : 'warn');
-      }
-      i++;
-    }
+    [['ffmpeg', 'FFmpeg'], ['ytdlp', 'yt-dlp']].forEach(([key, label]) => {
+      const el = document.getElementById('badge-' + key);
+      if (!el || el.dataset.versionKnown) return;
+      const ok = tools[key] && tools[key].available;
+      el.textContent = (ok ? '✓ ' : '✗ ') + label + (ok ? '' : ' fehlt');
+      el.className = 'strip-badge ' + (ok ? 'ok' : 'warn');
+    });
   } catch(e) { console.log('Tool-Status:', e); }
 }
 
@@ -2143,18 +2437,8 @@ async function refreshQueue() {
   if (!a) return;
   try {
     const jobs = JSON.parse(await a.get_queue());
-    // State aus Backend in lokalen State übernehmen
-    jobs.forEach(bj => {
-      const lj = S.jobs.find(j => j.id === bj.id);
-      if (lj) {
-        lj.state = bj.state;
-        lj.prog  = bj.progress;
-        lj.awaitingCopyMedium = bj.awaiting_copy_medium === true;
-      } else if (bj.state !== 'done') {
-        S.jobs.push({id: bj.id, name: bj.name, state: bj.state,
-                     prog: bj.progress, status: '', awaitingCopyMedium: bj.awaiting_copy_medium === true});
-      }
-    });
+    S.jobs = jobs.map(bj => ({...bj, prog:bj.progress,
+      awaitingCopyMedium:bj.awaiting_copy_medium === true}));
     renderJobs();
     updateJobBadge();
     // Laufender Job im Detail-Panel
@@ -2163,6 +2447,7 @@ async function refreshQueue() {
       document.getElementById('curjob').style.display = 'block';
       document.getElementById('nojob').style.display  = 'none';
       document.getElementById('cjname').textContent   = running.name;
+      document.getElementById('cjstatus').textContent = running.status || '';
       document.getElementById('cjbar').style.width    = running.prog + '%';
       document.getElementById('cjpct').textContent    = Math.floor(running.prog) + '%';
     }
@@ -2198,6 +2483,7 @@ async function openOutputFolder() {
 // ── Startup ─────────────────────────────────────────────────────
 async function startup() {
   await loadToolStatus();
+  await loadEnvironment();
   await loadSettingsIntoForm();
   await loadPresetsFromBackend();
   await loadWatchFolders();
@@ -2206,6 +2492,7 @@ async function startup() {
   // Home-Screen hat das nichts zu suchen - sie laeuft erst, wenn der Nutzer
   // einen Disc-Bereich oeffnet.
   // Alle 2 Sekunden Queue aktualisieren
+  await refreshQueue();
   setInterval(refreshQueue, 2000);
 }
 
@@ -2768,11 +3055,11 @@ function renderJobs() {
     l.innerHTML = '<div style="padding:16px;color:#666;font-size:11px;">Keine Jobs vorhanden.</div>';
     return;
   }
-  const icons = { pending:'⏳', running:'🔄', done:'✅', failed:'❌', cancelled:'⛔' };
+  const icons = { pending:'⏳', running:'🔄', done:'✅', failed:'❌', cancelled:'⛔', interrupted:'⚠' };
   l.innerHTML = S.jobs.map(j => `
-    <div class="jobrow" style="${j.state==='running'?'background:#e8f4ff;':''}${j.awaitingCopyMedium?'flex-wrap:wrap;':''}">
+    <div class="jobrow" style="flex-wrap:wrap;${j.state==='running'?'background:#e8f4ff;':''}${j.awaitingCopyMedium?'flex-wrap:wrap;':''}">
       <span class="jstate">${icons[j.state]||'⏳'}</span>
-      <span class="jname" title="${j.name||''}">${j.name||j.id}</span>
+      <span class="jname" title="${escAttr(j.name||'')}">${escHtml(j.name||j.id)}</span>
       ${j.state==='running' && j.awaitingCopyMedium ? `
         <div style="flex-basis:100%;padding:6px 0;">
           <p>Quelldisc entfernen und leeren Rohling einlegen.</p>
@@ -2787,7 +3074,39 @@ function renderJobs() {
         <button style="padding:1px 5px;font-size:9px;cursor:pointer;border:1px solid #cc4444;color:#cc4444;background:#fff3f3;margin-left:3px;" 
           onclick="cancelJobUI('${j.id}')">✕</button>
       ` : `<span class="jpct">${Math.floor(j.prog||0)}%</span>`}
+      <div style="flex-basis:100%;overflow-wrap:anywhere;padding:5px 0;user-select:text;">
+        <div>Auftrag: ${escHtml(j.id)} · ${escHtml(j.created||'')}</div>
+        <div>${escHtml(j.status||j.state)}${j.error?' — '+escHtml(j.error):''}</div>
+        ${j.steps?.length ? `<div>${j.steps.map(escHtml).join(' → ')}</div>` : ''}
+        ${j.download ? `<div>Download: ${escHtml(j.download)} <button class="btn98" data-job="${escAttr(j.id)}" onclick="openJobFolder(this.dataset.job,'download')">Ordner öffnen</button></div>` : ''}
+        ${j.output ? `
+          <div><strong>Datei:</strong> ${escHtml(baseName(j.output))}</div>
+          <div><strong>Pfad:</strong> ${escHtml(j.output)}</div>
+          <div style="padding-top:3px;">
+            <button class="btn98" data-job="${escAttr(j.id)}" onclick="openJobFolder(this.dataset.job,'output')">📂 Ordner öffnen</button>
+            <button class="btn98" data-job="${escAttr(j.id)}" onclick="openJobFile(this.dataset.job)">▶ Datei öffnen</button>
+          </div>` : ''}
+        ${(j.outputs||[]).filter(p=>p!==j.output).map(p=>`<div>Video: ${escHtml(p)}</div>`).join('')}
+        ${j.warning ? `<div>${escHtml(j.warning)}</div>` : ''}
+      </div>
     </div>`).join('');
+}
+
+// Dateiname aus einem Windows- oder POSIX-Pfad, ohne den Pfad zu zerlegen.
+function baseName(p){ return String(p||'').split(/[\\/]/).pop(); }
+
+async function openJobFolder(jobId, kind) {
+  const a=api();
+  if(!a) return;
+  const r=JSON.parse(await a.open_job_folder(jobId,kind));
+  if(r.error) setStat(r.error);
+}
+
+async function openJobFile(jobId) {
+  const a=api();
+  if(!a) return;
+  const r=JSON.parse(await a.open_job_file(jobId));
+  if(r.error) setStat(r.error);
 }
 
 async function confirmCopyMedium(jobId) {
@@ -2953,6 +3272,7 @@ const FLOW_TITLES = {
   burn:['Disc brennen','Rohling einlegen und brennen'],
   rip:['Disc rippen','DVD oder CD als Datei einlesen'],
   download:['Download','Video aus dem Netz holen'],
+  mediaai:['Media AI','Importieren, Spuren trennen, weiterverarbeiten'],
   search:['Suche','Medien finden'],
   edit:['Bearbeiten','Schneiden und Menue gestalten'],
   ai:['AI Tools','KI-gestuetzte Funktionen'],
@@ -2973,6 +3293,10 @@ function openFlow(name){
     setTimeout(() => loadBurners(false), 50);
   }
   if(name==='download'){ setTimeout(()=>document.getElementById('urlinp')?.focus(), 50); }
+  if(name==='convert'){ refreshOutputDirField(); }
+  // Die Mappenliste liegt auf der Platte und kann sich seit dem letzten Blick
+  // geaendert haben - beim Oeffnen neu lesen, sonst nie.
+  if(name==='mediaai'){ loadMediaAiWorkspaces(); }
   const t = FLOW_TITLES[name] || [name,''];
   document.getElementById('flowTitle').textContent = t[0];
   document.getElementById('flowSub').textContent = t[1];

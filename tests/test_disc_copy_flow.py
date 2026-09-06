@@ -233,7 +233,17 @@ def test_detection_result_is_cached_for_the_session():
 
 
 def test_refresh_buttons_force_a_fresh_scan():
-    assert UI.count("loadBurners(true)") == 2, "Neu-suchen-Knoepfe erzwingen nicht"
+    """Jeder Knopf, der die Erkennung anstoesst, muss sie auch erzwingen.
+
+    Frueher stand hier eine feste Anzahl. Das prueft nicht die Eigenschaft,
+    sondern den Stand: ein berechtigter dritter Knopf - der Rip-Bereich hatte
+    als einziger keinen - liess den Test scheitern, obwohl nichts kaputt war.
+    """
+    handlers = re.findall(r'onclick="loadBurners\((.*?)\)"', UI)
+
+    assert handlers, "Kein Neu-suchen-Knopf gefunden"
+    assert all(arg.strip() == "true" for arg in handlers), \
+        f"Ein Knopf stoesst die Erkennung ohne force an: {handlers}"
 
 
 def test_no_periodic_background_drive_detection():
