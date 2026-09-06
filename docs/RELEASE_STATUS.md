@@ -2,11 +2,11 @@
 
 Ein Blick auf die Frage: **kann das ausgeliefert werden?**
 
-Kurze Antwort: nein, und zwar aus drei Gründen, von denen **keiner** im Code
-liegt. Der Quellstand ist so weit und seit dem 06.09. eingefroren; belegt ist
-er am Artefakt nicht.
+Kurze Antwort: nein — aber deutlich näher als heute früh. B1 ist am 06.09.
+entfallen, damit laufen alle Gates wieder. Es fehlt der **Build aus dem
+eingefrorenen Stand**; die vorhandenen Artefakte sind vom 05.09.
 
-Stand: 2026-09-06 · Branch `release-signing` · letzter Commit `5b6f1de` · gepusht
+Stand: 2026-09-06 · Branch `release-signing` · letzter Commit `ca99a05` · gepusht
 
 ---
 
@@ -62,27 +62,40 @@ Belegt durch Test oder Messung. Die Nachweise stehen in
 
 ## BLOCKIERT
 
-Diese drei verhindern die Freigabe. **Keiner davon ist durch Code lösbar.**
-B4 ist am 06.09. entfallen und bleibt unten als Nachweis stehen.
+Zwei verhindern die Freigabe, beide **nicht durch Code lösbar**. B1 und B4
+sind am 06.09. entfallen und bleiben als Nachweis stehen.
 
-### B1 — Vendor-Binaries von der Anwendungssteuerungsrichtlinie blockiert
+### ~~B1 — Vendor-Binaries blockiert~~ — **entfallen am 2026-09-06**
 
-`vendor/ffmpeg.exe` (145 852 928 Bytes, SHA-256 `6834A793…`) ist **NotSigned**
-und wird von Smart App Control blockiert. Auch der direkte Aufruf scheitert:
+Die Richtlinie blockiert die Binaries nicht mehr; sie wurde dabei **nicht
+umgangen und nicht verändert**. Belegt:
 
 ```
-Eine Anwendungssteuerungsrichtlinie hat diese Datei blockiert   (WinError 4551)
+vendorfmpeg.exe  ->  ffmpeg version N-126342-gf88b741dbf-20260831
+vendor\yt-dlp.exe  ->  2026.08.19
 ```
 
-**Folge.** `.hermes/verify_core.py`, `scripts/release_smoke.py` und der
-Bauweg sind auf diesem Host nicht lauffähig. Die echte Medienstrecke — yt-dlp
-und ffmpeg — ist seit dem 05.09. nicht mehr gefahren worden. Geprüft ist die
-Ablauf-, Pfad- und Aufruflogik; **nicht** das Ergebnis der Werkzeuge.
+Alle Gates, die echte Medienarbeit fahren, laufen wieder:
+`.hermes/verify_core.py` **0**, `scripts/release_smoke.py` **0**,
+`scripts/run_acceptance.py` **PASS** (source 6/6, packaged 7/7) — inklusive
+eines echten YouTube-Downloads mit koreanischem Titel, also des
+cp1252-Falls.
 
-**Nicht umgehen.** Die Richtlinie wird nicht abgeschaltet und nicht verändert;
-ein Abschalten ist unter Windows nur durch eine Neuinstallation reversibel.
-Der Weg nach vorn ist ein Host, auf dem die Binaries laufen, oder signierte
-Vendor-Binaries.
+**Nicht als dauerhaft annehmen.** Smart App Control entscheidet **je Datei**.
+Dass diese Hashes jetzt starten, sagt nichts über andere — insbesondere nicht
+über eine **neu gebaute** `dist\RetroDisc.exe`, die einen neuen Hash bekommt.
+Ein erneuter Block beim nächsten Build ist möglich und wäre kein Rückschritt
+im Code.
+
+### B5 — Kein Build aus dem eingefrorenen Stand
+
+Mit B1 ist der Bauweg wieder offen, aber noch nicht gefahren. Solange das
+nicht geschehen ist, gilt für den ausgelieferten Zustand nur, was am
+Quellstand belegt ist. Das betrifft D3/R3 (Logging im windowed Build), F12
+(Media AI am Artefakt) und R1 (die Artefakte selbst).
+
+Nächster Schritt: `python build.py --clean --sign`, danach
+`scripts/verify_release_artifacts.py --require-signed` und ein Runtime-Gate.
 
 ### B2 — Keine öffentlich vertrauenswürdige Code-Signatur
 
@@ -150,21 +163,33 @@ kein Release-Logging, keine Media AI Pipeline.
 nicht als „Release ist fertig" gelesen werden. Nach dem nächsten Build sind
 diese drei Hashes ungültig.
 
+Dasselbe gilt für die **packaged**-Ebene von `run_acceptance.py`: sie meldet
+7/7, fährt dabei aber genau diese alte EXE. Der Nachweis gilt für den Stand
+vom 05.09., nicht für die Arbeit danach.
+
 ### R2 — Ein grüner Testlauf belegt die Medienstrecke nicht
 
-Seit heute überspringt `test_download_workflow.py` seinen Echtlauf bei
-WinError 4551 statt fehlzuschlagen (ADR-006). Das macht die Suite ehrlich —
-eine dauerhaft rote Suite verdeckt die nächste echte Regression —, aber die
-Zahl „588 passed" bedeutet jetzt weniger als vorher. Der Skip-Text nennt den
-Grund, und `-rs` macht ihn im Lauf sichtbar. **Wer freigibt, muss auf die
-Skips sehen, nicht nur auf die Farbe.**
+`test_download_workflow.py` überspringt seinen Echtlauf bei WinError 4551
+statt fehlzuschlagen (ADR-006). Das macht die Suite ehrlich, lässt aber echte
+Defekte durch, solange der Skip greift.
+
+**Das ist keine Theorie mehr.** Am 06.09., als die Richtlinie den Block
+aufhob, lief der Test zum ersten Mal — und fiel sofort über eine Regression,
+die seit `2132e36` im Repository lag: der Test führte eine eigene Kopie der
+Schrittnamen, die beim Umbenennen nicht mitgezogen wurde. Der Block hatte das
+verdeckt, und der Fehler ist mit dem Freeze in die gepushte Historie gewandert.
+Behoben in `ca99a05`; die Kopie ist durch `WORKFLOW_STAGES` ersetzt.
+
+**Lehre:** Ein Skip ist eine Schuld, kein Ergebnis. Wer freigibt, muss auf die
+Skips sehen, nicht nur auf die Farbe — und ein Skip, der lange steht, gehört
+in einer Umgebung nachgeholt, in der er nicht greift.
 
 ### R3 — Das Release-Logging ist nur am Quellstand belegt
 
 Der ganze Punkt von P1-4 ist der windowed Build, in dem `sys.stdout` `None`
-ist. Genau dort ist es nicht nachgemessen, weil nicht gebaut werden kann (B1).
-Der Nachweis ist ein Lauf der gepackten EXE, dessen Logfile Zeilen aus
-`src.core.pipeline` enthält.
+ist. Genau dort ist es nicht nachgemessen. Mit B1 ist das jetzt **prüfbar**
+und nur noch nicht geprüft: es braucht einen Build (B5) und danach einen Lauf
+der gepackten EXE, dessen Logfile Zeilen aus `src.core.pipeline` enthält.
 
 ### ~~R4 — Der eingefrorene Stand liegt nur auf einem Rechner~~ — **geschlossen am 2026-09-06**
 
@@ -242,9 +267,10 @@ zuunterst, weil alles Weitere sie benutzt.
 
 ## Was als Nächstes den größten Unterschied macht
 
-1. **B1 auflösen** — einen Host, auf dem die Vendor-Binaries laufen. Erst
-   danach lassen sich B6, D3, F12 und R3 überhaupt belegen. Das ist jetzt der
-   einzige Punkt, der weitere Arbeit am Code blockiert.
-2. **P2-3** — die letzten Werkzeug-Rohtexte aus der Oberfläche.
-3. **P2-8** — das Artefakt-Gate soll melden, wenn die Artefakte älter sind als
-   die jüngste Quelldatei (siehe R1).
+1. **B5 — bauen.** `python build.py --clean --sign` aus dem eingefrorenen
+   Stand, dann `verify_release_artifacts.py --require-signed` und ein
+   Runtime-Gate. Das schließt R1 und R3 und belegt D3 und F12. Der mit
+   Abstand größte Einzelschritt, jetzt wo B1 weg ist.
+2. **P2-8** — das Artefakt-Gate soll melden, wenn die Artefakte älter sind als
+   die jüngste Quelldatei; genau diese Falle hat heute zugeschlagen.
+3. **P2-3** — die letzten Werkzeug-Rohtexte aus der Oberfläche.

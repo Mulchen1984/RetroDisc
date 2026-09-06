@@ -18,7 +18,7 @@ sie nicht:
 Ein Ticket verschwindet hier erst, wenn es **belegt** erledigt ist. Der Beleg
 steht im Journal, nicht hier.
 
-Stand: 2026-09-06 (nach Durchlauf 7, gepusht)
+Stand: 2026-09-06 (nach Durchlauf 8; gepusht, B1 entfallen)
 
 ---
 
@@ -28,7 +28,8 @@ Diese drei verhindern ein Release unabhängig vom Code.
 
 | # | Blocker | Art | Zuständig |
 |---|---------|-----|-----------|
-| B1 | **Vendor-Binaries von Smart App Control blockiert.** `vendor/ffmpeg.exe` lässt sich auf dem Entwicklungsrechner nicht starten (`WinError 4551`). Damit sind `.hermes/verify_core.py`, `scripts/release_smoke.py` und der Bauweg nicht lauffähig. | Umgebung | Host — Richtlinie **nie** umgehen |
+| ~~B1~~ | ~~Vendor-Binaries von Smart App Control blockiert~~ — **entfallen 06.09.** Alle Gates laufen wieder; SAC entscheidet je Datei, ein neuer Build kann erneut blockiert werden. | Umgebung | — |
+| **B5** | **Kein Build aus dem eingefrorenen Stand.** Der Bauweg ist wieder offen, aber nicht gefahren. Bis dahin gilt nur, was am Quellstand belegt ist. | Build | offen |
 | B2 | **Keine öffentlich vertrauenswürdige Code-Signatur.** Das lokale Development-Zertifikat belegt die Pipeline, nicht die Weitergabefähigkeit. | Beschaffung | — |
 | B3 | **Physischer Brenn- und Rücklesetest fehlt.** Kein Rohling vorhanden. | Hardware | — |
 
