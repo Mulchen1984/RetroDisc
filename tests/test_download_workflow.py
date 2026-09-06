@@ -18,13 +18,32 @@ from src.core.ffmpeg import FFmpeg
 from src.core.pipeline import Pipeline
 from src.models.media import Job, JobType
 from src.services.converter import Converter
-from src.services.download_workflow import run_download_workflow
+from src.services.download_workflow import WORKFLOW_STAGES, run_download_workflow
 from src.services.job_history import JobHistory
 from src.utils.subprocesses import run_hidden
 from retrodisc_launcher import RetroDiscBridge
 
 ROOT = Path(__file__).resolve().parents[1]
-STEPS = ["Quelle erkannt", "Download läuft", "Download abgeschlossen", "Verarbeitung läuft", "Video erstellt", "Fertig"]
+
+# Die Schrittnamen kommen aus der Quelle, nicht aus einer Kopie. Hier stand
+# eine Literal-Liste, die beim Umbenennen der Stufen nicht mitgezogen wurde -
+# unbemerkt, weil der Test wegen des Richtlinienblocks monatelang nicht lief.
+STEPS = list(WORKFLOW_STAGES)
+
+
+def assert_stage_chain(steps: list[str]) -> None:
+    """Jede Stufe kommt vor, in der richtigen Reihenfolge.
+
+    Keine Gleichheit: der Konvertierungsschritt traegt die laufende Nummer und
+    den Dateinamen mit sich ("Konvertierung laeuft (1/3): Name.mp4"), und bei
+    mehreren Videos kommt er mehrfach vor.
+    """
+    positions = []
+    for stage in WORKFLOW_STAGES:
+        match = next((i for i, step in enumerate(steps) if step.startswith(stage)), None)
+        assert match is not None, f"Schritt fehlt: {stage!r} in {steps}"
+        positions.append(match)
+    assert positions == sorted(positions), f"Reihenfolge stimmt nicht: {steps}"
 
 
 #: WinError 4551 - "Eine Anwendungssteuerungsrichtlinie hat diese Datei
@@ -171,7 +190,7 @@ async def test_complete_real_download_processing_restart_and_ui(tmp_path, monkey
         await pipeline.submit(job, lambda j: run_download_workflow(j, dl, converter, history))
         await pipeline._execute_job(job)
         assert job.state.value == "done", job.error_message
-        assert job.params["steps"] == STEPS
+        assert_stage_chain(job.params["steps"])
         assert progress == sorted(progress)
         assert job.output_path.parent == tmp_path / "Videos"
         assert job.output_path.suffix == ".mp4"
@@ -195,7 +214,15 @@ async def test_complete_real_download_processing_restart_and_ui(tmp_path, monkey
         ui = (ROOT / "src/ui/app.html").read_text(encoding="utf-8")
         def function(name):
             return re.search(r"(?:async )?function " + name + r"\([^)]*\)\s*\{.*?^\}", ui, re.S | re.M)[0]
-        helpers = "\n".join(line for line in ui.splitlines() if line.startswith(("function escHtml(", "function escAttr(")))
+        # Jeder einzeilige Helfer der Oberflaeche, nicht eine Auswahl davon:
+        # die Liste war eine Kopie und kannte baseName() nicht, das renderJobs
+        # fuer den Dateinamen braucht. Was das Geruest oben selbst stellt, wird
+        # ausgelassen - sonst ist der Bezeichner doppelt deklariert.
+        provided = {"setStat", "api"}
+        helpers = "\n".join(
+            line for line in ui.splitlines()
+            if (m := re.match(r"function (\w+)\(.*\)\s*\{.*\}\s*$", line))
+            and m.group(1) not in provided)
         code = "const S={jobs:" + json.dumps(rows) + "}; const node={};const document={getElementById:()=>node};let calls=[];const api=()=>({open_job_folder:async(id,kind)=>{calls.push([id,kind]);return '{}'}});const setStat=()=>{};\n"
         code += helpers + "\n" + function("renderJobs") + "\n" + function("openJobFolder")
         code += "\n(async()=>{renderJobs();await openJobFolder(S.jobs[0].id,'download');await openJobFolder(S.jobs[0].id,'output');console.log(JSON.stringify({html:node.innerHTML,calls}));})();"
