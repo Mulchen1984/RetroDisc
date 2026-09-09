@@ -39,6 +39,8 @@ class JobType(Enum):
     UPSCALE = "upscale"
     INTERPOLATE = "interpolate"
     SMART_EDIT = "smart_edit"
+    DIRECTOR_RENDER = "director_render"
+    RESTORE = "restore"
     TRIM = "trim"
     MERGE = "merge"
 

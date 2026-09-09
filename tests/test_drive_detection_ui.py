@@ -48,11 +48,16 @@ const document={getElementById:id=>nodes[id]};
 let confirmed=[], alerts=[];
 const updateJobBadge=()=>{};
 const alert=text=>alerts.push(text);
+// refreshQueue/renderJobs call these shipped helpers; provide the same minimal
+// harness stubs as updateJobBadge/alert so the real functions run under Node.
+function escHtml(s){return String(s==null?'':s);}
+function escAttr(s){return String(s==null?'':s);}
+function revealOutputButton(p){return '';}
 const api=()=>({
  get_queue:async()=>JSON.stringify([{id:'copy123',name:'Disc copy',state:'running',progress:50,awaiting_copy_medium:true}]),
  confirm_copy_medium:async id=>{confirmed.push(id);return JSON.stringify({error:'Insert blank disc'});}
 });
-""" + function("refreshQueue") + function("renderJobs") + function("confirmCopyMedium")
+""" + function("finalOutputPaths") + function("refreshQueue") + function("renderJobs") + function("confirmCopyMedium")
     code += """
 (async()=>{
  await refreshQueue();

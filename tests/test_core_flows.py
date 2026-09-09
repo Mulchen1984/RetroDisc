@@ -231,6 +231,7 @@ def test_bridge_save_settings_merges_and_applies_runtime_dependencies(tmp_path):
     bridge.settings.tools.mkisofs = "preserve-mkisofs"
     bridge.ffmpeg = SimpleNamespace(ffmpeg_path="old-ffmpeg", ffprobe_path="old-ffprobe")
     bridge.converter = SimpleNamespace(output_dir=None)
+    bridge.dvd_workflow = SimpleNamespace(temp_dir=None)
     bridge.downloader = SimpleNamespace(ytdlp_path="old-ytdlp", ffmpeg_path="old-ffmpeg", output_dir=None)
     bridge.disc = SimpleNamespace(
         dvdauthor="old-dvdauthor", mkisofs="old-mkisofs",

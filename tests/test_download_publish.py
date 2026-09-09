@@ -36,7 +36,7 @@ def _stage(work: Path, files: dict[str, bytes]) -> None:
 async def test_download_rejects_escaping_template_before_launch(tmp_path, monkeypatch, template):
     output = tmp_path / "out"
     downloader = Downloader(output_dir=output)
-    launch = AsyncMock()
+    launch = AsyncMock(side_effect=AssertionError("Ungültiges Template startet yt-dlp"))
     monkeypatch.setattr("src.core.downloader.create_hidden_subprocess", launch)
 
     with pytest.raises(DownloadError, match="Template"):

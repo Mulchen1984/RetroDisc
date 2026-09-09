@@ -46,12 +46,37 @@ class SubtitleGenerator:
         self._model = None
         self._backend = None
 
+    @staticmethod
+    def capability(model: str = 'base') -> dict:
+        import importlib.util
+        import sys
+        engines = [name for name in ('whisper', 'faster_whisper') if importlib.util.find_spec(name)]
+        status = 'package_missing' if not engines else 'model_missing'
+        local = Path(model).expanduser() if model else None
+        if model == 'base':
+            local = Path(getattr(sys,'_MEIPASS',Path(__file__).resolve().parents[2]))/'vendor'/'whisper-base'
+        if not model:
+            status='not_configured'
+        elif engines and local and ((local.is_file() and 'whisper' in engines) or
+                (local.is_dir() and (local/'model.bin').is_file() and 'faster_whisper' in engines)):
+            status='available'
+        notes={'available':'Lokales Modell gefunden.', 'package_missing':'Whisper-Paket fehlt in dieser Python-Umgebung (reguläre Runtime-Dependency).',
+               'model_missing':'Kein konfiguriertes lokales Modell gefunden. Modellpfad wählen; kein automatischer Download im Director.',
+               'not_configured':'Kein Whisper-Modell konfiguriert.'}
+        return {'available':status=='available','status':status,'engines':engines,
+                'model_path':str(local) if local else '', 'note':notes[status]}
+
     async def _load_model(self):
         """Lädt das Whisper-Modell (lazy loading)."""
         if self._model is not None:
             return
 
         def _load():
+            if Path(self.model_name).is_dir():
+                from faster_whisper import WhisperModel
+                self._backend = "faster"
+                return WhisperModel(self.model_name, device=self.device or "cpu",
+                    compute_type="float16" if self.device == "cuda" else "int8", local_files_only=True)
             try:
                 import whisper
                 device = self.device or ("cuda" if self._cuda_available() else "cpu")

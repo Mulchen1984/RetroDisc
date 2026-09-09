@@ -66,6 +66,12 @@ class DVDWorkflow:
         iso_path = await wf.run(project, job=job)
     """
 
+    @staticmethod
+    def supports_recent_source(path: Path) -> bool:
+        # The existing DVD pipeline transcodes these videos to DVD MPEG.
+        from src.services.converter import Converter
+        return path.suffix.lower() in Converter.VIDEO_EXTENSIONS
+
     STEPS = [
         "Quelldateien prüfen",
         "Video in DVD-Format konvertieren",

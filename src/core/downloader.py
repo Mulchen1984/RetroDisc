@@ -9,11 +9,12 @@ import re
 import shutil
 import tempfile
 import structlog
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Optional
 from urllib.parse import urlparse
 
 from src.models.media import Job, SearchResult
+from src.config.settings import default_media_directory
 from src.utils.subprocesses import (
     create_hidden_subprocess,
     decode_console_output,
@@ -53,7 +54,7 @@ class Downloader:
         ffmpeg_path: Optional[str] = None,
     ):
         self.ytdlp_path = ytdlp_path or shutil.which("yt-dlp") or "yt-dlp"
-        self.output_dir = Path(output_dir) if output_dir else Path.home() / "Downloads" / "RetroDisc"
+        self.output_dir = Path(output_dir) if output_dir else default_media_directory("download")
         self.ffmpeg_path = ffmpeg_path or shutil.which("ffmpeg")
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -82,7 +83,10 @@ class Downloader:
         base_dir = Path(dest_dir) if dest_dir is not None else self.output_dir
         template = output_template or "%(title).180B [%(id)s].%(ext)s"
         template_path = Path(template)
-        if template_path.anchor or ".." in template_path.parts:
+        # Windows-Pfade auch auf macOS/Linux erkennen (z. B. importierte Templates).
+        windows_template = PureWindowsPath(template)
+        if (template_path.anchor or ".." in template_path.parts
+                or windows_template.anchor or ".." in windows_template.parts):
             raise DownloadError("Das Ausgabe-Template muss ein relativer Pfad ohne '..' sein.")
         output_path = base_dir / template
         if not output_path.resolve().is_relative_to(base_dir.resolve()):

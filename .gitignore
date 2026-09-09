@@ -1,5 +1,6 @@
 # Python environments and caches
 .venv/
+.venv-test/
 venv/
 __pycache__/
 *.py[cod]
@@ -40,3 +41,9 @@ RetroDisc_Data/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Release staging artifacts; reviewable reports/instructions remain versioned
+release/macos/*
+release/windows/*
+!release/macos/README.md
+!release/windows/README.md

@@ -12,11 +12,12 @@ import re
 import sqlite3
 import structlog
 from datetime import datetime
+from contextlib import closing
 from pathlib import Path
 from typing import Optional
 
 from src.core.ffmpeg import FFmpeg
-from src.models.media import MediaFile, MediaType
+from src.models.media import MediaFile, MediaType, JobState
 
 log = structlog.get_logger()
 
@@ -44,7 +45,8 @@ class MediaLibrary:
         ".mp3", ".flac", ".wav", ".aac", ".ogg", ".m4a",
         ".wma", ".ac3", ".dts", ".opus", ".mka",
     }
-    ALL_EXTS = VIDEO_EXTS | AUDIO_EXTS
+    IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+    ALL_EXTS = VIDEO_EXTS | AUDIO_EXTS | IMAGE_EXTS
 
     def __init__(
         self,
@@ -68,6 +70,7 @@ class MediaLibrary:
         )
         self._conn.row_factory = sqlite3.Row
         self._create_schema()
+        self.recent_outputs()
         log.info("Media Library geöffnet", db=str(self.db_path))
 
     def close(self) -> None:
@@ -108,6 +111,15 @@ class MediaLibrary:
                 modified_at TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS asset_details (
+                path TEXT PRIMARY KEY, origin TEXT DEFAULT 'manual',
+                transcript TEXT, transcript_mtime TEXT, description TEXT DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS recent_outputs (
+                path TEXT PRIMARY KEY, operation TEXT NOT NULL, created_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS scan_folders (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 path        TEXT UNIQUE NOT NULL,
@@ -123,6 +135,85 @@ class MediaLibrary:
                 USING fts5(path, filename, title, artist, album,
                            content=media_files, content_rowid=id);
         """)
+        self._conn.commit()
+
+    def record_job_outputs(self, job, excluded_dirs=()) -> None:
+        """A small output history in the existing library, without probing/scanning."""
+        if job.state != JobState.DONE:
+            return
+        excluded = [Path(p).resolve() for p in excluded_dirs]
+        paths = list(job.params.get("output_paths") or [])
+        if job.output_path:
+            paths.append(str(job.output_path))
+        rows = {}
+        for raw in paths:
+            path = Path(raw).resolve()
+            if (path.suffix.lower() not in self.ALL_EXTS | {".iso"}
+                    or path.name.startswith(".") or ".retrodisc-" in path.name
+                    or any(part.startswith(".retrodisc-dl-") for part in path.parts)
+                    or any(path.is_relative_to(root) for root in excluded)
+                    or not path.is_file() or path.stat().st_size == 0):
+                continue
+            operation = job.job_type.value
+            if operation.startswith("rip_"):
+                operation = "rip"
+            if path.suffix.lower() in self.AUDIO_EXTS:
+                if (operation == "download" and not job.params.get("audio_only", False)
+                        or operation == "convert" and job.input_files
+                        and job.input_files[0].suffix.lower() in self.VIDEO_EXTS):
+                    operation = "extract_audio"
+            rows[str(path)] = (str(path), operation, (job.finished_at or datetime.now()).isoformat())
+        with closing(sqlite3.connect(str(self.db_path))) as conn, conn:
+            conn.executemany("INSERT OR REPLACE INTO recent_outputs VALUES (?, ?, ?)", rows.values())
+            conn.executemany("INSERT INTO asset_details(path, origin) VALUES (?, ?) "
+                             "ON CONFLICT(path) DO UPDATE SET origin=excluded.origin",
+                             [(r[0], r[1]) for r in rows.values()])
+            conn.execute("DELETE FROM recent_outputs WHERE path NOT IN "
+                         "(SELECT path FROM recent_outputs ORDER BY created_at DESC, rowid DESC LIMIT 10)")
+
+    def recent_outputs(self) -> list[dict]:
+        with closing(sqlite3.connect(str(self.db_path))) as conn, conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("SELECT * FROM recent_outputs ORDER BY created_at DESC, rowid DESC").fetchall()
+            result = []
+            for row in rows:
+                path = Path(row["path"])
+                if not path.is_file() or path.stat().st_size == 0:
+                    conn.execute("DELETE FROM recent_outputs WHERE path = ?", (str(path),))
+                    continue
+                suffix = path.suffix.lower()
+                kind = ("video" if suffix in self.VIDEO_EXTS else
+                        "audio" if suffix in self.AUDIO_EXTS else
+                        "image" if suffix in self.IMAGE_EXTS else "disc")
+                result.append(dict(row) | {"filename": path.name, "type": kind})
+            return result
+
+    async def asset(self, path: Path | str):
+        """Canonical asset view over the existing library; refresh stale metadata only."""
+        import hashlib
+        from src.models.director import MediaAsset
+        path = Path(path).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"Asset fehlt: {path}")
+        await self._add_file(path, generate_thumb=False)
+        self._conn.commit()
+        row = self.get_by_path(str(path))
+        details = self._conn.execute("SELECT * FROM asset_details WHERE path=?", (str(path),)).fetchone()
+        transcript = None
+        if details and details["transcript_mtime"] == row["modified_at"] and details["transcript"]:
+            transcript = json.loads(details["transcript"])
+        return MediaAsset(id=hashlib.sha256(str(path).encode()).hexdigest()[:16], path=str(path),
+            kind=row["media_type"], duration=row["duration"] or 0, container=row["container"] or '',
+            video_codec=row["video_codec"], audio_codec=row["audio_codec"], width=row["width"], height=row["height"],
+            origin=details["origin"] if details else 'manual', title=row["title"] or path.name,
+            transcript=transcript, description=details["description"] if details else '')
+
+    def attach_transcript(self, path: Path | str, transcript: dict) -> None:
+        path = Path(path).resolve()
+        self._conn.execute("INSERT INTO asset_details(path, transcript, transcript_mtime) VALUES (?,?,?) "
+                           "ON CONFLICT(path) DO UPDATE SET transcript=excluded.transcript, "
+                           "transcript_mtime=excluded.transcript_mtime", (str(path), json.dumps(transcript, ensure_ascii=False),
+                            datetime.fromtimestamp(path.stat().st_mtime).isoformat()))
         self._conn.commit()
 
     # ─── Scanning ────────────────────────────────────────────────────

@@ -119,6 +119,8 @@ def test_install_places_program_uninstaller_and_shortcuts(installed):
     assert all(link.is_file() for link in created)
 
 
+@pytest.mark.skipif(sys.platform != "win32",
+    reason="Start-Menu-Verknuepfungen liegen unter %APPDATA%; os.path.expandvars loest das nur unter Windows auf")
 def test_uninstaller_removes_every_shortcut_the_installer_creates(installed):
     """Kernregression: keine vom Installer erzeugte Verknuepfung darf zurueckbleiben."""
     _module, _install_dir, created, script = installed
@@ -129,6 +131,8 @@ def test_uninstaller_removes_every_shortcut_the_installer_creates(installed):
     assert not uncovered, f"Deinstaller entfernt diese Verknuepfungen nicht: {uncovered}"
 
 
+@pytest.mark.skipif(sys.platform != "win32",
+    reason="start_menu_dir()/%APPDATA% werden nur unter Windows korrekt aufgeloest")
 def test_uninstaller_removes_start_menu_folder_recursively(installed):
     """Ein nicht rekursives rmdir scheitert am nicht leeren App-Ordner."""
     module, _install_dir, _created, script = installed

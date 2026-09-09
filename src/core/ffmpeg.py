@@ -65,6 +65,28 @@ class FFmpeg:
         self.ffprobe_path = ffprobe_path or shutil.which("ffprobe") or "ffprobe"
         self._validated = False
 
+    async def available_video_encoders(self) -> set[str]:
+        """Ask the configured FFmpeg; cache successful results per executable path."""
+        cached = getattr(self, "_encoder_cache", None)
+        if cached and cached[0] == self.ffmpeg_path:
+            return cached[1]
+        try:
+            proc = await create_hidden_subprocess(
+                self.ffmpeg_path, "-hide_banner", "-encoders",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(
+                communicate_with_job(proc, max_output_bytes=65536), timeout=5,
+            )
+            if proc.returncode != 0:
+                return set()
+        except (OSError, asyncio.TimeoutError):
+            return set()
+        encoders = {parts[1] for line in stdout.decode("utf-8", errors="replace").splitlines()
+                    if len(parts := line.split()) >= 2 and parts[0].startswith("V")}
+        self._encoder_cache = (self.ffmpeg_path, encoders)
+        return encoders
+
     async def validate(self) -> dict[str, str]:
         """Prüft ob FFmpeg und FFprobe verfügbar sind und gibt Versionen zurück."""
         versions = {}
@@ -176,7 +198,9 @@ class FFmpeg:
                 ))
 
         # MediaType bestimmen
-        if media_file.has_video:
+        if media_file.has_video and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
+            media_file.media_type = MediaType.IMAGE
+        elif media_file.has_video:
             media_file.media_type = MediaType.VIDEO
         elif media_file.has_audio:
             media_file.media_type = MediaType.AUDIO

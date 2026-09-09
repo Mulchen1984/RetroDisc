@@ -1,0 +1,4 @@
+{
+  "status": "CAPABILITY_UNAVAILABLE",
+  "reason": "FFmpeg has no subtitles/libass filter"
+}

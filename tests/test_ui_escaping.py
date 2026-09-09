@@ -105,3 +105,95 @@ def test_esc_attr_output_is_correct_for_real_input(tmp_path):
     produced = json.loads(result.stdout.decode("utf-8"))
     assert produced[len(inputs) :] == ["", ""], "null/undefined must escape to the empty string"
     assert dict(zip(inputs, produced)) == ESC_ATTR_CASES
+
+
+@pytest.mark.skipif(NODE is None, reason="node is required to execute queue rendering")
+def test_queue_escapes_titles_and_labels_long_result_paths(tmp_path):
+    html = _html()
+    render = html[html.index('function renderJobs() {'):html.index('async function confirmCopyMedium(')]
+    render += '\n' + html[html.index('function revealOutputButton('):html.index('async function openOutputFolder(')]
+    esc_html = re.search(r'function escHtml\(s\)\{[^\n]+\}', html).group(0)
+    title = '\"><img src=x onerror=alert(1)> & 日本'
+    paths = ['/Movies/' + 'long/' * 70 + title + '.webm', '/Music/' + title + '.mp3']
+    script = tmp_path / 'queue.js'
+    script.write_text(_esc_attr_source(html) + '\n' + esc_html + '\n' + render + '\n'
+        + 'const target={innerHTML:""}; const document={getElementById:()=>target};\n'
+        + 'const S={jobs:' + json.dumps([{'id':'test', 'name':title, 'state':'done', 'outputPaths':paths}]) + '};\n'
+        + 'renderJobs(); process.stdout.write(target.innerHTML);', encoding='utf-8')
+    result = subprocess.run([NODE, str(script)], capture_output=True, text=True, timeout=10, check=True)
+    assert '<img' not in result.stdout
+    assert '&lt;img' in result.stdout
+    assert '<b>Video:</b>' in result.stdout and '<b>Audio:</b>' in result.stdout
+    assert 'long/' * 70 in result.stdout
+    assert 'overflow-wrap:anywhere' in result.stdout
+
+
+@pytest.mark.skipif(NODE is None, reason="Node required")
+def test_final_output_buttons_pass_exact_path_and_report_errors(tmp_path):
+    html = _html()
+    functions = html[html.index('function finalOutputPaths('):html.index('// ── Startup', html.index('function finalOutputPaths('))]
+    script = tmp_path / 'reveal.js'
+    script.write_text(_esc_attr_source(html) + '\n' + functions + r'''
+const assert = require('node:assert/strict');
+Object.defineProperty(globalThis,'navigator',{value:{platform:'MacIntel'},configurable:true});
+const path = '/actual output/Grüße & 日本 \".mp4';
+let received, status, failure = false;
+function api(){return {open_output_folder:async p=>{received=p;return JSON.stringify(failure?{error:'Finder fehlgeschlagen'}:{ok:true})}}}
+function setStat(s){status=s}
+function alert(){}
+(async()=>{
+ assert.deepEqual(finalOutputPaths({output:path}),[path]);
+ assert.deepEqual(finalOutputPaths({output:path,output_paths:[path,'/second.mp3']}),[path,'/second.mp3']);
+ assert.ok(revealOutputButton(path).includes('Im Finder öffnen'));
+ assert.ok(revealOutputButton(path).includes('openOutputFolder(this.dataset.path)'));
+ assert.ok(revealOutputButton(path).includes('&amp;'));
+ await openOutputFolder(path); assert.equal(received,path);
+ failure=true; await openOutputFolder(path); assert.equal(status,'Finder fehlgeschlagen');
+})().catch(e=>{console.error(e);process.exit(1)});
+''')
+    subprocess.run([NODE, str(script)], check=True, capture_output=True, text=True, timeout=10)
+
+
+@pytest.mark.skipif(NODE is None, reason='Node required')
+def test_director_outputs_reuse_safe_workflow_buttons(tmp_path):
+    html=_html()
+    functions=html[html.index('function directorSummarizePlan('):html.index('async function directorRenderPlan(')]
+    functions+='\n'+html[html.index('function revealOutputButton('):html.index('async function openOutputFolder(')]
+    helpers=_esc_attr_source(html)+'\n'+re.search(r'function escHtml\(s\)\{[^\n]+\}',html).group()
+    script=tmp_path/'director-ui.js'
+    script.write_text(helpers+'\n'+functions+r'''
+const assert=require('node:assert/strict');
+const nodes={directorOutputs:{},directorPlan:{value:JSON.stringify({voiceover:[{voice:'Anna'}]})},directorAudio:{value:'keep'},directorVoice:{value:''}};
+const document={getElementById:id=>nodes[id]};
+directorShowOutputs(['/Movies/<img onerror="bad"> & 日本.mp4','/Music/voice.wav']);
+const out=nodes.directorOutputs.innerHTML;
+assert.ok(out.includes('&lt;img'));
+assert.ok(!out.includes('<img'));
+assert.equal((out.match(/data-target="burn"/g)||[]).length,1);
+assert.equal((out.match(/data-target="convert"/g)||[]).length,2);
+assert.ok(out.includes('useRecentMedia(this)'));
+assert.ok(out.includes('openOutputFolder(this.dataset.path)'));
+directorEditAudio();
+assert.equal(JSON.parse(nodes.directorPlan.value).voiceover[0].voice,'Anna');
+assert.equal(JSON.parse(nodes.directorPlan.value).original_audio,'keep');
+''')
+    subprocess.run([NODE,str(script)],check=True,capture_output=True,text=True,timeout=10)
+
+
+@pytest.mark.skipif(NODE is None, reason='Node required')
+def test_director_plan_summary_shows_sources_and_fallback_as_text(tmp_path):
+    html=_html()
+    source=html[html.index('function directorSummarizePlan('):html.index('async function directorTranslatePlan(')]
+    script=tmp_path/'plan-summary.js'
+    script.write_text(source+r'''
+const assert=require('node:assert/strict');
+const summary={};const plan={title:'<img src=x>',target_duration:8,planner:'metadata',story:['Storyline'],notes:['LLM Fallback'],assets:[{id:'a',title:'Quelle',path:'/Video/日本.mp4'}],timeline:[{asset_id:'a',start:12.4,end:18.8,position:0}],voiceover:[{position:0,text:'Hallo'}]};
+const document={getElementById:id=>id==='directorPlanSummary'?summary:{value:JSON.stringify(plan)}};
+directorSummarizePlan();
+assert.ok(summary.textContent.includes('Von: 00:12.4'));
+assert.ok(summary.textContent.includes('/Video/日本.mp4'));
+assert.ok(summary.textContent.includes('LLM Fallback'));
+assert.ok(summary.textContent.includes('Voiceover 00:00.0: Hallo'));
+assert.equal(summary.innerHTML,undefined);
+''')
+    subprocess.run([NODE,str(script)],check=True,capture_output=True,text=True,timeout=10)

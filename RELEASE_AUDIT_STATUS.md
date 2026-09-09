@@ -1212,3 +1212,638 @@ Bewusst noch nicht als Packaged-Fall automatisiert: Cancel, Collision (auf
 Quellebene durch `tests/test_download_publish.py` abgedeckt),
 Whisper-Untertitel und der optische Teil. `rip_disc` ist seit diesem Block auf
 Bridge-Ebene abgesichert, end-to-end aber nur mit echter Hardware pruefbar.
+
+### 2026-09-08 — macOS: Download-Templates plattformunabhaengig pruefen
+
+- Grundlage: `origin/crossplatform-2026` bei `44af8d2`, isolierter Worktree
+  auf `codex/retrodisc-download-paths`. Aktueller Nutzerauftrag autorisiert
+  die Weiterentwicklung auf macOS; keine Build-/Release-Aenderung.
+- Befund: Die native `Path`-Pruefung akzeptierte unter macOS fuenf bereits
+  durch Tests ausgeschlossene Windows-Pfadformen (Traversal, Laufwerk,
+  laufwerksrelativer Pfad, Root und UNC). Reproduktion: 5 failed, 4 passed.
+- Fix: Windows-Syntax zusaetzlich mit `PureWindowsPath` pruefen, bevor yt-dlp
+  startet. Bestehende native Pfad- und Zielverzeichnispruefung bleibt bestehen.
+- Test-Mock wirft bei unerwartetem Prozessstart sofort einen AssertionError,
+  damit dieser Fehler keinen haengenden Mock-Stream mehr verursacht.
+- Verifikation auf macOS mit vorhandener Python-3.11-Umgebung:
+  `python -m pytest -q tests/test_download_publish.py tests/test_core_flows.py
+  -k 'download or collision or playlist or publication or publish'`
+  → **35 passed, 10 deselected in 0.20s**, Exitcode 0.
+- Kein Windows-Lauf, kein echter Netzwerkdownload, kein Build durchgefuehrt;
+  daraus folgt keine neue Artefakt- oder Windows-Runtime-Freigabe.
+- Naechster sinnvoller Punkt: Download und anschliessende Audioextraktion mit
+  echten macOS-Tools gegen den gemeinsamen Acceptance-Harness pruefen.
+
+### 2026-09-08 — macOS: Video-Download mit separater Audioausgabe
+
+- Zentrale Defaults in `src/config/settings.py` erweitert: macOS-Video und
+  Downloads unter `~/Movies/RetroDisc`, Audio unter `~/Music/RetroDisc`.
+  Explizit konfigurierte Pfade bleiben erhalten; Windows/Linux-Defaults bleiben
+  unveraendert. Downloader verwendet dieselbe zentrale Default-Funktion.
+- Produktive Download-Bridge extrahiert auf macOS nach einem Video-Download
+  MP3 mit dem vorhandenen `FFmpeg.extract_audio`. Audio-Namen enthalten die
+  Job-ID; vorhandene Zieldateien werden vom FFmpeg-Wrapper abgewiesen.
+  Bei Extraktionsfehler bleibt das fertige Video samt Ergebnispfad erhalten.
+  Audio-only verwendet auf macOS den Audioordner. Windows-Verkettung unveraendert.
+- Vorhandene Tool-Erkennung wiederverwendet; macOS ignoriert Windows-EXEs.
+- Beide Ergebnispfade werden in Queue/Event ausgegeben und in der vorhandenen
+  Warteschlange als kopierbarer, HTML-escapter Text angezeigt.
+- Echter macOS-Test: lokaler HTTP-Server mit versioniertem Testvideo → echte
+  yt-dlp-Binary → Video → echte ffmpeg-MP3-Extraktion; ffprobe bestaetigt
+  Videostream und reine Audioausgabe mit passender Dauer. Audio-only ebenfalls
+  real geprueft. Home/Temp/Appdaten fuer den Test in den Worktree umgeleitet.
+  `tests/test_macos_download_workflow.py`: 6 passed in 1.69s (inkl. Realtest).
+  Danach zusaetzlicher Tool-Erkennungstest: 6 passed, 1 deselected in 0.09s.
+- Download-/Settings-/Completion-Regressionen gezielt: 44 passed,
+  11 deselected in 0.16s. UI-Bridge-Pruefung PASS (0 findings),
+  `node --check build/ui-audit/inline.js` erfolgreich.
+- Reale Testdateien unter
+  `build/macos-download-check/verified-results/test_real_macos_download_and_a0/`:
+  Video: `Movies/RetroDisc/test_video [test_video].mp4`;
+  Audio: `Music/RetroDisc/test_video [test_video]_fbe13892.mp3`.
+- Grenzen: lokaler HTTP-Download statt YouTube-Netztest, keine GUI-Sichtpruefung,
+  kein Windows-Runtime-Test, kein Build/Commit. Keine neuen Dependencies.
+- Naechster offener Punkt: externe YouTube-Quelle mit vorhandener yt-dlp-Version
+  pruefen; bei Playlists wird derzeit nur fuer das zurueckgegebene Hauptvideo
+  die separate MP3 erzeugt.
+
+### 2026-09-08 — Kleine macOS-/Queue-Korrekturen vor VideoToolbox
+
+- Ausgabeordner: macOS verwendet `open` mit separatem Pfadargument, Timeout und
+  Exitcode-Pruefung; Windows verwendet weiterhin `os.startfile`.
+- Fehlende macOS-Tools starten keinen Windows-EXE-Download mehr; klare Diagnose
+  verweist auf native Tools in PATH/vendor. Darwin hat keinen erfundenen
+  `/dev/sr0`-Default mehr, sondern verlangt eine Laufwerksauswahl.
+- Queue: Jobnamen HTML-escapen; vorhandene Ergebnispfade explizit mit
+  Video/Audio beschriften. Lange Unicode-Pfade per echtem Node-Rendering getestet.
+- Gezielt 15 passed. Visuelle macOS-Abnahme bleibt offen (Computer Use konnte
+  das Entwicklungsfenster nicht adressieren); keine weiteren Computer-Use-Versuche.
+- Native optische Erkennung/Brennen bleiben ohne Hardwarebeleg offen.
+
+### 2026-09-08 — VideoToolbox: H.264/HEVC mit CPU-Fallback
+
+- `FFmpeg.available_video_encoders()` fragt das konfigurierte Binary ab,
+  mit Timeout, Prozess-Cleanup und Cache pro Toolpfad.
+- Converter bevorzugt auf macOS fuer libx264/libx265 die Encoder
+  h264_videotoolbox/hevc_videotoolbox. `-allow_sw 0` erzwingt echte Hardware;
+  fehlender Encoder oder FFmpeg-Fehler wiederholt mit dem bisherigen CPU-Preset.
+  Abbruch wird nicht als Fallback behandelt. Windows-Encoderwahl bleibt unveraendert.
+- Vorhandene Bitraten bleiben erhalten (H.264 720p: 3M, HEVC 4K: 15M).
+  Beim HEVC-Preset ohne feste Aufloesung wird die 4K/15M-Referenz nach
+  Quellpixelzahl skaliert (1080p: 3.75M, mindestens 250k). Dies ist keine
+  CRF-Gleichsetzung; fuer exakte CRF-Kontrolle bleibt CPU verfuegbar.
+  CPU-spezifisches preset/crf entfaellt nur im Hardwarelauf, H.264-Level wird
+  in die VideoToolbox-Zahlendarstellung umgerechnet. HEVC-MP4 verwendet hvc1.
+- UI auf macOS: „Apple Hardware – schnell“ (Vorgabe) / „CPU – maximale
+  Qualitaetskontrolle“, fuer Einzel- und Batch-Konvertierung. Andere Plattformen
+  zeigen keine Apple-Option. Keine neue Dependency, keine Presetmutation.
+- Real auf macOS: H.264 720p, iPhone 1080p, HEVC Originalgroesse und HEVC 4K
+  mit Hardware erfolgreich. ffprobe bestaetigt Codec, Aufloesung, Audio und
+  Dauer. CPU-Fallback bei fehlender Encoderanzeige und echtem FFmpeg-Fehler
+  ebenfalls bis zur gueltigen Ausgabedatei geprueft.
+- 2-Sekunden-Testclip (720p): H.264 Hardware 0.432s / CPU 0.380s;
+  HEVC Hardware 0.513s / CPU 0.717s. Kein belastbarer Benchmark: Startkosten
+  dominieren, Bitratenregelung und CPU-CRF sind nicht qualitaetsgleich.
+- Reproduktion: `build/videotoolbox-check/run.py`, `verify_extra.py`;
+  Messungen in `result.json` und `extra-result.json`, alles im Worktree.
+- Gezielt: 50 passed, 1 deselected (Whisper-Runtime-Test: faster_whisper fehlt
+  in der vorhandenen Mac-Testumgebung). UI-Bridge PASS (0 findings), Node-Syntax
+  erfolgreich. Keine komplette Suite, kein Windows-/GUI-/Release-Nachweis.
+
+### 2026-09-08 — Gemeinsame Uebergaben ueber Recent Media
+
+- Kleine Ergebnishistorie in der vorhandenen MediaLibrary-SQLite-Datei:
+  `recent_outputs` speichert maximal zehn Pfade mit Vorgang und Zeitpunkt;
+  Dateiname/Medientyp werden ohne ffprobe abgeleitet. Keine zweite Bibliothek,
+  kein Scan und keine neuen Dependencies. Eigene kurze DB-Transaktionen fuer
+  Job-Thread/UI; Pfade werden dedupliziert und beim Start/Abruf bereinigt.
+- Zentraler Completion-Hook registriert nur DONE-Outputs aus output_path und
+  output_paths. Fehlende/leere Dateien, Download-Arbeitsordner, Staging-Dateien,
+  konfigurierte Temp-Verzeichnisse und Thumbnails werden ausgeschlossen.
+- Download/Video-Konvertierung/Rip → Konvertieren und DVD-Brennen;
+  extrahiertes Audio → Audio-Konvertierung. Neueste passende Ausgabe gewinnt.
+  DVD-Vorschlaege verwenden die Videoformate des vorhandenen Converters;
+  die bestehende DVD-Pipeline konvertiert sie selbst nach DVD-MPEG.
+  Andere erkannte Videos bieten „Vor dem Brennen konvertieren“ mit vorhandenem
+  H.264-Preset. Audio und ISO werden nicht als DVD-Video-Eingabe vorgeschlagen.
+- UI: kompakter „Zuletzt erstellt“-Bereich mit Name, Typ, Herkunft,
+  aufklappbarem vollstaendigem Pfad und Uebernahmebutton. Vorschlaege ersetzen
+  niemals automatisch eine manuelle Auswahl. Vor Uebernahme erneut Existenz
+  pruefen. Dateinamen/Pfade sind HTML-escaped und umbrechbar.
+- Mac-Encoderwahl: Auto (Apple bevorzugt), Apple Hardware, CPU. Vorhandene
+  Encoder-/Fallback-Implementierung wiederverwendet; Windows-Auswahl unveraendert.
+- Gezielt 66 passed, 1 deselected (unveraendert fehlendes faster_whisper im
+  fachfremden Runtime-Test). Einschliesslich echter Queue-Completion,
+  SQLite-Neustart, fehlgeschlagenem Job, Sonderzeichen, manuellem Auswahl-Schutz,
+  gerenderten UI-Uebergaben in Node sowie Auto/Hardware/CPU-Fallback.
+  UI-Bridge PASS (0 findings), Node-Syntax und git diff --check sauber.
+- Keine Computer-Use-/Web-Aufrufe, keine Commits. Visuelle Abnahme und reales
+  macOS-Brennen mit Laufwerk/Rohling bleiben extern zu pruefen.
+
+### 2026-09-08 — Tatsächlichen Konvertierungsoutput im Finder öffnen
+
+- Ursache: Convert setzt Job.output_path; Queue/UI übernahmen bisher nur
+  output_paths. Der Öffnen-Button verwendete ausschließlich den Standardordner.
+- Queue liefert jetzt auch output; UI führt beide Ergebnisfelder dedupliziert
+  zusammen. Jeder erfolgreiche Output und Recent-Media-Vorschlag erhält einen
+  eigenen Öffnen-Button mit HTML-escaped Datenattribut und Fehleranzeige.
+- Zentrale reveal_output-Funktion: macOS open -R für Dateien, open für Ordner;
+  fehlende Dateien führen zum vorhandenen Elternordner. Windows öffnet weiter
+  Ordner über os.startfile. Keine Shell und keine festgelegten Benutzerpfade.
+- 26 gezielte Tests bestanden (Bridge, Recent Media, UI-Escaping/Node),
+  UI-Bridge 0 findings, Node-Syntax und diff --check sauber. Native Aufrufe
+  gemockt; keine visuelle Finder-/Windows-Abnahme und keine Commits.
+- Separater bestehender os.startfile-Aufruf in der Clip-Vorschau gehört nicht
+  zur Ausgabeort-Funktion und wurde in diesem Ticket nicht geändert.
+
+### 2026-09-08 — KI-Regisseur: lokale Planung, Fallback und echter Schnitt
+
+- Bestehende MediaLibrary um Asset-Metadaten/Transkripte erweitert; Director-
+  Projekte speichern Prompt, Quellen, Timeline, Sprechertexte und Ergebnisse.
+  Fehlende Quellen werden beim Laden markiert, beim Rendern erneut geprüft.
+- Ollama erhält Pydantic-JSON-Schema mit erlaubten Asset-IDs. Genau ein
+  Reparaturversuch, danach gekennzeichneter deterministischer Fallback.
+  Zeitbereiche bleiben an tatsächliche Quelllängen gebunden; Zielpositionen
+  werden aus den Schnittlängen berechnet. Explizit zitierter Sprechertext
+  bleibt im Fallback erhalten; keine erfundenen Übersetzungen/Inhalte.
+- Reale lokale Prüfung mit installiertem llama3.2:3b: zwei Antworten lieferten
+  ungültige Timeline-Positionen; Fallback wurde verwendet. Danach keine weiteren
+  Modellversuche. Die anschließend ergänzte Positionsableitung ist per Test
+  belegt, noch nicht durch einen neuen realen LLM-Aufruf.
+- Reales Ergebnis: zwei lokale Quellen → 8.0s H.264 VideoToolbox + AAC;
+  Anna-Systemstimme separat als WAV, Originalton während Voiceover abgesenkt.
+  ffprobe, Recent-Media-Übergabe Konvertieren/Brennen und Projektladen PASS.
+  Video build/director-check/Output/Director_d89759e3_3284f34f.mp4
+  SHA-256 f9e031f8960422cf8245e103be3941ff66c223837f4fa046afa0fb08f97357b9
+  Voice build/director-check/Audio/Director_d89759e3_60e0d1fc.wav
+  SHA-256 8092bb8476faee9e00d0efd4ce91c23b2f5a01d43960799de512c9c258687ded
+  Bericht: build/director-check/llm-e2e-result.json; gespeicherter Fallback:
+  llm-plan.json, Render-Reproduktion ohne weitere Modellaufrufe: llm-e2e.py.
+- Systemstimmen werden ermittelt, Anna nur falls vorhanden bevorzugt, sonst
+  andere deutsche Stimme/Systemstandard. Keep/Duck/Mute verfügbar; Duck senkt
+  nur innerhalb der tatsächlichen Voiceover-Zeitintervalle ab.
+- UI: editierbarer JSON-Plan, Projekte, Audio-/Stimmenwahl, Library-Zugang,
+  Ergebnisbuttons nutzen vorhandenes Finder-/Recent-Media-Verhalten.
+  Brennanzeige ergänzt DVD-R/RW, DVD+R/RW, CD-R/RW, BD-R/RE; CD-/Blu-ray-
+  Authoring ausdrücklich als hier noch nicht angebunden gekennzeichnet.
+- Whisper fehlt lokal, Capability/UI deaktiviert, kein Download/Installation.
+  Vorhandene Transkriptions-Engine und zeitmarkierte Segmente angebunden und
+  gezielt gemockt getestet. Dubbing-Datenmodell/Providergrenze vorbereitet;
+  kein Übersetzungsprovider und kein Dubbing-Render vorgetäuscht.
+- 76 gezielte Tests PASS; UI-Bridge 0 findings, Node-Syntax PASS. Keine volle
+  Suite, kein Computer Use, keine Dependencies/Commits/Push. Offen: realer
+  LLM-Plan ohne Fallback nach Positionskorrektur, Whisper mit lokalem Modell,
+  Dubbing-Ausführung, Musik-/Soundspuren, Übergänge außer harten Schnitten.
+
+### 2026-09-08 — Gemeinsame Plattform-UI und Settings-Prüfung
+
+- Funktionslose HTML-Fensterknöpfe entfernt. Beide create_window-Wege verwenden
+  explizit native Rahmen/resizable; macOS erhält native linke Systemknöpfe,
+  Windows behält native rechte. Kein Custom-Bridge-Fensterersatz erforderlich.
+  Native Klicks nicht visuell geprüft (kein Computer Use).
+- Hartes Windows-11-Label durch Backend-OS-Erkennung ersetzt: macOS-Version
+  aus mac_ver, Windows mit tatsächlich gemeldeter Kernel-/Buildversion.
+- Extras öffnet jetzt den Settings-Workflow auch von der Startseite aus.
+  Datei öffnet vorhandenen Dialog, Hilfe beschreibt reale/experimentelle
+  Funktionen. Alle sichtbaren onclick/onchange-Funktionsnamen aufgelöst.
+- Settings: Audio/Voiceover und Temp/Preview editierbar, Pfadstatus für vier
+  zentrale Benutzerziele, Config, Logs, DB/Recent, Thumbnails und Projekte.
+  Output wird für Konvertierung, Rip, Untertitel und Director verwendet;
+  Temp für DVD-Arbeit und nun auch Preview, Audio für Extraktion/Voiceover.
+  Keine Datenmigration: vorhandene .config/.retrodisc-Datenpfade bleiben gültig.
+  Verzeichnis-Preflight prüft absolute Pfade, Dateikonflikte und echte
+  Schreibbarkeit. Nur Benutzerziele werden bei Start/Speichern erzeugt,
+  niemals Toolpfade. Audio-Ziel fehlte bisher in ensure_directories.
+  DVD-Temp wird bei Settings-Änderung an den bestehenden Service weitergegeben.
+- Benutzerdefinierte Toolpfade werden beim Start nicht mehr durch PATH-Funde
+  überschrieben; Toolstatus nutzt die tatsächlichen Laufzeitpfade. Windows-
+  Beispielpfade und unbedingte Whisper-Offline-Behauptung aus UI entfernt.
+- Reale Benutzerpfade rein lesend geprüft: derzeit fehlen Media-Zielordner,
+  Config, Library und Projekte; Logs existieren. Keine Ordner außerhalb des
+  Worktrees erzeugt. Details: build/platform-check/actual-paths.json.
+- Lokales FFmpeg bietet scale_vt, transpose_vt und yadif_videotoolbox (Metal).
+  4s-Test, 640x360 H.264/AAC: CPU 0.149s, VideoToolbox 0.255s,
+  Hardwaredecode+scale_vt+VideoToolbox 0.444s. KEIN belastbarer Benchmark;
+  CPU-CRF und Hardware-Bitrate sind nicht qualitätsgleich.
+  CPU und bisheriger VT-Weg: ffprobe + vollständiges Dekodieren sauber.
+  scale_vt-Output: Metadaten plausibel, aber Decoderfehler. Deshalb keine
+  Aktivierung/Änderung der bewährten Encoder-/Fallback-Pipeline.
+  Reproduktion/Messwerte: build/platform-check/performance.py, performance.json,
+  decode.json. SHA-256 der geprüften Ausgaben:
+  CPU b24f80bd83c76eaf1f79e2765ab65538a65f710ad58100a5bf18a75cb76e01ae
+  VT ecbc585d9bd4fc3e3cb49780c207e299e62a8d6b624c64f3c6d61ed00665b25e
+  scale_vt bc3108aa8daebb5245af8e952c371c551d528e9fdf0f2254b100f8c6d27937ea
+- 82 relevante Regressionstests bestanden; 1 fachfremder Whisper-Runtime-Test
+  wegen fehlendem faster_whisper ausgeschlossen (erster Lauf: 82 pass/1 fail).
+  UI-Bridge 0 findings, Node-Syntax und diff --check sauber. Kein Commit/Push.
+  Offen: native manuelle Mac-/Windows-Abnahme und separate Ursachenprüfung des
+  experimentellen scale_vt-Ausgabefehlers. Keine Metal-Beschleunigung behauptet.
+
+### 2026-09-08 — Director mit gültiger LLM-Planung, SRT und lokalem Dubbing
+
+- JSON-Schema aus PlanProposal/Pydantic bleibt verpflichtend, anschließend
+  Prüfung der echten Asset-IDs/Dauern und Ableitung monotoner Zielpositionen.
+  Maximal Primärversuch + eine Reparatur, danach sichtbarer gespeicherter Fallback.
+  Prompt-Kontext enthält maximal acht relevante Transkriptsegmente je Asset,
+  je 600 Zeichen; vollständiges Transkript bleibt im Asset. Stichworttreffer
+  begrenzen den vorgeschlagenen Quellschnitt auf das betreffende Segment.
+- Drei bereits installierte Modelle real geprüft: llama3.2:3b gültiger Plan
+  im ersten Versuch (6.360s), qwen2.5-coder:3b ebenfalls (22.721s), gemma3:4b
+  Fallback nach zwei Versuchen (9.967s). Llama wird in der Director-UI bevorzugt
+  vorgeschlagen, explizite Nutzerauswahl bleibt erhalten. Kein Modelldownload.
+- UI zeigt Titel, Zieldauer, Story, Quellen, Start/Ende/Ziel, Voiceover und
+  Fallback-Hinweis als Text neben editierbarem JSON. Speichern/Neuplanen und
+  Rendern bleiben getrennt. Lokale Dubbing-Übersetzung mit anschließender Review.
+- Whisper-Diagnose: requirements/setup deklarieren faster-whisper regulär;
+  PyInstaller berücksichtigt Paket und vendor/whisper-base. In der verwendeten
+  Dev-Python-Umgebung fehlen Paket und lokales Modell, kein Hidden-Import-Fix
+  nötig. Kein Test auf optional umetikettiert, keine Installation außerhalb
+  des Worktrees. Capability unterscheidet package_missing/model_missing/
+  not_configured/available. Director verwendet nachgewiesenen lokalen Modellpfad;
+  Faster-Whisper-Verzeichnisse werden local_files_only geladen. Reale ASR offen.
+- Segmentdaten erhalten start/end/text/language. SRT nutzt bestehenden
+  SubtitleGenerator: Originalsegmente werden auf Schnitte umgerechnet, bei
+  Voiceover werden tatsächlich gesprochene Texte/Dauern verwendet. Sidecar-
+  Pfad im Projekt und Abschlussereignis; Finder-Button ohne falsche Konvertierung.
+- LocalOllamaTranslationProvider prüft lokalen Host, installiertes Modell,
+  Schema und Segmentanzahl. Keine Cloud-/Fake-Übersetzung. Dubbing verwendet
+  gemeinsamen Director-Renderer mit originalen Startzeiten und Keep/Duck/Mute.
+  Sprachsegmente werden höchstens um Faktor 1.25 via atempo beschleunigt,
+  sonst verständlicher Fehler. Passende Sprachstimme aus lokalen Fähigkeiten.
+  Windows meldet TTS unavailable; kein Apple-Prozess auf Windows.
+- Realer 8s-Lauf: Llama-Plan → zwei Videos → deutsche Stimme → Ducking → SRT →
+  h264_videotoolbox → ffprobe → Recent Media → Projekt erneut laden PASS.
+  Deutsch→Englisch, Ollama-Übersetzung, englische TTS, moderate Tempoanpassung,
+  Audio-Mix und 8s-Output ebenfalls PASS. Quelle war das bekannte Skript der
+  tatsächlich erzeugten TTS-Spur, ausdrücklich keine Whisper-Erkennung.
+- 30s-Test mit vorhandener wiederholter lokaler Fixture, 1280x720, Audio:
+  CPU H.264 1.397s / 21.48x Echtzeit / 981482 Bytes;
+  VT H.264 1.322s / 22.69x / 2919100 Bytes;
+  VT HEVC 1.563s / 19.20x / 3350790 Bytes.
+  Alle ffprobe- und vollständigen Decoderprüfungen PASS. Stark synthetisches
+  Material; CPU-CRF und Hardware-Bitrate nicht qualitätsgleich, keine allgemeine
+  Beschleunigungsbehauptung. scale_vt bleibt deaktiviert.
+- Reproduktion/Reports unter build/director-next: models.py/json, e2e.py,
+  e2e-result.json, hashes.json. SHA-256 der geprüften MP4:
+  Director 08e3fa9ffda517819033bebcb30b3d7d5183f7fe72521b8e53660c90b9cd666e
+  Dubbing f2452320d5b3dbf0953b0ee4af584beb3a57fe20f8d09dc54ab99a32ee2e9b22
+  CPU30 b2f0a305519fa4bbf1661fdad075da9e0fc5e43777c0d101508db0322dd34edf
+  H26430 d3201faa437b84941d26c76d364e1e32a87559400867990be61eee448ceceb47
+  HEVC30 63a5acdc71ad516d5a36e95763b2c23c9c27cb78723d93446ed9e0e5cae953ff
+- 97 gezielte Regressionstests PASS, 1 fehlende Whisper-Runtime ausgeschlossen;
+  danach 7 UI-Tests inklusive neuer Planansicht PASS. UI-Bridge 0 findings,
+  Node-Syntax/diff --check sauber. Keine gesamte Suite, keine Commits/Push.
+- Restpunkte: reguläre Whisper-Dev-Dependency + lokales Modell bereitstellen,
+  echte ASR-End-to-End-Prüfung, Windows-TTS-Provider. Dubbing bleibt Prototyp;
+  semantische Übersetzungsqualität muss vor Rendern vom Nutzer geprüft werden.
+
+### 2026-09-09 — Klassischer Video-Restaurations-Prototyp
+
+- Gemeinsame RestorationAnalysis/Options/Plan-Modelle und RestorationProvider-
+  Grenze. Bestehende MediaLibrary, Converter, Encoderwahl/Fallback und Queue-
+  Completion wiederverwendet; eigener Workflow „Video restaurieren“ im Menü.
+- Analyse: echte ffprobe-Metadaten (Codec, Auflösung, DAR/SAR, Framerate,
+  Pixelformat, Farbraum/Pegelbereich, Bitrate, Audio), IDÉT-Feldanalyse und
+  signalstats über maximal acht Sekunden. Luma-/Chroma-Rauschproxy aus Differenz
+  zu schwacher hqdn3d-Filterung; ausdrücklich auch Textur/Bewegung enthalten.
+  Verwacklung, Unschärfe, Blockartefakte, Flicker und Audiostörungen bleiben
+  unbestimmt statt erfundener Einstufung. Widersprüchliche Field Order bleibt
+  unknown und erfordert Nutzerprüfung. Gesamtes Langmaterial nicht analysiert.
+- bwdif/yadif send_field erhält bei 576i25 die 50 Bewegungsphasen. Danach
+  getrenntes Luma/Chroma/Temporal-Denoise, sehr leichte Farbe, geringe Schärfung,
+  optional Lanczos-Skalierung zuletzt. Natürlich/Verbessert/Stark mit Warnung
+  vor Detailverlust. Kein KI-Upscale, keine Frame-Interpolation/scale_vt.
+- DAR-bewusste Skalierung auf 720p/1080p mit Padding; Originalauflösung lässt
+  SAR bestehen. Optional Audio highpass+afftdn, standardmäßig aus. Kein
+  automatischer Weißabgleich oder aggressives Histogramm-Stretching.
+- libvidstab-Zweipasspfad vorbereitet (smoothing=5, kein Autozoom), aber im
+  vorhandenen FFmpeg fehlen die Filter: Checkbox deaktiviert, real ungeprüft.
+  QTGMC/VapourSynth nicht verfügbar; weitere KI-/RF-Provider unsupported.
+  Szenenparameter/optionale Szenenanalysen speicherbar, noch nicht ausführbar.
+- UI: Analyse, Presets, einzeln schaltbare Filter, editierbares JSON, Projekt
+  speichern/laden, Original-/Restauriert-Vorschau bis 6s über native Player,
+  explizite Renderbestätigung. Ergebnis über vorhandenen Finder-Button und
+  Recent-Media-Übergaben an Konvertieren/Brennen/Director/erneute Restaurierung.
+- Projekte unter bestehender Library-Datenwurzel/restoration-projects speichern
+  Analyse/Plan, Preview/Output, Filter, FFmpeg-Version und SHA-256 von Quelle
+  und Derivat. Keine Originalüberschreibung; Namenskollisionen erhalten die
+  bestehende Datei. FFV1-Archivmaster/RF-Capture sind nicht implementiert.
+- Real: verrauschte 4s-SD-Fixtures in TFF und BFF korrekt erkannt (je 100
+  eindeutige Fields); beide → H.264 VideoToolbox 1280x720/50p + Audio. Progressive
+  50p bleibt 50p. ffprobe + vollständiges Dekodieren PASS. Cropdetect bestätigt
+  4:3-Inhalt 960x720 bei x=160; Audio-/Video-Endzeitdifferenz jeweils 0.0s.
+  Vorschau, Projektladen, Recent Media und unveränderte Quellchecksummen PASS.
+  Zusätzlich 0.4s/25p ohne Audio auf CPU inkl. Vorschau PASS.
+- Reproduktion: build/restoration-check/run.py und extra.py; result.json und
+  extra-result.json. SHA-256 der geprüften finalen MP4:
+  TFF cd7678743206527199590d6098ff63fea6670d9f1442f41e52814b4844a00736
+  BFF 265d663e435e694832e8ed68e1331955ddbb4070ed54fff9d394afa3adb266f2
+  Progressive d73af3878b708ac78dcff8bdcbc21a31c4e91d3bf4840b2dfcd0e13a88c689fd
+- 63 gezielte Tests PASS (Restoration, Recent, VideoToolbox, Plattform, UI),
+  native Playeraufrufe Mac/Windows gemockt; UI-Bridge 0 findings, Node-Syntax
+  und diff --check sauber. Keine visuelle Qualitätsabnahme/echte VHS-Aufnahme,
+  kein realer Windows- oder libvidstab-Test. Keine Dependencies/Commits/Push.
+
+### 2026-09-09 — Restaurierung: Vorschau- und Quellschutz nachgeschärft
+
+- Vorhandenen Prototyp beibehalten. FFprobe-Bildrate 0/0/N/A verwendet eine
+  gültige r_frame_rate; ohne belastbare Angabe klarer Fehler statt Division
+  durch null oder erfundener Bildrate. Analysemodell verlangt positive fps.
+- Vorschau-Signatur bindet Quellstand, Preset, Filteroptionen und Szenenparameter.
+  Nach Änderungen oder gelöschten Preview-Dateien wird eine neue Vorschau
+  verlangt. UI startet finalen Render erst nach vorhandener Vorher/Nachher-
+  Vorschau und Nutzerbestätigung. Alte Projekte ohne Signatur bleiben ladbar,
+  benötigen für die bisherigen Vorschauen eine Neugenerierung.
+- Quellgröße/mtime werden auch über Analyse und Verarbeitung hinweg verglichen;
+  Änderungen führen zum Abbruch, eigene Derivate werden bereinigt.
+- 69 relevante Tests PASS; UI-Bridge 0 findings, JS-Syntax/diff --check sauber.
+  Vorhandener echter SD-Test erneut PASS: TFF/BFF 25i → 720p50, progressive
+  50p unverändert; Audio, Decoderprüfung, Preview, Projektladen, Recent Media
+  und originale Quellchecksummen bestätigt. Keine neue Provider-/Pipeline.
+- Aktuelle result.json unter build/restoration-check; SHA-256 finaler MP4:
+  TFF 2381472284119fe9e832f5d5b8a80228e0d3c1f82895cd38593238026628cbd8
+  BFF acebd7846fa2ffdd38d2168abfed1d4f8cd0eadce556e02e6b850d93f4152820
+  Progressive a3192015057bbc21bcb68e1efe0f9a1f3349b72a5eace3f563b089d8c5224677
+- Keine Commits/Push. Restpunkte unverändert: reale Band-Qualitätsabnahme,
+  Windows-Praxistest, libvidstab-Verfügbarkeit, szenenadaptive Ausführung,
+  optionale KI-/Archivmaster-/RF-Provider.
+
+### 2026-09-09 — Szenenadaptive Ausführung fertiggestellt + Smart-Edit-Kern (macOS-Beleg)
+
+Fortsetzung des unterbrochenen Codex-Stands (szenenadaptive Restauration). Der
+Renderer wendet Szenenparameter jetzt tatsächlich an; zusätzlich neu: Report
+nach Missionsvorgabe, Batch, sowie ein deterministischer Smart-Edit/Short-Kern.
+Umgebung: macOS 15.6 (Apple Silicon), Homebrew **ffmpeg 8.1.1**, Python 3.11
+in `.venv-test` (nur pydantic/pytest/pytest-asyncio/pytest-mock/structlog/rich/
+click/httpx — keine schweren ML-Pakete). Keine Commits/Push/Branches.
+
+**Restauration (Missionen 1–5, 7, 23, 24, 26) — realer FFmpeg-Beleg, keine Mocks:**
+Reproduzierbar über `scripts/restoration_acceptance.py` (erzeugt Testmedien,
+fährt Analyse→Szenenanalyse→adaptiven Render→Report→Archiv, dekodiert jede
+Ausgabe mit `-xerror`, prüft Dauer/Streams/SHA). Lauf `/tmp/retrodisc-accept`,
+GESAMT PASS:
+- `filters()` erzeugt pro Szene `hqdn3d`/`unsharp` mit `enable='gte(t,s)*lt(t,e)'`.
+  30s-Video: 3 Szenen erkannt, 1 dunkle Szene → stärkeres Denoise
+  `1.2:2.8:1.5:3.0` vs. helle `0.7:1.5:1.0:2.0`; 6 szenengesteuerte Filter aktiv.
+  Ausgabe 1280x720/25p, 30.0s, Audio, vollständiges Decoding PASS. Quell-SHA
+  625715ce… unverändert; Ausgabe-SHA 50fe5d19….
+- TFF/BFF 576i → 720p: field_order tff/bff, Deinterlace an, Ausgabe dekodiert,
+  Quell-SHA unverändert (6afe3e62…, 3d78d217…). Progressive SD nicht deinterlaced,
+  720x576 erhalten.
+- Report neu (`Restoration.build_report`, Mission 3): Sektionen source/analysis/
+  processing/result/integrity; nur gemessene Fakten, keine erfundenen Scores.
+- Archivmaster (Missionen 4/5): FFV1 + pcm_s24le, 30.0s, vollständiges Decoding,
+  Manifest-SHA cfd12f27… == Datei-SHA, `-map_metadata -1`, Quelle unverändert.
+- Performance (Mission 26, VideoToolbox): 30s adaptiver Render 4.99s; Archiv 2.56s;
+  4s-Läufe ~1.0–1.2s. `scale_vt` bleibt aus.
+- Batch (Mission 7, neu): `Restoration.batch()` + Launcher `restoration_batch`.
+  Lauf über [TFF, kaputte Datei, progressive] → 2 done / 1 error, Fehler stoppt
+  die Queue nicht, beide Ausgaben dekodieren; Originale nie überschrieben.
+
+**Smart Edit / Short (Missionen 9–19, 22, 25) — neuer deterministischer Kern:**
+`src/models/smart_edit.py` (SmartEditProject, CaptionStyle, ReframeSettings,
+SilenceSettings, VoiceEnhanceSettings, TimeRange) + `SmartEditor` in
+`src/services/smart_edit.py`; Launcher `smart_edit_short/_capabilities/_project`;
+LLM-Wiederverwendung über `Director.select_time_ranges` + `Assistant.highlight_ranges`.
+Reproduzierbar über `scripts/smart_edit_acceptance.py`, GESAMT PASS:
+- 20s-Quelle mit echter Sprechpause 6–10s. Short-Lauf: Highlight-Fallback →
+  Sprechpausen kürzen (silencedetect) → Center-Reframe 9:16 → Voice-Enhance →
+  (Captions) → H.264/AAC. Ausgabe **1080x1920**, Audio, vollständiges Decoding,
+  geschnittene Segmente [2.5–6.15, 9.85–17.5] (Pause getrimmt), Dauer 11.4s,
+  Projekt-Reload PASS.
+- **Ehrliche Grenze:** Homebrew-ffmpeg 8.1.1 ist **ohne libass** gebaut
+  (`ffmpeg -buildconf` bestätigt), daher kein `subtitles`-Filter. Captions wurden
+  kapazitätsgesteuert übersprungen (`captions_burned:false` + Notiz), **nicht
+  gefälscht**. ASS-Erzeugung (`build_ass`) ist rein unit-getestet; der Burn-Pfad
+  ist auf einem libass-fähigen Build (Windows-Vendor gyan.dev) noch praktisch
+  zu verifizieren.
+- Mission 15 (SubjectTracker) nur Architektur (`level:'unavailable'`); Reframe
+  V1 = stabiler Center-Crop, keine vorgetäuschte Personenverfolgung.
+- Mission 18 (Ducking): keep/duck/mute im Modell; echtes Ducking lebt weiterhin
+  im Director. Im Ein-Quellen-Short ist `duck` mangels zweiter Spur wie `keep`.
+
+**Tests/Gates:** `tests/test_restoration.py` 24 PASS (3 neu: build_report,
+collect_sources, batch), `tests/test_smart_edit.py` 19 PASS (neu). Gesamtsuite
+`pytest -q`: **470 passed, 17 skipped, 4 failed**. Die 4 Fehler sind
+umgebungs-/plattformbedingt und **nicht** von dieser Arbeit verursacht:
+`test_core_flows` (faster-whisper/`requests` nicht im Test-venv), 2×
+`test_installer` (Windows-`%APPDATA%`-Pfade unter macOS), `test_drive_detection_ui`
+(Node-Ausführung eines `app.html`-JS-Snippets in Codex' noch offener Disc-Copy-
+Arbeit; `app.html` wurde hier nicht verändert). `verify_ui_bridge.py` PASS
+(0 findings, 63 Bridge-Methoden), `node --check` OK, `git diff --check` sauber,
+`compileall` sauber.
+
+**Offen (echte Punkte):** Caption-Burn auf libass-Build; UI-Panels für Batch/
+Short in `app.html`; LLM-Highlight-Lauf gegen laufendes Ollama; realer
+Windows-/libvidstab-Test; optionale KI-/RF-Provider. Detaillierte Übergabe:
+`HANDOFF_2026-09-09_SzenenAdaptiv_SmartEdit.md`.
+
+### 2026-09-09 (Teil 2) — UI für Smart-Edit/Short + Batch/Archiv, Ollama-Realtest, Testklärung
+
+Fortsetzung: die offenen Punkte aus Teil 1 abgearbeitet. Umgebung wie oben
+(macOS, ffmpeg 8.1.1, `.venv-test`). Keine Commits/Push/Branches.
+
+**UI in `src/ui/app.html` (Missionen 1–4, 6–8, 20, 21):**
+- Neues Panel `tab-short`: Quelle wählen/Recent übernehmen, 15/30/60 s, 9:16/1:1/16:9,
+  Highlights, Sprechpausen (Aus/Natürlich/Straff/Kompakt), Fülllaute, Untertitel
+  (Aus/Normal/Modern), Sprache verbessern (Aus/Natürlich/Klar/Stark), Audio
+  keep/duck/mute, Exportprofil, „Short erstellen", Fortschritt, Ergebnis mit
+  Buttons Finder/Konvertieren/Brennen/KI-Regisseur. Nutzt ausschließlich die
+  vorhandene Bridge (`smart_edit_short/_capabilities/_project`), keine zweite Logik.
+- Restore-Panel erweitert: Archiv-Sektion („Archivkopie erstellen" → neuer Bridge
+  `restoration_archive`, Ergebnis zeigt Archivmaster/Manifest/SHA256/Original
+  unverändert) und Batch-Sektion (Dateien/Ordner, Liste mit Status, Presets
+  Natürlich/Verbessert/Stark, Szenenadaptiv, `restoration_batch`).
+- Caption-Capability sauber vor dem Rendern (Mission 4): `smart_edit_capabilities`
+  meldet `captions` (libass). Fehlt libass, werden Normal/Modern deaktiviert +
+  Hinweis; „Untertiteldatei (SRT) erstellen" bleibt über `generate_subtitles`.
+  Kein Fehler erst beim Rendern. Tests für beide Zustände
+  (`test_capabilities_enable_caption_burn_only_with_libass`).
+- Startseite gruppiert (Mission 6): fünf Medien-Aktionen oben; sekundär gruppiert
+  in Erstellen (KI-Regisseur, Short) / Retten (Restaurieren) / Werkzeuge. Neue
+  Toolbar-Buttons Short + Restaurieren. Handoffs verdrahtet: Restoration→Short,
+  Short→Konvertieren/Brennen/KI-Regisseur.
+- Archivmaster wird NICHT in Recent Media beworben: der Job setzt bewusst keine
+  `output_paths`; die UI erhält die Archivinfo separat über das `job_done`-Event
+  (`_on_complete` reicht `archive`/`batch_summary` durch).
+- UI-Zustände (Mission 7): null-`api()`-Guards, Job läuft/erfolg/fehlgeschlagen,
+  Ollama offline, Caption-Burn nicht verfügbar, Ausgabe verschwunden
+  (`useRecentMedia` prüft erneut). `node --check` sauber, `verify_ui_bridge`
+  PASS (0 findings, 64 Bridge-Methoden).
+
+**Ollama-Highlight-Realtest (Missionen 5, 11), `scripts/ollama_highlight_realtest.py`:**
+- Lokales Ollama erreichbar, Modell `llama3.2:3b`. 40s-Asset + Transkript, Wunsch
+  „interessanteste 15 s". LLM lieferte reale Segmente [10–16, 20–26, 30–37];
+  `all_within_duration`=true, `no_invented_times`=true; echter Short 1080x1920,
+  19.12s, vollständiges Decoding. Genau ein LLM-Versuch, dann Fallback.
+- Offline (unerreichbarer Host): deterministischer Fallback [12.5–27.5], Short
+  15.02s, vollständiges Decoding. GESAMT PASS.
+- Beim Aufbau ein Fehler NUR im Testskript gefunden (2-Tupel statt (start,end,text)-
+  Tripel an `Director.select_time_ranges`); Produktpfad nutzt Tripel und ist korrekt.
+
+**Testklärung (Mission 9) — Herkunft und Einzelbewertung:**
+Alle Zahlen stammen aus EINEM Lauf `.venv-test/bin/python -m pytest -q`. Vorher:
+475 passed / 17 skipped / 4 failed. Nachher: **476 passed / 19 skipped / 1 failed**.
+- `test_drive_detection_ui::…medium_confirmation…`: **behoben.** Ursache war eine
+  Lücke im Node-Test-Harness (rief `refreshQueue`, das `finalOutputPaths` nutzt,
+  ohne es im Stub bereitzustellen → ReferenceError vom eigenen `catch{}`
+  verschluckt → `jlist.innerHTML` blieb undefined). Das echte UI-Verhalten war
+  korrekt (nachgewiesen). Fix: `finalOutputPaths` extrahiert + `escHtml/escAttr/
+  revealOutputButton`-Stubs ergänzt. Kein künstlicher Skip. → jetzt 5/5 PASS.
+- `test_installer::…every_shortcut…` und `…start_menu_folder_recursively…`:
+  **echt Windows-only.** `_removal_plan` nutzt `os.path.expandvars`, das `%APPDATA%`
+  nur unter Windows auflöst; die 5 Geschwister-Parse-Tests laufen plattformüber-
+  greifend, diese zwei nicht. Gleicher `skipif(sys.platform!='win32')` wie der
+  bereits vorhandene Schwester-Ausführungstest (Zeile 186) ergänzt — Konsistenz,
+  kein Green-Washing; auf Windows laufen sie weiter.
+- `test_core_flows::…whisper…importable`: **fehlende optionale Runtime.** Der Test
+  ist ein Packaging-Guard (`import requests`, `import faster_whisper`). Das schlanke
+  macOS-Dev-venv installiert die schwere ML-Runtime bewusst nicht; im echten
+  Windows-Build-venv importierbar. Bewusst NICHT geskippt (das würde den Zweck des
+  Guards zerstören). Einziger verbleibender, umgebungsbedingter Fehler.
+
+**Acceptance nach allen Änderungen (Mission 11):** `restoration_acceptance.py`
+GESAMT PASS (30s adaptiv erneut 3 Szenen/1 dunkel, 4.95s), `smart_edit_acceptance.py`
+GESAMT PASS (1080x1920, Audio, Decoding, kept 11.3s), Ollama-Realtest PASS. Alle
+Ausgaben mit ffprobe + `-xerror`-Volldecode geprüft.
+
+**Gates:** `verify_ui_bridge` PASS (0 findings), `node --check` OK, `compileall`
+sauber, `git diff --check` sauber. Backend-Kern: `test_restoration` 24,
+`test_smart_edit` 24 PASS.
+
+**Offen:** Caption-Burn praktisch auf libass-fähigem (Windows-)ffmpeg; realer
+Windows-/libvidstab-Test; optionale KI-/RF-Provider. Handoffs sind auf Bridge-/
+UI-Ebene verdrahtet; ein echter Klick-Durchlauf braucht die laufende WebView.
+
+### 2026-09-09 (Teil 3) — Produktionsreife: Whisper-ASR, Dubbing, Diagnose, Packaging
+
+Umgebung wie zuvor (macOS, ffmpeg 8.1.1, `.venv-test`). Keine Commits/Push/Branches.
+Ergebnis vorweg: `pytest -q` = **480 passed / 19 skipped / 0 failed**.
+
+**Whisper-Runtime (Mission 1):** `faster-whisper` ist laut Architektur PFLICHT
+(requirements.txt, setup.py install_requires, build.py RUNTIME_DEPS, Spec bündelt
+faster_whisper+ctranslate2+tokenizers+huggingface_hub+av+numpy + vendor/whisper-base).
+Die vorgesehene Dependency (`faster-whisper`+`requests`) NUR ins Dev-/Test-venv
+installiert (keine alternative ASR). Packaging-Guard-Test grün.
+
+**Echte ASR (Missionen 2/3), `scripts/whisper_asr_realtest.py` — GESAMT PASS:**
+Kleinstes Modell `tiny` einmalig lokal (~4 Dateien, offline danach). Echte deutsche
+Sprache via `say`. A) SubtitleGenerator: Sprache=de erkannt, 3 Segmente start/end/text,
+SRT mit Timecodes, ASR 2.1s. B) Director.transcribe: Video→Audio-Extraktion→ASR→
+Transcript→Projekt speichern/neu laden. C) Smart Edit mit ECHTEM ASR (keine
+vorgegebenen Segmente): Short 1080x1920, 10s, Audio, Volldecode.
+
+**Echtes Dubbing (Mission 4), `scripts/dubbing_realtest.py` — GESAMT PASS:**
+DE-Video → Whisper (de) → Ollama-Übersetzung EN (`llama3.2:3b`) → `say`-TTS →
+Ducking → EN-Video (Volldecode, Audio, generierte Sprachspur, SRT mit Inhalt).
+Gegenprobe EN→DE akkurat. Echter Produkt-Schutz bestätigt: >25% TTS-Beschleunigung
+wird verweigert (kurze Clips brauchen Zeitfenster-Headroom).
+
+**App/JS-Smoke (Mission 5), `tests/test_ui_smoke.py`:** Node-Harness führt die
+ausgelieferten Panel-Funktionen (loadShortUI/applyCaptionCapability/shortShowResult/
+batchRenderList/batchOnDone/archiveShowResult) ohne JS-Runtime-Fehler aus; Caption-
+Capability wirkt in beiden Zuständen korrekt auf die UI.
+
+**Capability-Dashboard (Mission 12):** neuer Bridge `diagnostics()` + Diagnose-Panel
+in den Einstellungen. Ehrliche Aggregation echter Detektion (FFmpeg/FFprobe/yt-dlp,
+Ollama, Whisper, TTS, Hardware-Encoder, libass, libvidstab, QTGMC/Real-ESRGAN/…);
+Status available/unavailable/optional/model_missing. Test `tests/test_diagnostics.py`.
+
+**Cleanup/Security/Pfade (Missionen 7/10/21):** Alle Temp-Verzeichnisse nach den
+Läufen leer (keine verwaisten Clips/WAV/AIFF/concat-Listen; TemporaryDirectory).
+KEIN `shell=True` in src/scripts/launcher; alle Subprozesse als Argumentlisten über
+`create_hidden_subprocess`/`subprocess.run`. Edge-Case-Pfad
+`Te st (ä ö ü ß 🎬) 'quote' [v1].mp4` durch Restoration- UND Short-Render, beide
+dekodieren (`scripts/edgecase_paths_realtest.py` PASS). Kein hardcodierter User-/OS-Pfad
+in neuem Code.
+
+**Output-Kollision (Mission 9):** Restoration/Short lehnen vorhandene Ziele ab
+(FileExistsError, eindeutige uuid-Namen), Archiv nutzt `open('x')`/`-n`, Batch
+eindeutige Namen. Regressionstest vorhanden.
+
+**Packaging (Missionen 13-18):** `retrodisc_final.spec` um `collect_submodules("src")`
+ergänzt — die vielen LAZY im Launcher importierten Module (restoration, director,
+translation, voice, smart_edit + deren Modelle, utils) fehlten in `hiddenimports`
+und hätten im Paket gecrasht. Verifiziert via identischem `pkgutil.walk_packages`:
+alle 40 src-Submodule inkl. der zuvor fehlenden werden erfasst. PyInstaller ist auf
+dem Mac nicht installiert und der Spec ist Windows-only (verlangt `vendor/ffmpeg.exe`,
+sonst `sys.exit`); ein echter macOS-.app-Build ist hier NICHT möglich und wurde NICHT
+vorgetäuscht. Neue Services erben die Tool-Auflösung über die gemeinsame FFmpeg-Instanz
+(settings.tools), keine neue Shell-PATH-Annahme. Modelle liegen im vorgesehenen
+Vendor-/User-Data-Pfad (nicht im beschreibbaren Bundle).
+
+**Performance (Mission 19, VideoToolbox):** Restoration 30s adaptiv ~4.95s, Short
+~1.4s, Dubbing (inkl. ASR+LLM+TTS) End-to-End im niedrigen Sekundenbereich; Whisper
+tiny 2.1s. Große Dateien: FFmpeg-Streaming, Prüfsummen in 1-MB-Blöcken, Transkript-
+kontext fürs LLM begrenzt — kein Vollladen in RAM.
+
+**Tests (Mission 24):** EIN Lauf `.venv-test/bin/python -m pytest -q` →
+**480 passed, 19 skipped, 0 failed**. Neu u.a. `test_ui_smoke` (2), `test_diagnostics` (1),
+Caption-Capability (1). Gates: `verify_ui_bridge` PASS (0 findings, 65 Bridge-Methoden),
+`node --check` OK, `compileall` sauber, `git diff --check` sauber. Keine künstlichen Skips.
+
+**Offen (echte Restpunkte):** Caption-Burn praktisch auf libass-fähigem (Windows-)ffmpeg;
+echter macOS/Windows-Paket-Build auf dem Build-Rechner; libvidstab (advanced),
+optionale KI-/RF-Provider; Klick-Durchlauf in laufender WebView.
+
+### 2026-09-09 — Echter macOS-Bundle-/WebView-Abnahmelauf
+
+- Gemeinsamer Launcher als `RetroDisc.app` gebaut; separater macOS-Spec, Windows-Spec erhalten.
+- Packaging-Fixes: eigenständiges yt-dlp ohne System-Python; multiprocessing.freeze_support gegen erneuten GUI-Start durch Whisper.
+- Bundle-Tools mit minimalem PATH, echte offline deutsche ASR (3 Segmente), Modell-fehlt-Capability, Cocoa-WebView/JS-Bridge, Convert → Recent → Konvertieren/Brennen/Director PASS. Vollständiger Decode PASS.
+- Verschobene App (Leerzeichenpfad) einschließlich ASR PASS. 121 Mach-O-Dateien ohne externe Homebrew-/Dev-Abhängigkeiten; Ad-hoc-Signatur gültig.
+- Hauptprogramm SHA-256 `f7739c9b3e97ac03e2324302dc1ae7e2af4f7a9317ff92041b588fe8393553da`; vollständige Artefakt-Hashes/Belege in `build/macos-release`. Details/Reproduktion: `MACOS_RELEASE_READINESS.md`.
+- Regression 483 passed / 19 skipped / 0 failed; abschließend 46 gezielte Tests PASS; Bridge/JS/compileall/diff-check PASS.
+- Keine Distributionsfreigabe: Developer-ID/Notarisierung und Windows-Praxistest offen; Caption-Burn ohne libass nicht verfügbar. Keine Commits/Push.
+- Gatekeeper separat real geprüft: `spctl --assess --type execute` → rejected (Exit 3); Ad-hoc-Signatur genügt nicht für Distributionsfreigabe.
+
+### 2026-09-09 — Windows static package / final release matrix
+
+- Windows-Spec behalten; ASR-Pflichtpakete schlagen bei fehlender Runtime/Collection jetzt früh fehl. Shared Services/Package-Check via collect_submodules geprüft. Windows-Vendor-EXEs hier nicht vorhanden: sämtliche Windows-FFmpeg-Capabilities/Caption-Ausführung NOT TESTED.
+- LOCALAPPDATA-Umleitung für Windows-Settings korrigiert; Windows-TTS ehrlich unavailable ohne Apple-Providerlabel. Package-Check prüft frozen/UI/Shared Imports/Whisper-Runtime.
+- Plattformneutraler Caption-Burn-Harness: echte Quelle/SRT, Burn-in, FFprobe, Volldecode, sichtbarer Textkontrast; macOS-Build ohne libass meldet CAPABILITY_UNAVAILABLE.
+- Release-Staging ignoriert Artefakte; nachvollziehbare Build-/Signier-Anleitungen und Matrix unter release/reports/READINESS.md. Keine gültigen sichtbaren Apple-Signieridentitäten, keine Notarisierung/Umgehung.
+- Finaler macOS-Staging-Build erneut Package-ASR/WebView/Handoffs/Decode PASS, 121 Mach-O-Dateien ohne externe Dev-/Homebrew-Bibliotheken, Ad-hoc-Signatur gültig. Hashbindung und Größenmessung in Release-Bericht.
+- Neue release-Artefakte führten zunächst zur Sammlung upstream NumPy-Tests; pytest.ini ignoriert ausschließlich release/. Abschließend 487 passed / 19 skipped / 0 failed. Bridge/JS/compileall/diff-check PASS.
+- LOCAL DEVELOPMENT YES; PUBLIC DISTRIBUTION NO (Developer-ID/Notarisierung, echter Windows-Build/Vendor-Caption-Test fehlen). Keine Commits/Push/neuer Branch.
+
+### 2026-09-09 (Teil 4) — Timeline-Fortsetzung: Undo/Redo, Render, Transitions, Slideshow/Musik
+
+Fortsetzung exakt an Codex' Timeline-Stand (edit() auf ProductionPlan, client-seitige
+Timeline-UI). Umgebung wie zuvor. Keine Commits/Push/Branches. Ergebnis:
+`pytest -q` = **497 passed / 19 skipped / 0 failed**.
+
+- **Undo/Redo (Mission 1):** Server-seitige `TimelineHistory` (Snapshot-basiert,
+  begrenzt, Redo-Zweig-Verwerfung, kein Event-Sourcing, keine Mediendatei berührt)
+  in `src/services/timeline.py` + 5 Tests. Client-seitige Undo/Redo-Buttons von Codex
+  waren nie deaktiviert → `timelineUpdateButtons()` ergänzt: Buttons disabled, wenn
+  Stack leer; Aufruf in draw/apply/undo. Smoke-Test `test_ui_smoke` deckt beide Zustände.
+- **Timeline-UI (Mission 2):** von Codex weitgehend fertig (Video/Audio/Voiceover/
+  Caption/Music-Tracks, Trim/Split/Move/Delete, Transition/Zoom-Selects, auto-Refresh);
+  nur Button-Gating-Lücke behoben.
+- **Timeline-Render real (Mission 3), `scripts/timeline_render_realtest.py` PASS:**
+  2 Videos → Trim/Split/Move/Delete + Undo/Redo (echt gefahren) → Director.render →
+  1280x720, Dauer = Summe der Clips, Video+Audio, Volldecode.
+- **Transitions (Mission 4/5):** im Renderer bereits umgesetzt (cut/fade/dip_black via
+  fade-Filter, Zeilen 277-280). Acceptance im selben Skript: fade (8s) + dip_black,
+  beide Volldecode PASS. (Echtes xfade-Crossfade nicht im Modell — offener Punkt.)
+- **Bilder/Ken-Burns/Slideshow/Musik (Missionen 6-11), `scripts/slideshow_realtest.py`
+  PASS:** 3 echte Bilder (png/jpg) + mp3-Musik → image→video (loop), zoompan
+  (Ken Burns subtle), fade-Transition, Musik-Mix (afade/adelay/amix) → **H.264/AAC**,
+  9.0s, Volldecode. Bild-Assets (kind='image'), image→video und Musik-Mix waren von
+  Codex im Modell (`AudioPlacement`) + Renderer umgesetzt; hier erstmals real belegt.
+- **Recent-Media-Fix (Missionen 6/22):** `recent_outputs()` klassifizierte Bilder als
+  „disc"; jetzt `image`. `asset()` war bereits korrekt.
+- **Audio/Originalton (Mission 12):** Renderer wendet `original_audio` keep/duck/mute +
+  `original_volume` an (Slideshow mit mute belegt).
+
+**Tests/Gates:** EIN Lauf → 497 passed / 19 skipped / 0 failed. Neu: `test_timeline`
+(9, davon 5 Undo/Redo), `test_ui_smoke` Timeline-Button-Gating. Eine durch Codex'
+parallele `app.html`-Änderung entstandene Regression behoben (`directorSummarizePlan`
+rief `timelineDraw` unbedingt → im isolierten Escaping-Test undefiniert; jetzt
+`typeof`-Guard). `verify_ui_bridge` PASS (0 findings), `node --check` OK, `compileall`
+sauber, `git diff --check` sauber.
+
+**Offen (echte Restpunkte):** xfade-Crossfade (Modell hat cut/fade/dip_black);
+Waveform-Track (Mission 13), Director 2.0, Restoration-Pro-UI-Details, Drag&Drop,
+als eigenständige spätere Blöcke; Windows-Praxistest/Vendor-libass-Caption.

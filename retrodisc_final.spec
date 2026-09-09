@@ -7,8 +7,9 @@
 # Größe: ~120-150 MB
 
 import sys
+import importlib.util
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files, collect_all
+from PyInstaller.utils.hooks import collect_data_files, collect_all, collect_submodules
 
 HERE = Path(SPECPATH)
 VENDOR = HERE / "vendor"
@@ -26,13 +27,15 @@ ai_datas = []
 ai_binaries = []
 ai_hiddenimports = []
 for package in ("faster_whisper", "ctranslate2", "tokenizers", "huggingface_hub", "av", "numpy"):
+    if importlib.util.find_spec(package) is None:
+        raise SystemExit(f"Required runtime missing: {package}")
     try:
         package_datas, package_binaries, package_hidden = collect_all(package)
         ai_datas.extend(package_datas)
         ai_binaries.extend(package_binaries)
         ai_hiddenimports.extend(package_hidden)
     except Exception as exc:
-        print(f"WARNUNG: {package} konnte nicht gesammelt werden: {exc}")
+        raise SystemExit(f"Required runtime collection failed: {package}: {exc}") from exc
 
 datas = [
     # ── UI ──
@@ -104,7 +107,10 @@ hiddenimports = [
 
     # structlog, rich, click
     "structlog", "rich", "rich.console", "click",
-] + ai_hiddenimports
+# Alle src-Submodule robust bündeln: Launcher importiert viele Services/Modelle
+# (restoration, director, translation, voice, smart_edit, deren Modelle, utils)
+# lazy in Funktionen; ohne dies fehlten sie im Paket und Panels crashten.
+] + collect_submodules("src") + ai_hiddenimports
 
 # ── Nicht benötigte Module ausschließen ───────────────────────────────
 excludes = [

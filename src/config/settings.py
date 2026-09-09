@@ -12,7 +12,10 @@ from pydantic import BaseModel, Field
 
 def _default_burn_device() -> str:
     """Return the platform-appropriate default optical drive."""
-    return "D:" if platform.system() == "Windows" else "/dev/sr0"
+    system = platform.system()
+    if system == "Darwin":
+        return ""  # Erst ein tatsächlich erkanntes/ausgewähltes Laufwerk verwenden.
+    return "D:" if system == "Windows" else "/dev/sr0"
 
 
 class ToolPaths(BaseModel):
@@ -26,11 +29,22 @@ class ToolPaths(BaseModel):
     cdrecord: str = "cdrecord"
 
 
+def default_media_directory(kind: str) -> Path:
+    """Zentrale Medien-Defaults; bestehende Windows/Linux-Pfade beibehalten."""
+    if platform.system() == "Darwin":
+        folder = "Music" if kind == "audio" else "Movies"
+    else:
+        folder = "Downloads" if kind == "download" else "Videos"
+    return Path.home() / folder / "RetroDisc"
+
+
 class DirectorySettings(BaseModel):
     """Verzeichnis-Einstellungen."""
-    output_dir: Path = Field(default_factory=lambda: Path.home() / "Videos" / "RetroDisc")
-    temp_dir: Path = Field(default_factory=lambda: Path.home() / "Videos" / "RetroDisc" / "_temp")
-    download_dir: Path = Field(default_factory=lambda: Path.home() / "Downloads" / "RetroDisc")
+    output_dir: Path = Field(default_factory=lambda: default_media_directory("video"))
+    temp_dir: Path = Field(default_factory=lambda: default_media_directory("video") / "_temp")
+    download_dir: Path = Field(default_factory=lambda: default_media_directory("download"))
+
+    audio_dir: Path = Field(default_factory=lambda: default_media_directory("audio"))
 
 
 class SoundSettings(BaseModel):
@@ -83,9 +97,28 @@ class AppSettings(BaseModel):
 
     def ensure_directories(self) -> None:
         """Erstellt alle konfigurierten Verzeichnisse."""
-        self.directories.output_dir.mkdir(parents=True, exist_ok=True)
-        self.directories.temp_dir.mkdir(parents=True, exist_ok=True)
-        self.directories.download_dir.mkdir(parents=True, exist_ok=True)
+        for _,path in self.directories:
+            self.validate_directory(path)
+        for _,path in self.directories:
+            self.validate_directory(path, create=True)
+
+    @staticmethod
+    def validate_directory(path: Path, create: bool = False) -> dict:
+        path = Path(path).expanduser()
+        if not path.is_absolute():
+            raise ValueError(f'Absoluter Verzeichnispfad erforderlich: {path}')
+        if path.exists() and not path.is_dir():
+            raise ValueError(f'Kein Verzeichnis: {path}')
+        if create:
+            path.mkdir(parents=True, exist_ok=True)
+        probe = path
+        while not probe.exists():
+            probe = probe.parent
+        # An actual short write probe detects ACL/read-only-volume failures too.
+        with tempfile.TemporaryFile(dir=probe) as stream:
+            stream.write(b'check')
+            stream.flush()
+        return {'path':str(path), 'exists':path.is_dir(), 'writable':True}
 
     def save(self, path: Path | None = None) -> None:
         """Speichert Einstellungen als JSON."""
@@ -128,7 +161,7 @@ class AppSettings(BaseModel):
     def _default_config_path() -> Path:
         """Standard-Pfad für die Konfigurationsdatei."""
         if platform.system() == "Windows":
-            base = Path.home() / "AppData" / "Local" / "RetroDisc"
+            base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "RetroDisc"
         else:
             base = Path.home() / ".config" / "retrodisc"
         return base / "settings.json"

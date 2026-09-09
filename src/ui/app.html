@@ -423,6 +423,8 @@ body.home-mode #homeview { display:flex; }
 .sec-btn { display:flex; align-items:center; gap:7px; padding:8px 16px; background:rgba(255,255,255,.7);
   border:1px solid #e2e7ee; border-radius:20px; font-size:12px; color:#243240; cursor:pointer; font-weight:bold; }
 .sec-btn:hover { background:#fff; border-color:#ff8a3c; color:#c75a12; }
+.sec-group-label { display:flex; align-items:center; font-size:10px; font-weight:bold; text-transform:uppercase;
+  letter-spacing:.06em; color:#8a96a4; padding:0 4px 0 12px; }
 #flowbar { display:none; align-items:center; gap:14px; padding:14px 30px 0; flex-shrink:0; }
 body.flow-mode #flowbar { display:flex; }
 .back { width:38px; height:38px; border-radius:10px; border:1px solid #e2e7ee; background:#fff;
@@ -614,16 +616,13 @@ select, input[type="text"], input[type="url"], input[type="number"] {
       <span style="font-weight:bold;letter-spacing:0.6px;">RetroDisc <span style="color:#ff8a3c;">1.0</span></span>
       <span style="font-size:10px;opacity:0.7;font-weight:normal;"> — All-in-One Media Suite</span>
     </div>
-    <div class="win-btns">
-      <div class="win-btn" title="Minimieren">_</div>
-      <div class="win-btn" title="Maximieren">□</div>
-      <div class="win-btn" style="font-size:10px;" title="Schließen">✕</div>
-    </div>
+
   </div>
 
   <!-- MENU BAR -->
   <div id="menubar">
     <div class="menu-item" onclick="menuAction('file')">Datei</div>
+    <div class="menu-item" onclick="openFlow('restore')">Video restaurieren</div>
     <div class="menu-item" onclick="menuAction('extras')">Extras</div>
     <div class="menu-item" onclick="menuAction('help')">Hilfe</div>
   </div>
@@ -743,11 +742,16 @@ select, input[type="text"], input[type="url"], input[type="number"] {
           <div class="cc-label">Download</div>
         </div>
       </div>
-      <div class="cc-sub">Klicke auf eine der fuenf Aktionen.</div>
+      <div class="cc-sub">Fünf Medien-Aktionen oben — Erstellen und Retten unten.</div>
       <div class="secondary">
+        <span class="sec-group-label">Erstellen</span>
+        <div class="sec-btn" onclick="openFlow('ai')">KI-Regisseur</div>
+        <div class="sec-btn" onclick="openFlow('short')">Short erstellen</div>
+        <span class="sec-group-label">Retten</span>
+        <div class="sec-btn" onclick="openFlow('restore')">Video restaurieren</div>
+        <span class="sec-group-label">Werkzeuge</span>
         <div class="sec-btn" onclick="openFlow('search')">Suche</div>
         <div class="sec-btn" onclick="openFlow('edit')">Bearbeiten</div>
-        <div class="sec-btn" onclick="openFlow('ai')">AI Tools</div>
         <div class="sec-btn" onclick="openFlow('library')">Bibliothek</div>
         <div class="sec-btn" onclick="openFlow('queue')">Job Queue</div>
         <div class="sec-btn" onclick="openFlow('settings')">Einstellungen</div>
@@ -875,6 +879,26 @@ select, input[type="text"], input[type="url"], input[type="number"] {
       <span class="tbtn-label">AI Tools</span>
     </button>
 
+    <!-- Short erstellen: 9:16-Rahmen mit Play -->
+    <button class="tbtn" onclick="showTab('short',this)" id="tbtn-short">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <rect x="12" y="4" width="12" height="28" rx="2" fill="#e0447a" stroke="#a01e54" stroke-width="1.5"/>
+        <polygon points="15,13 15,23 24,18" fill="white"/>
+      </svg>
+      <span class="tbtn-label">Short</span>
+    </button>
+
+    <!-- Video restaurieren: Wischeffekt alt→neu -->
+    <button class="tbtn" onclick="showTab('restore',this)" id="tbtn-restore">
+      <svg width="36" height="36" viewBox="0 0 36 36">
+        <rect x="4" y="8" width="28" height="20" rx="2" fill="#5a6672"/>
+        <rect x="18" y="8" width="14" height="20" fill="#33bb66"/>
+        <path d="M18 6 L18 30" stroke="#fff" stroke-width="1.5" stroke-dasharray="3 2"/>
+        <circle cx="9" cy="13" r="1.6" fill="#cfd6dd"/>
+      </svg>
+      <span class="tbtn-label">Restaurieren</span>
+    </button>
+
     <!-- Bibliothek: Bücher grün -->
     <button class="tbtn" onclick="showTab('library',this)" id="tbtn-library">
       <svg width="36" height="36" viewBox="0 0 36 36">
@@ -969,6 +993,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 
       <!-- ══ KONVERTIEREN ══ -->
       <div class="tabpanel active" id="tab-convert">
+        <div id="recent-convert" class="sect" style="display:none;"></div>
 
         <div class="sect">
           <div class="sect-title">🔄 Format auswählen</div>
@@ -1018,9 +1043,14 @@ select, input[type="text"], input[type="url"], input[type="number"] {
           <div class="sect-title">⚙️ Optionen</div>
           <div class="sect-body">
 
+            <div class="row" id="encoderRow" style="display:none;">
+              <label for="encoderSel" style="font-weight:bold;width:120px;">Encoder:</label>
+              <select id="encoderSel" style="width:260px;"></select>
+            </div>
+
             <div class="row">
               <label style="width:160px;">Ausgabe-Ordner:</label>
-              <input type="text" style="width:240px;" placeholder="C:\Videos\RetroDisc" id="outdir">
+              <input type="text" style="width:240px;" placeholder="Leer = konfigurierter Ausgabeordner" id="outdir">
               <button class="btn98" style="margin-left:4px;" onclick="openOutputFolderDialog()">Durchsuchen...</button>
             </div>
 
@@ -1042,6 +1072,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 
       <!-- ══ BRENNEN ══ -->
       <div class="tabpanel" id="tab-burn">
+        <div id="recent-burn" class="sect" style="display:none;"></div>
 
         <div class="sect">
           <div class="sect-title" style="display:flex;align-items:center;">Brenner
@@ -1063,6 +1094,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
           <div class="sect-title">🔥 Disc brennen</div>
           <div class="sect-body">
 
+            <p style="font-size:11px;">Rohlingtypen: DVD-R / DVD-RW · DVD+R / DVD+RW · CD-R / CD-RW · Blu-ray BD-R / BD-RE.<br>Dieser Bereich erstellt Video-DVDs; CD-/Blu-ray-Authoring ist hier noch nicht angebunden.</p>
             <div class="disc-icons-row">
               <div class="disc-card sel" onclick="selDisc(this)">
                 <svg width="38" height="38" viewBox="0 0 40 40" style="display:block"><ellipse cx="20" cy="22" rx="15" ry="13" fill="#cc6600" stroke="#884400" stroke-width="1.5"/><ellipse cx="20" cy="22" rx="15" ry="13" fill="white" opacity="0.15"/><ellipse cx="20" cy="22" rx="4.5" ry="4" fill="#bb5500"/><ellipse cx="20" cy="22" rx="1.8" ry="1.6" fill="#ffaa66"/></svg>
@@ -1070,7 +1102,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
               </div>
               <div class="disc-card" onclick="selDisc(this)">
                 <svg width="38" height="38" viewBox="0 0 40 40" style="display:block"><ellipse cx="20" cy="22" rx="15" ry="13" fill="#cc8800" stroke="#886600" stroke-width="1.5"/><ellipse cx="20" cy="22" rx="15" ry="13" fill="white" opacity="0.15"/><ellipse cx="20" cy="22" rx="4.5" ry="4" fill="#bb7700"/><ellipse cx="20" cy="22" rx="1.8" ry="1.6" fill="#ffcc88"/><circle cx="20" cy="10" r="2" fill="#ffcc00"/></svg>
-                <span class="disc-card-label">DVD-RW</span>
+                <span class="disc-card-label">DVD-RW / DVD+RW</span>
               </div>
               <div class="disc-card" onclick="selDisc(this)">
                 <svg width="38" height="38" viewBox="0 0 40 40" style="display:block"><rect x="6" y="8" width="28" height="22" rx="2" fill="#668844" stroke="#446622" stroke-width="1.5"/><rect x="9" y="11" width="22" height="16" rx="1" fill="#88aa66"/><rect x="5" y="30" width="30" height="4" rx="1" fill="#446622"/><text x="12" y="23" font-size="12" fill="white" opacity="0.9">ISO</text></svg>
@@ -1290,8 +1322,140 @@ select, input[type="text"], input[type="url"], input[type="number"] {
         </div>
       </div>
 
+      <div class="tabpanel" id="tab-restore">
+        <div class="sect"><div class="sect-title">Video restaurieren – Erhalten vor Erfinden</div><div class="sect-body">
+          <button class="btn98" onclick="restorationChoose()">Datei auswählen und analysieren</button>
+          <button class="btn98" onclick="restorationRecent()">Letztes Video analysieren</button>
+          <div id="restorationAnalysis" style="white-space:pre-wrap;overflow-wrap:anywhere;"></div>
+          <label>Preset <select id="restorationPreset" onchange="restorationOptions()"><option value="natural">Natürlich</option><option value="balanced">Verbessert</option><option value="strong">Stark – möglicher Detailverlust</option></select></label>
+          <div id="restorationOptions"></div>
+          <label>Ausgabe <select id="restorationSize" onchange="restorationOptions()"><option value="original">Originalauflösung</option><option value="720p">720p</option><option value="1080p">1080p</option></select></label>
+          <p>Stark kann Texturen entfernen. Stabilisierung kann Ränder verändern. Unklare Field Order vor Rendern prüfen. Keine KI-Detailerfindung.</p>
+          <button class="btn98" onclick="restorationRun(true)">Vorschau erzeugen (bis 6 s)</button>
+          <button class="btn98" onclick="restorationPlay(0)">Originalvorschau abspielen</button>
+          <button class="btn98" onclick="restorationPlay(1)">Restaurierte Vorschau abspielen</button>
+          <button class="btn98" onclick="restorationRun(false)">Geprüften Plan restaurieren</button>
+          <details><summary>Details / Experteneinstellungen / Projekt</summary>
+            <textarea id="restorationPlan" style="width:100%;height:210px;box-sizing:border-box;font-family:monospace;"></textarea>
+            <button class="btn98" onclick="restorationSave()">Plan speichern</button>
+            <input id="restorationProjectId" placeholder="Projekt-ID" aria-label="Projekt-ID">
+            <button class="btn98" onclick="restorationLoad()">Projekt laden</button>
+          </details>
+          <div id="restorationResult" style="white-space:pre-wrap;overflow-wrap:anywhere;"></div>
+          <button class="btn98" onclick="restorationHandoff('short')">Als Short verwenden</button>
+          <button class="btn98" onclick="restorationHandoff('convert')">Konvertieren</button>
+          <button class="btn98" onclick="restorationHandoff('burn')">Brennen</button>
+          <button class="btn98" onclick="restorationHandoff('ai')">KI-Regisseur</button>
+        </div></div>
+
+        <div class="sect"><div class="sect-title">Archivkopie (Preservation Master, FFV1)</div><div class="sect-body">
+          <p style="font-size:11px;margin:0 0 6px;">Verlustloser technischer Master aus der aktuell analysierten Quelle: keine Entrauschung/Schärfung/Skalierung. Nicht der restaurierte Output. Wird nicht prominent unter „Zuletzt erstellt" gezeigt.</p>
+          <button class="btn98" onclick="restorationArchive()">Archivkopie erstellen</button>
+          <div id="archiveResult" style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:6px;"></div>
+        </div></div>
+
+        <div class="sect"><div class="sect-title">Batch-Restaurierung – mehrere Dateien / Ordner</div><div class="sect-body">
+          <div class="row" style="flex-wrap:wrap;gap:6px;">
+            <button class="btn98" onclick="batchAddFiles()">Dateien hinzufügen…</button>
+            <button class="btn98" onclick="batchAddFolder()">Ordner hinzufügen…</button>
+            <button class="btn98" onclick="batchClear()">Liste leeren</button>
+          </div>
+          <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:6px;">
+            <label>Preset <select id="batchPreset"><option value="natural">Natürlich</option><option value="balanced">Verbessert</option><option value="strong">Stark – möglicher Detailverlust</option></select></label>
+            <label>Ausgabe <select id="batchSize"><option value="original">Original</option><option value="720p">720p</option><option value="1080p">1080p</option></select></label>
+            <label><input type="checkbox" id="batchAdaptive"> Szenenadaptiv</label>
+            <button class="btn98" onclick="batchRun()">Batch restaurieren</button>
+          </div>
+          <div id="batchList" style="background:white;border:2px solid;border-color:#808080 #fff #fff #808080;min-height:60px;margin-top:6px;font-size:11px;"></div>
+          <div id="batchResult" style="overflow-wrap:anywhere;margin-top:4px;font-size:11px;color:#444;"></div>
+        </div></div>
+      </div>
+
+      <!-- ══ SHORT / SMART EDIT ══ -->
+      <div class="tabpanel" id="tab-short">
+        <div class="sect"><div class="sect-title">🎬 Short erstellen (Smart Edit)</div><div class="sect-body">
+          <div id="shortCaps" style="font-size:11px;color:#333;">Fähigkeiten werden beim Öffnen geprüft.</div>
+          <div class="row" style="flex-wrap:wrap;gap:6px;">
+            <button class="btn98" onclick="shortChoose()">Quelldatei auswählen</button>
+            <button class="btn98" onclick="shortRecent()">Letztes Video übernehmen</button>
+          </div>
+          <div id="shortSource" style="overflow-wrap:anywhere;font-size:11px;margin:4px 0;color:#225;">Noch keine Quelle gewählt.</div>
+          <div class="row" style="flex-wrap:wrap;gap:10px;">
+            <label>Zieldauer <select id="shortDuration"><option value="15">15 s</option><option value="30" selected>30 s</option><option value="60">60 s</option></select></label>
+            <label>Format <select id="shortAspect"><option value="9:16" selected>9:16</option><option value="1:1">1:1</option><option value="16:9">16:9</option></select></label>
+            <label>Sprechpausen <select id="shortSilence"><option value="off">Aus</option><option value="natural" selected>Natürlich</option><option value="tight">Straff</option><option value="compact">Kompakt</option></select></label>
+          </div>
+          <div class="row" style="flex-wrap:wrap;gap:10px;">
+            <label>Untertitel <select id="shortCaptions"><option value="off" selected>Aus</option><option value="normal">Normal</option><option value="modern">Modern</option></select></label>
+            <label>Sprache verbessern <select id="shortVoice"><option value="off" selected>Aus</option><option value="natural">Natürlich</option><option value="clear">Klar</option><option value="strong">Stark</option></select></label>
+            <label>Audio <select id="shortAudio"><option value="keep" selected>Behalten</option><option value="duck">Absenken</option><option value="mute">Stumm</option></select></label>
+          </div>
+          <div class="row" style="flex-wrap:wrap;gap:10px;">
+            <label><input type="checkbox" id="shortHighlights" checked> Highlights automatisch</label>
+            <label><input type="checkbox" id="shortFillers"> Fülllaute reduzieren</label>
+            <label>Exportprofil <select id="shortExport"><option value="youtube_shorts" selected>YouTube Shorts</option><option value="tiktok">TikTok</option><option value="instagram_reels">Instagram/Reels</option><option value="youtube">YouTube</option><option value="tv_original">TV/Original</option></select></label>
+          </div>
+          <div id="shortCaptionNote" style="font-size:10px;color:#a33;"></div>
+          <div class="row" style="flex-wrap:wrap;gap:6px;">
+            <button class="btn98" id="shortRunBtn" onclick="shortRun()">Short erstellen</button>
+            <button class="btn98" onclick="shortMakeSrt()">Untertiteldatei (SRT) erstellen</button>
+          </div>
+          <div id="shortResult" style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:6px;"></div>
+          <div id="shortHandoff"></div>
+        </div></div>
+      </div>
+
       <!-- ══ AI ══ -->
       <div class="tabpanel" id="tab-ai">
+        <div class="sect">
+          <div class="sect-title">🎬 KI-Regisseur</div>
+          <div class="sect-body">
+            <div id="directorCaps" style="font-size:11px;">Lokale Fähigkeiten werden beim Öffnen geprüft.</div>
+            <div class="row">
+              <button class="btn98" onclick="directorSelect(false)">Ausgewählte Dateien übernehmen</button>
+              <button class="btn98" onclick="directorSelect(true)">Drei letzte Videos</button>
+              <button class="btn98" onclick="showTab('library',document.getElementById('tbtn-library'))">Medienbibliothek</button>
+            </div>
+            <div id="directorAssets" style="max-height:100px;overflow:auto;overflow-wrap:anywhere;">Noch keine Assets ausgewählt.</div>
+            <textarea id="directorPrompt" style="width:100%;box-sizing:border-box;height:65px;" placeholder="Erstelle einen kurzen Zusammenschnitt aus diesen Videos. Beschreibe Ziel, Stimmung und Hauptmaterial."></textarea>
+            <div class="row" style="flex-wrap:wrap;">
+              <label>Zieldauer (s, 0 = Prompt): <input id="directorDuration" type="number" min="0" max="600" value="0" style="width:55px;"></label>
+              <select id="directorModel"><option value="">Rohschnitt aus Metadaten (ohne LLM)</option></select>
+              <label><input id="directorTranscribe" type="checkbox" disabled> Whisper-Transkription (optional)</label>
+              <button class="btn98" onclick="directorMakePlan()">Plan erstellen / erneut erzeugen</button>
+            </div>
+            <label for="directorPlan">Produktionsplan / Timeline – vor dem Rendern prüfen und bearbeiten (JSON)</label>
+            <div id="directorPlanSummary" style="white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0;"></div>
+            <section aria-label="Timeline" style="border:1px solid #888;padding:8px;">
+              <strong>Timeline</strong>
+              <button class="btn98" id="timelineUndoBtn" onclick="timelineUndo(false)" disabled>Rückgängig</button>
+              <button class="btn98" id="timelineRedoBtn" onclick="timelineUndo(true)" disabled>Wiederholen</button>
+              <div id="timelineTracks" style="overflow:auto;max-height:320px;"></div>
+              <label>Originalton <input id="timelineVolume" type="number" min="0" max="2" step="0.1" value="1" onchange="timelineAudio()"></label>
+              <label><input id="timelineVoice" type="checkbox" checked onchange="timelineAudio()">Voiceover aktiv</label>
+              <button class="btn98" onclick="timelineSlideshow()">Aus gewählten Bildern: Slideshow</button>
+              <button class="btn98" onclick="timelineMusic()">Gewählte Audiodatei als Musik</button>
+              <p style="font-size:11px;">Schnittwerte sind Quellsekunden. Änderungen werden erst beim Rendern gerechnet. Sprach-/Musikpositionen bleiben absolut; unpassende Tracks werden nicht still gelöscht.</p>
+            </section>
+            <textarea oninput="directorSummarizePlan()" id="directorPlan" style="width:100%;box-sizing:border-box;height:190px;font-family:monospace;"></textarea>
+            <div class="row" style="flex-wrap:wrap;">
+              <select id="directorEncoder"><option value="auto">Automatisch</option></select>
+              <button class="btn98" onclick="directorSavePlan()">Projekt speichern</button>
+              <button class="btn98" onclick="directorRenderPlan()">Geprüften Plan rendern</button>
+              <select id="directorProjects"></select>
+              <button class="btn98" onclick="directorLoadPlan()">Projekt laden</button>
+              <select id="directorDubLanguage"><option value="en">Dubbing: Englisch</option><option value="de">Dubbing: Deutsch</option></select>
+              <button class="btn98" onclick="directorTranslatePlan()">Dubbing übersetzen (lokal)</button>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0;">
+              <label>Originalton <select id="directorAudio" onchange="directorEditAudio()"><option value="duck">Unter Sprecher absenken</option><option value="keep">Behalten</option><option value="mute">Stumm</option></select></label>
+              <label>Stimme <select id="directorVoice" onchange="directorEditAudio(true)"><option value="">Automatisch (Deutsch bevorzugt)</option></select></label>
+            </div>
+            <div id="directorOutputs" style="overflow-wrap:anywhere;"></div>
+            <div id="directorResult" style="overflow-wrap:anywhere;user-select:text;"></div>
+          </div>
+        </div>
+
         <div class="sect">
           <div class="sect-title">🤖 KI-Assistent (Ollama)</div>
           <div class="sect-body">
@@ -1331,7 +1495,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
           <div style="font-size:11px;color:#333;margin-bottom:6px;">Automatische Spracherkennung und SRT-Generierung. Das Base-Modell ist vollständig offline enthalten.</div>
           <div class="row">
             <label style="width:120px;">Whisper-Modell:</label>
-            <select style="width:160px;" id="subtitleModel"><option value="base">base (offline)</option><option value="small">small (Download)</option><option value="medium">medium (Download)</option><option value="large-v3">large-v3 (Download)</option></select>
+            <select style="width:160px;" id="subtitleModel"><option value="base">base (Modell erforderlich)</option><option value="small">small (Download)</option><option value="medium">medium (Download)</option><option value="large-v3">large-v3 (Download)</option></select>
             <label style="margin-left:8px;">Sprache:</label>
             <select style="width:110px;" id="subtitleLanguage"><option value="">Automatisch</option><option value="de">Deutsch</option><option value="en">Englisch</option></select>
             <button class="btn98" style="margin-left:8px;" onclick="startSubtitle()">▶ Starten</button>
@@ -1434,7 +1598,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
             </div>
             <div class="row">
               <label style="width:120px;">Ordner:</label>
-              <input type="text" id="watchFolder" style="flex:1;" placeholder="C:\Videos\Eingang">
+              <input type="text" id="watchFolder" style="flex:1;" placeholder="Eingangsordner auswählen">
               <button class="btn98" style="margin-left:4px;" onclick="chooseWatchFolder()">Wählen</button>
             </div>
             <div class="row">
@@ -1508,12 +1672,23 @@ select, input[type="text"], input[type="url"], input[type="number"] {
           </div>
         </div>
         <div class="sect">
+          <div class="sect-title">🩺 Diagnose / Fähigkeiten</div>
+          <div class="sect-body">
+            <p style="font-size:11px;margin:0 0 6px;">Echte Erkennung – keine vorgetäuschte Verfügbarkeit.</p>
+            <button class="btn98" onclick="loadDiagnostics()">Aktualisieren</button>
+            <div id="diagnostics" style="margin-top:8px;font-size:11px;">Auf „Aktualisieren" klicken.</div>
+          </div>
+        </div>
+        <div class="sect">
           <div class="sect-title">⚙️ Allgemeine Einstellungen</div>
           <div class="sect-body">
             <div class="row"><label style="width:180px;">DVD-Standard:</label><select id="settingsDvdStandard" style="width:160px;"><option value="PAL">PAL (Europa)</option><option value="NTSC">NTSC</option></select></div>
-            <div class="row"><label style="width:180px;">Whisper-Modell:</label><select id="settingsWhisperModel" style="width:160px;"><option value="base" selected>base (offline)</option><option value="small">small</option><option value="medium">medium</option><option value="large-v3">large-v3</option></select></div>
+            <div class="row"><label style="width:180px;">Whisper-Modell:</label><select id="settingsWhisperModel" style="width:160px;"><option value="base" selected>base (Modell erforderlich)</option><option value="small">small</option><option value="medium">medium</option><option value="large-v3">large-v3</option></select></div>
             <div class="row"><label style="width:180px;">Ollama-Modell:</label><select id="settingsOllamaModel" style="width:160px;"><option>phi3:mini</option><option>llama3.2:3b</option><option>mistral:7b</option></select></div>
             <div class="row"><label style="width:180px;">Output-Ordner:</label><input id="settingsOutputDir" type="text" style="width:260px;"><button class="btn98" style="margin-left:4px;" onclick="chooseSettingsFolder('settingsOutputDir')">Durchsuchen</button></div>
+            <div class="row"><label style="width:180px;">Audio / Voiceover:</label><input id="settingsAudioDir" type="text" style="width:260px;"><button class="btn98" onclick="chooseSettingsFolder('settingsAudioDir')">Durchsuchen</button></div>
+            <div class="row"><label style="width:180px;">Temp / Preview:</label><input id="settingsTempDir" type="text" style="width:260px;"><button class="btn98" onclick="chooseSettingsFolder('settingsTempDir')">Durchsuchen</button></div>
+            <pre id="settingsPathStatus" style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;"></pre>
             <div class="row"><label style="width:180px;">Download-Ordner:</label><input id="settingsDownloadDir" type="text" style="width:260px;"><button class="btn98" style="margin-left:4px;" onclick="chooseSettingsFolder('settingsDownloadDir')">Durchsuchen</button></div>
             <div class="row">
               <input type="checkbox" checked id="snd">
@@ -1535,7 +1710,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
   <div id="statusbar">
     <div class="sbar-cell" id="stxt">Bereit</div>
     <div class="sbar-cell" style="width:160px;">FFmpeg 6.1 · Python 3.12</div>
-    <div class="sbar-cell" style="width:100px;">Windows 11</div>
+    <div class="sbar-cell" id="platformLabel">Betriebssystem wird erkannt…</div>
   </div>
 
 </div><!-- /win -->
@@ -1561,7 +1736,7 @@ function renderFiles(){
     <div class="frow ${S.selFile===i?'sel':''}" onclick="selF(${i})">
       <span class="frow-icon">${f.ico}</span>
       <div class="frow-info">
-        <div class="frow-name">${f.n}</div>
+        <div class="frow-name" title="${escAttr(f.path||f.n)}">${escHtml(f.n)}</div>
         <div class="frow-meta">${f.sz} · ${f.dur}</div>
       </div>
     </div>`).join('');
@@ -1603,6 +1778,7 @@ function selDType(el, type){
   };
   const sel = document.getElementById('presetSel');
   sel.innerHTML = (opts[type] || opts.video).map(([v,t]) => `<option value="${v}">${t}</option>`).join('');
+  renderRecentMedia();
   setStat('Zielformat-Gruppe: ' + ({video:'Video',audio:'Audio',device:'Gerät',disc:'Disc-Format'}[type] || type));
 }
 function selDisc(el,mode='disc'){
@@ -1645,8 +1821,8 @@ function fmtDuration(sec){
 }
 function menuAction(kind){
   if(kind==='file') { openFileDialog(); return; }
-  if(kind==='extras') { showTab('settings', document.getElementById('tbtn-settings')); setStat('Extras: Einstellungen geöffnet.'); return; }
-  if(kind==='help') { alert('RetroDisc 1.0\n\nLokale Medienkonvertierung, Batch-Verarbeitung, Videoschnitt, Downloads, Untertitel, DVD-/ISO-Erstellung, Brennen und Rippen ungeschützter Medien.\n\nPhysische Disc-Aktionen benötigen ein geeignetes Laufwerk und Medium; kopiergeschützte Medien benötigen ein separates, rechtmäßig verwendetes Entschlüsselungswerkzeug.'); return; }
+  if(kind==='extras') { openFlow('settings'); setStat('Extras: Einstellungen geöffnet.'); return; }
+  if(kind==='help') { alert('RetroDisc – lokale Medienwerkzeuge\n\nDownloads, Audioextraktion, Konvertierung, Recent Media, Rip ungeschützter Medien und Video-DVD/ISO-Erstellung. Physisches Brennen benötigt passende Tools, Laufwerk und Rohling.\n\nmacOS: H.264/HEVC über VideoToolbox, CPU-Fallback.\n\nKI-Regisseur (experimentell): editierbare Schnittpläne, lokale Ollama-Planung mit Fallback, FFmpeg-Schnitt und optionale macOS-Systemstimmen. Whisper benötigt eine installierte Engine und ein Modell.\n\nDubbing ist ein lokaler Prototyp mit geprüftem Transkript, Ollama und Systemstimme. Musikgenerierung ist noch nicht ausführbar. Einstellungen unter Extras.'); return; }
 }
 
 // ── BACKEND API BRIDGE
@@ -1666,6 +1842,7 @@ window.onBackendEvent = function(payload) {
       S.jobs.push({id:data.id, name:data.name, state:'pending', prog:0, status:''});
       renderJobs(); updateJobBadge(); break;
     case 'job_progress':
+      if(data.id===S.batchJobId){ const br=document.getElementById('batchResult'); if(br) br.textContent='Fortschritt: '+(data.status||''); }
       const jp = S.jobs.find(j=>j.id===data.id);
       if(jp){ jp.prog=data.progress; jp.status=data.status; jp.state='running'; }
       if(S.jobs.find(j=>j.state==='running')){
@@ -1678,8 +1855,14 @@ window.onBackendEvent = function(payload) {
       }
       renderJobs(); break;
     case 'job_done':
+      refreshRecentMedia();
+      if(data.id===S.batchJobId){ batchOnDone(data); }
+      else if(data.type==='restore') { S.restorationOutput=data.output; document.getElementById('restorationResult').innerHTML='Fertig: '+escHtml(data.output||'')+' '+revealOutputButton(data.output||''); }
+      if(data.type==='smart_edit' && data.id===S.shortJobId){ shortShowResult(finalOutputPaths(data)); }
+      if(data.archive){ archiveShowResult(data.archive); }
+      if (data.type === 'director_render') { document.getElementById('directorResult').textContent = 'Rendering abgeschlossen.'; directorShowOutputs([...finalOutputPaths(data),...(data.subtitle_paths||[])]); }
       const jd = S.jobs.find(j=>j.id===data.id);
-      if(jd){ jd.state='done'; jd.prog=100; }
+      if(jd){ jd.state='done'; jd.prog=100; jd.outputPaths=finalOutputPaths(data); }
       document.getElementById('curjob').style.display='none';
       document.getElementById('nojob').style.display='block';
       setStat('✓ Fertig: '+data.name+(data.elapsed?' ('+data.elapsed+'s)':''));
@@ -1687,6 +1870,8 @@ window.onBackendEvent = function(payload) {
       if(data.type==='burn_dvd') animBurnDone();
       break;
     case 'job_failed':
+      if(data.id===S.shortJobId){ const b=document.getElementById('shortRunBtn'); if(b) b.disabled=false; const sr=document.getElementById('shortResult'); if(sr) sr.textContent='Short fehlgeschlagen: '+(data.error||''); }
+      if(data.id===S.batchJobId){ const br=document.getElementById('batchResult'); if(br) br.textContent='Batch fehlgeschlagen: '+(data.error||''); S.batchJobId=null; }
       const jf = S.jobs.find(j=>j.id===data.id);
       if(jf){ jf.state='failed'; }
       document.getElementById('curjob').style.display='none';
@@ -1730,7 +1915,7 @@ async function goConvert(){
   const a=api();
   if(a){
     try{
-      const r=JSON.parse(await a.convert_file(file,preset,outputDir||null,overwrite));
+      const r=JSON.parse(await a.convert_file(file,preset,outputDir||null,overwrite,document.getElementById("encoderSel").value||"auto"));
       if(r.error) alert('Fehler: '+r.error);
       else {
         setStat('Konvertierung zur Queue hinzugefügt.');
@@ -2080,6 +2265,8 @@ async function saveSettings() {
   current.ai.ollama_host=document.getElementById('settingsOllamaHost').value||'http://localhost:11434';
   current.directories.output_dir=document.getElementById('settingsOutputDir').value;
   current.directories.download_dir=document.getElementById('settingsDownloadDir').value;
+  current.directories.audio_dir=document.getElementById('settingsAudioDir').value;
+  current.directories.temp_dir=document.getElementById('settingsTempDir').value;
   current.conversion.dvd_standard=document.getElementById('settingsDvdStandard').value;
   current.ai.whisper_model=document.getElementById('settingsWhisperModel').value;
   current.ai.ollama_model=document.getElementById('settingsOllamaModel').value;
@@ -2107,6 +2294,12 @@ async function loadSettingsIntoForm() {
     document.getElementById('settingsOllamaHost').value=s.ai?.ollama_host||'http://localhost:11434';
     document.getElementById('settingsOutputDir').value=s.directories.output_dir||'';
     document.getElementById('settingsDownloadDir').value=s.directories.download_dir||'';
+    document.getElementById('settingsAudioDir').value=s.directories.audio_dir||'';
+    document.getElementById('settingsTempDir').value=s.directories.temp_dir||'';
+    const paths=JSON.parse(await a.get_path_status());
+    const tools=JSON.parse(await a.get_tool_status());
+    paths.push(...Object.entries(tools).map(([name,t])=>({name,path:t.path,exists:t.available,error:t.available?'':'Tool nicht gefunden'})));
+    document.getElementById('settingsPathStatus').textContent=paths.map(p=>`${p.name}: ${p.path} — ${p.error|| (p.exists?'vorhanden':'wird bei Bedarf erstellt')}`).join('\n');
     document.getElementById('settingsDvdStandard').value=s.conversion?.dvd_standard||'PAL';
     document.getElementById('settingsWhisperModel').value=s.ai?.whisper_model||'base';
     document.getElementById('settingsOllamaModel').value=s.ai?.ollama_model||'phi3:mini';
@@ -2150,10 +2343,11 @@ async function refreshQueue() {
       if (lj) {
         lj.state = bj.state;
         lj.prog  = bj.progress;
+        lj.outputPaths = finalOutputPaths(bj);
         lj.awaitingCopyMedium = bj.awaiting_copy_medium === true;
-      } else if (bj.state !== 'done') {
+      } else if (bj.state !== 'done' || finalOutputPaths(bj).length) {
         S.jobs.push({id: bj.id, name: bj.name, state: bj.state,
-                     prog: bj.progress, status: '', awaitingCopyMedium: bj.awaiting_copy_medium === true});
+                     prog: bj.progress, status: '', outputPaths: finalOutputPaths(bj), awaitingCopyMedium: bj.awaiting_copy_medium === true});
       }
     });
     renderJobs();
@@ -2191,16 +2385,33 @@ async function cancelJob(jobId) {
 }
 
 // ── Output-Ordner öffnen ─────────────────────────────────────────
-async function openOutputFolder() {
+function finalOutputPaths(result) {
+  return [...new Set([...(result.output_paths || []), result.output].filter(Boolean))];
+}
+function revealOutputButton(path) {
+  const label = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform) ? 'Im Finder öffnen' : 'Ordner öffnen';
+  return `<button class="btn98" data-path="${escAttr(path)}" onclick="openOutputFolder(this.dataset.path)">${label}</button>`;
+}
+async function openOutputFolder(path = '') {
   const a = api();
-  if (a) await a.open_output_folder();
+  if (!a) return;
+  try {
+    const result = JSON.parse(await a.open_output_folder(path));
+    if (result.error) { setStat(result.error); alert(result.error); }
+  } catch (error) { setStat('Ausgabeort konnte nicht geöffnet werden: ' + error.message); }
 }
 
 // ── Startup ─────────────────────────────────────────────────────
 async function startup() {
+  try {
+    const a=api();
+    if(a){const info=JSON.parse(await a.get_platform_info()); document.getElementById('platformLabel').textContent=info.label;}
+  }catch(e){document.getElementById('platformLabel').textContent='Betriebssystem unbekannt';}
   await loadToolStatus();
   await loadSettingsIntoForm();
   await loadPresetsFromBackend();
+  await loadEncoderOptions();
+  await refreshRecentMedia();
   await loadWatchFolders();
   // Bewusst KEIN loadBurners() hier: die Laufwerkserkennung startet unter
   // Windows PowerShell-Prozesse. Beim normalen Programmstart und auf dem
@@ -2541,6 +2752,10 @@ function addLibFileToQueueDirect(path) {
 // Bibliothek beim Laden des Tabs aktualisieren
 function showTab(name, btn) {
   _baseShowTab(name, btn);
+  if (name === 'convert' || name === 'burn') refreshRecentMedia();
+  if (name === 'ai') loadDirectorUI();
+  if (name === 'short') loadShortUI();
+  if (name === 'settings' && !S.diagLoaded) loadDiagnostics();
   if (name === 'library') {
     loadLibraryStats();
     searchLibrary();
@@ -2653,6 +2868,539 @@ function selF(i) {
 }
 
 // ── Presets dynamisch laden ───────────────────────────────────────
+// Recent Media uses completed outputs from the existing library. No automatic
+// mutation of S.files: a manual selection stays intact until the user clicks.
+function restorationShow(plan){
+  if(plan.error) throw new Error(plan.error);
+  document.getElementById('restorationPlan').value=JSON.stringify(plan,null,2);
+  document.getElementById('restorationProjectId').value=plan.id;
+  S.restorationOutput=plan.outputs.at(-1)||null;
+  if(S.restorationOutput) document.getElementById('restorationResult').innerHTML='Output: '+escHtml(S.restorationOutput)+' '+revealOutputButton(S.restorationOutput);
+  document.getElementById('restorationPreset').value=plan.preset;
+  document.getElementById('restorationSize').value=plan.options.size;
+  const a=plan.analysis;
+  document.getElementById('restorationAnalysis').textContent=`${a.asset.title}\n${a.asset.width}×${a.asset.height} · ${a.fps} fps · ${a.field_order} · DAR ${a.display_aspect_ratio}\n${a.asset.video_codec} · ${a.pixel_format} · ${a.color_space} · Audio ${a.asset.audio_codec||'fehlt'}\nPegel: ${JSON.stringify(a.levels)}\nRauschproxy (keine sichere Einstufung): ${JSON.stringify(a.noise_proxy)}\n${a.uncertain.join(' ')}\nStabilisierung: ${plan.capabilities?.stabilization?.available?'verfügbar':'libvidstab fehlt'}\nQTGMC/KI/RF-Provider: nicht verfügbar\n${plan.notes.join(' ')}`;
+  const names={deinterlace:'Deinterlace → doppelte Bildrate',denoise:'Rauschreduzierung',stabilize:'Moderate Stabilisierung (libvidstab nötig)',color:'Leichte Farbkorrektur',sharpen:'Leichte Schärfung',audio:'Audio-Rauschen reduzieren'};
+  document.getElementById('restorationOptions').innerHTML=Object.entries(names).map(([key,label])=>`<label style="display:block;"><input type="checkbox" data-option="${key}" onchange="restorationOptions()" ${plan.options[key]?'checked':''} ${key==='stabilize'&&!plan.capabilities?.stabilization?.available?'disabled':''}>${label}</label>`).join('');
+}
+function restorationOptions(){
+  try{
+    const p=JSON.parse(document.getElementById('restorationPlan').value);
+    p.preset=document.getElementById('restorationPreset').value;
+    p.options.size=document.getElementById('restorationSize').value;
+    document.querySelectorAll('#restorationOptions input').forEach(input=>{p.options[input.dataset.option]=input.checked;});
+    document.getElementById('restorationPlan').value=JSON.stringify(p,null,2);
+    document.getElementById('restorationResult').textContent='Optionen geändert: vor dem Rendern eine passende Vorschau erzeugen.';
+  }catch(e){document.getElementById('restorationResult').textContent='Zuerst analysieren: '+e.message;}
+}
+async function restorationAnalyze(path){
+  document.getElementById('restorationResult').textContent='Technische Analyse läuft…';
+  try{restorationShow(JSON.parse(await api().restoration_analyze(path)));document.getElementById('restorationResult').textContent='Plan prüfen und Vorschau erzeugen.';}
+  catch(e){document.getElementById('restorationResult').textContent=e.message;}
+}
+async function restorationChoose(){
+  try{
+    const r=JSON.parse(await api().open_file_dialog());
+    if(r.error) throw new Error(r.error);
+    const file=(r.files||[r])[0];
+    if(file?.path) await restorationAnalyze(file.path);
+  }catch(e){document.getElementById('restorationResult').textContent=e.message;}
+}
+async function restorationRecent(){
+  const rows=JSON.parse(await api().get_recent_media());
+  const video=rows.find(r=>r.type==='video');
+  if(video) await restorationAnalyze(video.path);
+  else document.getElementById('restorationResult').textContent='Kein zuletzt erzeugtes Video vorhanden.';
+}
+async function restorationRun(preview){
+  try{
+    const p=document.getElementById('restorationPlan').value;
+    if(!preview && JSON.parse(p).preview?.length!==2) throw new Error('Bitte zuerst eine Vorher/Nachher-Vorschau erzeugen.');
+    if(!preview && !confirm('Vorschau geprüft? Restaurierung mit diesem Plan starten?')) return;
+    document.getElementById('restorationResult').textContent=preview?'Vorschau wird erzeugt…':'Rendering wird eingereiht…';
+    const r=JSON.parse(await api().restoration_process(p,preview));
+    if(r.error) throw new Error(r.error);
+    if(preview){restorationShow(r);document.getElementById('restorationResult').textContent='Beide Vorschauen sind bereit.';}
+    else openFlow('queue');
+  }catch(e){document.getElementById('restorationResult').textContent=e.message;}
+}
+async function restorationHandoff(target){
+  const path=S.restorationOutput;
+  if(!path){document.getElementById('restorationResult').textContent='Zuerst ein fertiges Restaurierungsergebnis erzeugen oder Projekt laden.';return;}
+  if(target==='short'){
+    shortSetSource(path, path.split(/[\\/]/).pop());
+    openFlow('short');
+    return;
+  }
+  if(target==='ai'){
+    const assets=JSON.parse(await api().director_assets(JSON.stringify([path])));
+    if(assets.error){document.getElementById('restorationResult').textContent=assets.error;return;}
+    S.directorAssets=assets;
+    document.getElementById('directorAssets').textContent=assets.map(a=>a.title).join(' · ');
+    openFlow('ai');
+  }else{
+    openFlow(target);
+    await useRecentMedia({dataset:{path,target}});
+  }
+}
+async function restorationPlay(index){
+  const r=JSON.parse(await api().restoration_play(document.getElementById('restorationProjectId').value,index));
+  if(r.error) document.getElementById('restorationResult').textContent=r.error;
+}
+async function restorationSave(){
+  try{restorationShow(JSON.parse(await api().restoration_project(document.getElementById('restorationPlan').value,true)));}
+  catch(e){document.getElementById('restorationResult').textContent=e.message;}
+}
+async function restorationLoad(){
+  try{restorationShow(JSON.parse(await api().restoration_project(document.getElementById('restorationProjectId').value,false)));}
+  catch(e){document.getElementById('restorationResult').textContent=e.message;}
+}
+
+// ── Archivkopie (FFV1 Preservation Master) ───────────────────────────
+async function restorationArchive(){
+  const out=document.getElementById('archiveResult');
+  const planText=document.getElementById('restorationPlan').value;
+  if(!planText.trim()){ out.textContent='Bitte zuerst eine Quelle analysieren.'; return; }
+  try{
+    const r=JSON.parse(await api().restoration_archive(planText));
+    if(r.error) throw new Error(r.error);
+    out.textContent='Archivkopie wird erstellt (verlustloses FFV1) – Fortschritt im Job-Bereich.';
+    openFlow('queue');
+  }catch(e){ out.textContent='Archivkopie nicht möglich: '+e.message; }
+}
+function archiveShowResult(archive){
+  const out=document.getElementById('archiveResult');
+  if(!out) return;
+  const m=archive.metadata||{};
+  out.innerHTML=`<b>Archivmaster erstellt.</b><br>`+
+    `Datei: ${escHtml(archive.path||'')} ${revealOutputButton(archive.path||'')}<br>`+
+    `Manifest: ${escHtml(archive.manifest||'')}<br>`+
+    `Video ${escHtml(m.video_codec||'ffv1')} · SHA256 geprüft: ${m.archive_sha256?'ja':'nein'}<br>`+
+    `Original unverändert: ${m.source_sha256?'ja':'—'}`;
+}
+
+// ── Smart Edit / Short ───────────────────────────────────────────────
+async function loadShortUI(){
+  const el=document.getElementById('shortCaps');
+  try{
+    const c=JSON.parse(await api().smart_edit_capabilities());
+    if(c.error) throw new Error(c.error);
+    S.shortCaptions=!!c.captions;
+    const hw=(c.hardware_encode||[]).length?c.hardware_encode.join(', '):'CPU';
+    el.textContent=`Sprechpausen: ${c.silence_detection?'verfügbar':'nicht verfügbar'} · `+
+      `Untertitel einbrennen: ${c.captions?'verfügbar':'nicht verfügbar (FFmpeg ohne libass)'} · Hardware: ${hw}`;
+  }catch(e){ el.textContent='Fähigkeiten konnten nicht geladen werden: '+e.message; S.shortCaptions=false; }
+  applyCaptionCapability();
+}
+function applyCaptionCapability(){
+  const sel=document.getElementById('shortCaptions'), note=document.getElementById('shortCaptionNote');
+  [...sel.options].forEach(o=>{ if(o.value!=='off') o.disabled=!S.shortCaptions; });
+  if(!S.shortCaptions){
+    if(sel.value!=='off') sel.value='off';
+    note.textContent='Untertitel ins Video einbrennen ist nicht verfügbar (FFmpeg ohne libass). „Untertiteldatei (SRT) erstellen" bleibt möglich.';
+  } else note.textContent='';
+}
+function shortSetSource(path,label){ S.shortSource=path; document.getElementById('shortSource').textContent='Quelle: '+(label||path); }
+async function shortChoose(){
+  try{
+    const r=JSON.parse(await api().open_file_dialog());
+    if(r.error) throw new Error(r.error);
+    const f=(r.files||[])[0];
+    if(f&&f.path) shortSetSource(f.path,f.title||f.name||f.path);
+    else document.getElementById('shortResult').textContent='Keine Datei gewählt.';
+  }catch(e){document.getElementById('shortResult').textContent=e.message;}
+}
+async function shortRecent(){
+  try{
+    const rows=JSON.parse(await api().get_recent_media());
+    const v=rows.find(r=>r.type==='video');
+    if(v) shortSetSource(v.path,v.filename);
+    else document.getElementById('shortResult').textContent='Kein zuletzt erzeugtes Video vorhanden.';
+  }catch(e){document.getElementById('shortResult').textContent=e.message;}
+}
+async function shortRun(){
+  const out=document.getElementById('shortResult'), btn=document.getElementById('shortRunBtn');
+  if(!S.shortSource){ out.textContent='Bitte zuerst eine Quelldatei wählen.'; return; }
+  const caption=S.shortCaptions?document.getElementById('shortCaptions').value:'off';
+  try{
+    btn.disabled=true; out.textContent='Short wird eingereiht…';
+    document.getElementById('shortHandoff').innerHTML='';
+    const r=JSON.parse(await api().smart_edit_short(
+      S.shortSource,
+      Number(document.getElementById('shortDuration').value),
+      document.getElementById('shortAspect').value,
+      document.getElementById('shortSilence').value,
+      caption,
+      document.getElementById('shortVoice').value,
+      document.getElementById('shortExport').value,
+      document.getElementById('shortFillers').checked));
+    btn.disabled=false;
+    if(r.error) throw new Error(r.error);
+    S.shortJobId=r.job_id;
+    out.textContent='Short-Job in der Warteschlange ('+r.job_id+'). Fortschritt im Job-Bereich.';
+    openFlow('queue');
+  }catch(e){ btn.disabled=false; out.textContent='Fehler: '+e.message; }
+}
+function shortShowResult(paths){
+  const out=document.getElementById('shortResult');
+  const main=(paths||[]).find(p=>/\.mp4$/i.test(p))||(paths||[])[0];
+  if(!main){ out.textContent='Short fertig, aber kein Ausgabepfad gemeldet.'; return; }
+  S.shortSource=main;
+  out.innerHTML='Fertig: '+escHtml(main)+' '+revealOutputButton(main);
+  document.getElementById('shortHandoff').innerHTML=
+    `<button class="btn98" data-path="${escAttr(main)}" data-target="convert" onclick="useRecentMedia(this)">Konvertieren</button>`+
+    `<button class="btn98" data-path="${escAttr(main)}" data-target="burn" onclick="useRecentMedia(this)">Brennen</button>`+
+    `<button class="btn98" data-path="${escAttr(main)}" onclick="shortHandoffDirector(this.dataset.path)">KI-Regisseur</button>`;
+}
+async function shortHandoffDirector(path){
+  try{
+    const assets=JSON.parse(await api().director_assets(JSON.stringify([path])));
+    if(assets.error) throw new Error(assets.error);
+    S.directorAssets=assets;
+    document.getElementById('directorAssets').textContent=assets.map(a=>a.title).join(' · ');
+    openFlow('ai');
+  }catch(e){document.getElementById('shortResult').textContent=e.message;}
+}
+async function shortMakeSrt(){
+  const out=document.getElementById('shortResult');
+  if(!S.shortSource){ out.textContent='Bitte zuerst eine Quelldatei wählen.'; return; }
+  try{
+    const r=JSON.parse(await api().generate_subtitles(S.shortSource,''));
+    if(r.error) throw new Error(r.error);
+    out.textContent='Untertitel-Job (SRT) eingereiht – Fortschritt im Job-Bereich.';
+    openFlow('queue');
+  }catch(e){ out.textContent='SRT-Erstellung nicht möglich: '+e.message; }
+}
+
+// ── Batch-Restaurierung ──────────────────────────────────────────────
+function batchRenderList(){
+  const box=document.getElementById('batchList');
+  const items=S.batchFiles||[];
+  if(!items.length){ box.innerHTML='<div style="padding:8px;color:#666;">Keine Dateien/Ordner gewählt.</div>'; return; }
+  box.innerHTML=items.map((it,i)=>`<div style="display:flex;gap:8px;padding:3px 6px;border-bottom:1px solid #eee;">
+    <span style="flex:1;overflow-wrap:anywhere;">${escHtml(it.label)}</span>
+    <span id="batchStatus-${i}" style="width:120px;color:#446;">${escHtml(it.status||'Wartet')}</span></div>`).join('');
+}
+async function batchAddFiles(){
+  try{
+    const r=JSON.parse(await api().open_file_dialog());
+    if(r.error) throw new Error(r.error);
+    S.batchFiles=S.batchFiles||[];
+    (r.files||[]).forEach(f=>{ if(f.path && !S.batchFiles.find(x=>x.path===f.path)) S.batchFiles.push({path:f.path,label:f.title||f.name||f.path,status:'Wartet'}); });
+    batchRenderList();
+  }catch(e){document.getElementById('batchResult').textContent=e.message;}
+}
+async function batchAddFolder(){
+  try{
+    const r=JSON.parse(await api().open_folder_dialog());
+    if(r.error) throw new Error(r.error);
+    S.batchFiles=S.batchFiles||[];
+    if(r.folder && !S.batchFiles.find(x=>x.path===r.folder)) S.batchFiles.push({path:r.folder,label:r.folder+' (Ordner)',status:'Wartet'});
+    batchRenderList();
+  }catch(e){document.getElementById('batchResult').textContent=e.message;}
+}
+function batchClear(){ S.batchFiles=[]; batchRenderList(); document.getElementById('batchResult').textContent=''; }
+async function batchRun(){
+  const res=document.getElementById('batchResult');
+  if(!(S.batchFiles||[]).length){ res.textContent='Bitte zuerst Dateien oder einen Ordner hinzufügen.'; return; }
+  try{
+    const r=JSON.parse(await api().restoration_batch(
+      JSON.stringify(S.batchFiles.map(f=>f.path)),
+      document.getElementById('batchAdaptive').checked,
+      document.getElementById('batchPreset').value,
+      document.getElementById('batchSize').value));
+    if(r.error) throw new Error(r.error);
+    S.batchJobId=r.job_id;
+    (S.batchFiles||[]).forEach((f,i)=>{ f.status='In Bearbeitung'; const el=document.getElementById('batchStatus-'+i); if(el) el.textContent='In Bearbeitung'; });
+    res.textContent='Batch-Job eingereiht ('+r.job_id+'). Fehler einzelner Dateien stoppen die Liste nicht.';
+    openFlow('queue');
+  }catch(e){ res.textContent='Fehler: '+e.message; }
+}
+function batchOnDone(data){
+  (S.batchFiles||[]).forEach((f,i)=>{ const el=document.getElementById('batchStatus-'+i); if(el) el.textContent='Abgeschlossen'; f.status='Abgeschlossen'; });
+  const s=data.batch_summary, outs=finalOutputPaths(data);
+  const res=document.getElementById('batchResult');
+  const summary=s?`${s.done} erfolgreich, ${s.errors} fehlgeschlagen von ${s.total}`:`${outs.length} Ausgabe(n)`;
+  res.innerHTML='Batch abgeschlossen: '+escHtml(summary)+'. '+(outs[0]?revealOutputButton(outs[0]):'');
+  S.batchJobId=null;
+}
+
+// ── Diagnose / Capability Dashboard ──────────────────────────────────
+function diagBadge(status){
+  const map={available:['#159c4b','✓ Verfügbar'],unavailable:['#c0392b','✗ Nicht verfügbar'],
+             optional:['#b8860b','◐ Optional'],model_missing:['#b8860b','◐ Modell fehlt']};
+  const [c,t]=map[status]||['#666',String(status)];
+  return `<span style="color:${c};font-weight:bold;">${t}</span>`;
+}
+async function loadDiagnostics(){
+  const box=document.getElementById('diagnostics');
+  if(!box) return;
+  box.textContent='Prüfe Fähigkeiten…';
+  try{
+    const d=JSON.parse(await api().diagnostics());
+    if(d.error) throw new Error(d.error);
+    box.innerHTML=(d.groups||[]).map(g=>`<div style="margin-bottom:8px;">
+      <div style="font-weight:bold;border-bottom:1px solid #ccc;margin-bottom:2px;">${escHtml(g.category)}</div>
+      ${(g.items||[]).map(it=>`<div style="display:flex;gap:8px;padding:2px 0;">
+        <span style="width:190px;">${escHtml(it.name)}</span>
+        <span style="width:130px;">${diagBadge(it.status)}</span>
+        <span style="flex:1;color:#555;overflow-wrap:anywhere;">${escHtml(it.detail||'')}</span></div>`).join('')}
+    </div>`).join('');
+    S.diagLoaded=true;
+  }catch(e){ box.textContent='Diagnose fehlgeschlagen: '+e.message; }
+}
+
+async function loadDirectorUI() {
+  try {
+    const a=api();
+    const c=JSON.parse(await a.director_capabilities());
+    if(c.error) throw new Error(c.error);
+    document.getElementById('directorCaps').textContent =
+      `Whisper: ${c.whisper.available?'verfügbar':(c.whisper.note||'nicht verfügbar')} · TTS: ${c.tts.available?'macOS-Systemstimmen':'nicht verfügbar'} · Musikgenerierung / Voice-Cloning: nicht verfügbar · Dubbing: lokaler Prototyp`;
+    document.getElementById('directorTranscribe').disabled=!c.whisper.available;
+    if(!c.whisper.available) document.getElementById('directorTranscribe').checked=false;
+    document.getElementById('directorVoice').innerHTML='<option value="">Automatisch (Deutsch bevorzugt)</option>' + (c.tts.voices||[]).map(v=>`<option value="${escAttr(v.name)}">${escHtml(v.name)} · ${escHtml(v.language)}</option>`).join('');
+    const model=document.getElementById('directorModel'), previous=model.value;
+    model.innerHTML='<option value="">Rohschnitt aus Metadaten (ohne LLM)</option>' + c.llm_models.map(m=>`<option value="${escAttr(m)}">${escHtml(m)}</option>`).join('');
+    if(!S.directorModelInitialized && c.preferred_model) model.value=c.preferred_model;
+    else if(c.llm_models.includes(previous)) model.value=previous;
+    S.directorModelInitialized=true;
+    const options=JSON.parse(await a.get_encoder_options());
+    if(options.length) document.getElementById('directorEncoder').innerHTML=options.map(o=>`<option value="${escAttr(o.id)}">${escHtml(o.name)}</option>`).join('');
+    await directorRefreshProjects();
+  }catch(e){document.getElementById('directorResult').textContent=e.message;}
+}
+async function directorRefreshProjects(){
+  const rows=JSON.parse(await api().director_projects());
+  document.getElementById('directorProjects').innerHTML=rows.map(p=>`<option value="${escAttr(p.id)}">${escHtml(p.title)}</option>`).join('');
+}
+async function directorSelect(recent){
+  try{
+    if(!recent && !S.files.length) throw new Error('Bitte zuerst Dateien auswählen.');
+    const result=JSON.parse(await api().director_assets(JSON.stringify(recent?[]:S.files.map(f=>f.path))));
+    if(result.error) throw new Error(result.error);
+    S.directorAssets=result;
+    document.getElementById('directorAssets').textContent=result.map(a=>`${a.title} · ${a.kind} · ${a.duration.toFixed(1)}s · ${a.origin}`).join(' | ');
+  }catch(e){document.getElementById('directorResult').textContent=e.message;}
+}
+async function directorMakePlan(){
+  const status=document.getElementById('directorResult');
+  try{
+    if(!S.directorAssets?.length) throw new Error('Bitte Assets übernehmen.');
+    status.textContent='Produktionsplan wird erstellt…';
+    const result=JSON.parse(await api().director_plan(document.getElementById('directorPrompt').value,
+      JSON.stringify(S.directorAssets.map(a=>a.path)),Number(document.getElementById('directorDuration').value),
+      document.getElementById('directorModel').value,document.getElementById('directorTranscribe').checked));
+    if(result.error) throw new Error(result.error);
+    document.getElementById('directorPlan').value=JSON.stringify(result,null,2);
+    directorSummarizePlan();
+    status.textContent='Plan gespeichert. Zeitbereiche und Sprechertexte vor dem Rendern prüfen. ' + result.notes.join(' ');
+    await directorRefreshProjects();
+  }catch(e){status.textContent=e.message;}
+}
+async function directorSavePlan(){
+  const r=JSON.parse(await api().director_save(document.getElementById('directorPlan').value));
+  document.getElementById('directorResult').textContent=r.error||'Projekt gespeichert.';
+  if(!r.error) await directorRefreshProjects();
+}
+async function directorLoadPlan(){
+  const r=JSON.parse(await api().director_load(document.getElementById('directorProjects').value));
+  if(r.error){document.getElementById('directorResult').textContent=r.error;return;}
+  document.getElementById('directorPlan').value=JSON.stringify(r,null,2);
+  directorSummarizePlan();
+  document.getElementById('directorPrompt').value=r.prompt;
+  document.getElementById('directorDuration').value=r.target_duration;
+  S.directorAssets=r.assets;
+  document.getElementById('directorAssets').textContent=r.assets.map(a=>a.title).join(' | ');
+  document.getElementById('directorAudio').value=r.original_audio;
+  document.getElementById('directorResult').textContent=r.notes.join(' ');
+  directorShowOutputs([...r.outputs,...r.generated_audio,...(r.subtitle_paths||[])]);
+}
+const timelineHistory={undo:[],redo:[],id:null};
+function timelineDraw(p){
+  const container=document.getElementById('timelineTracks');if(!container)return;
+  if(timelineHistory.id!==p.id){timelineHistory.undo=[];timelineHistory.redo=[];timelineHistory.id=p.id;}
+  const asset=id=>p.assets.find(a=>a.id===id);
+  container.innerHTML='<b>Video Track</b>'+p.timeline.map((c,i)=>`<div style="border-bottom:1px solid #999;padding:5px;overflow-wrap:anywhere;">
+    <strong>${i+1}. ${escHtml(asset(c.asset_id)?.title||c.asset_id)}</strong> · Ziel ${c.position.toFixed(2)}s
+    <label>Start <input style="width:64px" type="number" step="0.1" value="${c.start}" onchange="timelineAction('trim',${i},{start:Number(this.value)})"></label>
+    <label>Ende <input style="width:64px" type="number" step="0.1" value="${c.end}" onchange="timelineAction('trim',${i},{end:Number(this.value)})"></label>
+    <input id="timelineSplit${i}" style="width:64px" type="number" step="0.1" aria-label="Teilpunkt" value="${(c.start+c.end)/2}">
+    <button class="btn98" onclick="timelineAction('split',${i},{time:Number(document.getElementById('timelineSplit${i}').value)})">Teilen</button>
+    <button class="btn98" ${i===0?'disabled':''} onclick="timelineAction('move',${i},{target:${i-1}})">↑</button>
+    <button class="btn98" ${i===p.timeline.length-1?'disabled':''} onclick="timelineAction('move',${i},{target:${i+1}})">↓</button>
+    <button class="btn98" onclick="timelineAction('delete',${i},{})">Löschen</button>
+    <select aria-label="Übergang" onchange="timelineAction('transition',${i},{value:this.value})">${[['cut','Cut'],['fade','Einblenden'],['dip_black','Schwarzblende']].map(([v,n])=>`<option value="${v}" ${c.transition===v?'selected':''}>${n}</option>`).join('')}</select>
+    <select aria-label="Zoom" onchange="timelineAction('zoom',${i},{value:this.value})">${[['off','Zoom aus'],['subtle','Dezent'],['dynamic','Dynamisch']].map(([v,n])=>`<option value="${v}" ${(c.zoom||'off')===v?'selected':''}>${n}</option>`).join('')}</select>
+  </div>`).join('')+'<p><b>Audio Track</b> · Originalton</p><p><b>Voiceover Track</b> · '+escHtml(p.voiceover.map(v=>`${v.position}s: ${v.text}`).join(' | ')||'leer')+'</p><p><b>Music / SFX Track</b> · '+escHtml([...(p.music||[]),...(p.sound_effects||[])].map(t=>`${t.position}s: ${asset(t.asset_id)?.title||t.asset_id}`).join(' | ')||'leer')+'</p><p><b>Caption Track</b> · Transkript-/Sprechersegmente → SRT</p>';
+  document.getElementById('timelineVolume').value=p.original_volume??1;
+  document.getElementById('timelineVoice').checked=p.voiceover_enabled!==false;
+  timelineUpdateButtons();
+}
+function timelineUpdateButtons(){
+  const u=document.getElementById('timelineUndoBtn'),r=document.getElementById('timelineRedoBtn');
+  if(u) u.disabled=!timelineHistory.undo.length;
+  if(r) r.disabled=!timelineHistory.redo.length;
+}
+function timelineApply(next){
+  const field=document.getElementById('directorPlan');
+  timelineHistory.undo.push(field.value);if(timelineHistory.undo.length>30)timelineHistory.undo.shift();timelineHistory.redo=[];
+  field.value=JSON.stringify(next,null,2);directorSummarizePlan();
+  timelineUpdateButtons();
+}
+async function timelineAction(operation,index,values){
+  try{
+    const next=JSON.parse(await api().director_edit(document.getElementById('directorPlan').value,operation,index,JSON.stringify(values)));
+    if(next.error)throw new Error(next.error);timelineApply(next);
+  }catch(e){document.getElementById('directorResult').textContent=e.message;directorSummarizePlan();}
+}
+function timelineUndo(redo){
+  const from=redo?timelineHistory.redo:timelineHistory.undo,to=redo?timelineHistory.undo:timelineHistory.redo;
+  if(!from.length)return;const field=document.getElementById('directorPlan');to.push(field.value);field.value=from.pop();directorSummarizePlan();
+  timelineUpdateButtons();
+}
+function timelineAudio(){timelineAction('audio',0,{original_volume:Number(document.getElementById('timelineVolume').value),voiceover_enabled:document.getElementById('timelineVoice').checked});}
+async function timelineSlideshow(){
+  try{
+    const images=(S.directorAssets||[]).filter(a=>a.kind==='image');if(!images.length)throw new Error('Zuerst Bilder auswählen und als Assets übernehmen.');
+    const duration=Number(prompt('Sekunden pro Bild','4'));if(!Number.isFinite(duration)||duration<=0||duration*images.length>600)throw new Error('Ungültige Dauer.');
+    const next={prompt:'Slideshow',title:'Slideshow',target_duration:duration*images.length,assets:images,timeline:images.map((a,i)=>({asset_id:a.id,start:0,end:duration,position:i*duration,transition:'fade',zoom:'subtle'}))};
+    const r=JSON.parse(await api().director_save(JSON.stringify(next)));if(r.error)throw new Error(r.error);
+    document.getElementById('directorPlan').value=JSON.stringify(r,null,2);directorSummarizePlan();
+  }catch(e){document.getElementById('directorResult').textContent=e.message;}
+}
+async function timelineMusic(){
+  try{
+    const audio=(S.directorAssets||[]).find(a=>a.kind==='audio');if(!audio)throw new Error('Audiodatei auswählen und als Asset übernehmen.');
+    const p=JSON.parse(document.getElementById('directorPlan').value),duration=p.timeline.reduce((t,s)=>t+s.end-s.start,0);
+    if(!p.assets.some(a=>a.id===audio.id))p.assets.push(audio);
+    p.music=[{asset_id:audio.id,position:0,start:0,duration:Math.min(duration,audio.duration),volume:0.2,fade_in:.5,fade_out:.5,duck:true}];
+    const r=JSON.parse(await api().director_save(JSON.stringify(p)));if(r.error)throw new Error(r.error);timelineApply(r);
+  }catch(e){document.getElementById('directorResult').textContent=e.message;}
+}
+
+function directorSummarizePlan(){
+  const box=document.getElementById('directorPlanSummary');
+  if(!box) return;
+  try{
+    const p=JSON.parse(document.getElementById('directorPlan').value);
+    const time=s=>`${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toFixed(1).padStart(4,'0')}`;
+    const assets=new Map(p.assets.map(a=>[a.id,a]));
+    const lines=[p.title,`Zieldauer: ${p.target_duration}s · Planung: ${p.planner}`,...p.story,...p.notes];
+    p.timeline.forEach((s,i)=>{
+      const a=assets.get(s.asset_id);
+      lines.push(`\n${i+1}. Asset: ${a?.title||s.asset_id}\nQuelle: ${a?.path||'Unbekannt'}\nVon: ${time(s.start)} · Bis: ${time(s.end)} · Ziel: ${time(s.position)}`);
+    });
+    p.voiceover.forEach(v=>lines.push(`Voiceover ${time(v.position)}: ${v.text}`));
+    if(p.atmosphere) lines.push('Musik-/Atmosphärenwunsch (nicht erzeugt): '+p.atmosphere);
+    if(p.dubbing) p.dubbing.cues.forEach(c=>lines.push(`Dubbing ${time(c.start)}: ${c.source_text} → ${c.translated_text||'noch nicht übersetzt'}`));
+    box.textContent=lines.join('\n');
+    if(typeof timelineDraw==='function') timelineDraw(p);
+  }catch(e){box.textContent='Plan-JSON noch nicht gültig: '+e.message;}
+}
+async function directorTranslatePlan(){
+  try{
+    const r=JSON.parse(await api().director_translate(document.getElementById('directorPlan').value,document.getElementById('directorModel').value,document.getElementById('directorDubLanguage').value));
+    if(r.error) throw new Error(r.error);
+    document.getElementById('directorPlan').value=JSON.stringify(r,null,2);
+    directorSummarizePlan();
+    document.getElementById('directorResult').textContent='Übersetzung prüfen; erst danach rendern.';
+  }catch(e){document.getElementById('directorResult').textContent=e.message;}
+}
+function directorEditAudio(changeVoice=false){
+  const field=document.getElementById('directorPlan');
+  if(!field.value.trim()) return;
+  try{
+    const plan=JSON.parse(field.value);
+    plan.original_audio=document.getElementById('directorAudio').value;
+    const voice=document.getElementById('directorVoice').value;
+    if(changeVoice) plan.voiceover.forEach(cue=>{cue.voice=voice;});
+    field.value=JSON.stringify(plan,null,2);
+    directorSummarizePlan();
+  }catch(e){document.getElementById('directorResult').textContent='Plan-JSON zuerst korrigieren: '+e.message;}
+}
+function directorShowOutputs(paths){
+  document.getElementById('directorOutputs').innerHTML=paths.map(path=>`
+    <div>${escHtml(path)} ${revealOutputButton(path)}
+      ${!/\.srt$/i.test(path)?`<button class="btn98" data-path="${escAttr(path)}" data-target="convert" onclick="useRecentMedia(this)">Konvertieren</button>`:''}
+      ${/\.mp4$/i.test(path)?`<button class="btn98" data-path="${escAttr(path)}" data-target="burn" onclick="useRecentMedia(this)">Brennen</button>`:''}
+    </div>`).join('');
+}
+async function directorRenderPlan(){
+  const r=JSON.parse(await api().director_render(document.getElementById('directorPlan').value,document.getElementById('directorEncoder').value));
+  document.getElementById('directorResult').textContent=r.error||'Rendering in der Warteschlange.';
+  if(!r.error) showTab('queue',document.getElementById('tbtn-queue'));
+}
+
+async function refreshRecentMedia() {
+  try {
+    S.recentMedia = JSON.parse(await api().get_recent_media());
+    renderRecentMedia();
+    return true;
+  } catch (e) { console.log('Recent Media nicht verfügbar:', e); return false; }
+}
+
+function recentCandidate(target) {
+  const rows = S.recentMedia || [];
+  if (target === 'burn') return rows.find(r => r.type === 'video' && r.can_convert);
+  const preset = document.getElementById('presetSel')?.value;
+  const kind = (S.presets || []).find(p => p.id === preset)?.media_type || 'video';
+  return rows.find(r => r.type === kind && r.can_convert);
+}
+
+function renderRecentMedia() {
+  const origins = {download:'Download', convert:'Konvertierung', rip:'Rip', extract_audio:'Audio extrahieren', director_render:'KI-Regisseur', restore:'Restaurierung'};
+  for (const target of ['convert', 'burn']) {
+    const box = document.getElementById('recent-' + target);
+    if (!box) continue;
+    const item = recentCandidate(target);
+    box.style.display = item ? 'block' : 'none';
+    if (!item) { box.innerHTML = ''; continue; }
+    const route = target === 'burn' && !item.can_burn ? 'convert' : target;
+    const label = target === 'convert' ? 'Als Eingabe verwenden' :
+      item.can_burn ? 'Zum Brennen verwenden' : 'Vor dem Brennen konvertieren';
+    box.innerHTML = `<div class="sect-title">Zuletzt erstellt</div>
+      <div class="sect-body" style="min-width:0;overflow-wrap:anywhere;">
+        <b>${escHtml(item.filename)}</b><br>
+        ${escHtml(item.type === 'video' ? 'Video' : 'Audio')} · ${escHtml(origins[item.operation] || item.operation)}
+        <details><summary>Vollständiger Pfad</summary><span style="user-select:text;">${escHtml(item.path)}</span></details>
+        <button class="btn98" data-path="${escAttr(item.path)}" data-target="${route}" data-convert-first="${target === 'burn' && !item.can_burn}"
+          onclick="useRecentMedia(this)">${label}</button>
+        ${revealOutputButton(item.path)}
+      </div>`;
+  }
+}
+
+async function useRecentMedia(button) {
+  const path = button.dataset.path;
+  const target = button.dataset.target;
+  // Recheck existence through the backend before accepting a stale suggestion.
+  if (!await refreshRecentMedia()) return;
+  const item = (S.recentMedia || []).find(r => r.path === path);
+  if (!item || (target === 'burn' ? !item.can_burn : !item.can_convert)) {
+    setStat('Diese Datei ist für den Arbeitsschritt nicht mehr verfügbar.');
+    return;
+  }
+  if (button.dataset.convertFirst === 'true') {
+    await loadPresetsFromBackend();
+    document.getElementById('presetSel').value = 'mp4_h264_1080p';
+    onPresetChange();
+  }
+  S.files = [{path:item.path, n:item.filename, ico:item.type === 'audio' ? '🎵' : '🎬', sz:'', dur:''}];
+  S.selFile = 0;
+  renderFiles();
+  showTab(target, document.getElementById('tbtn-' + target));
+}
+
+async function loadEncoderOptions() {
+  try {
+    const options = JSON.parse(await api().get_encoder_options());
+    const select = document.getElementById('encoderSel');
+    select.innerHTML = options.map(o => `<option value="${escAttr(o.id)}">${escHtml(o.name)}</option>`).join('');
+    document.getElementById('encoderRow').style.display = options.length ? 'flex' : 'none';
+  } catch (e) { /* Older backends keep their existing encoder selection. */ }
+}
+
 async function loadPresetsFromBackend() {
   const a = api();
   if (!a) return;
@@ -2663,6 +3411,7 @@ async function loadPresetsFromBackend() {
   try {
     const presets = JSON.parse(await a.get_presets());
     if (!Array.isArray(presets) || !presets.length) return;
+    S.presets = presets;
 
     // Optgroups nach Kategorie
     const cats = {
@@ -2692,6 +3441,7 @@ async function loadPresetsFromBackend() {
 }
 
 function onPresetChange() {
+  renderRecentMedia();
   const sel = document.getElementById('presetSel');
   if (!sel) return;
   const val = sel.value;
@@ -2722,7 +3472,7 @@ async function goBatchConvert() {
     const r = JSON.parse(await a.open_folder_for_batch());
     if (r.error) return;
     setStat('Batch-Konvertierung wird gestartet...');
-    const result = JSON.parse(await a.convert_batch(r.folder, preset));
+    const result = JSON.parse(await a.convert_batch(r.folder, preset, "", false, document.getElementById("encoderSel").value||"auto"));
     if (result.error) alert('Batch-Fehler: ' + result.error);
     else showTab('queue', document.getElementById('tbtn-queue'));
   } else {
@@ -2771,9 +3521,10 @@ function renderJobs() {
   }
   const icons = { pending:'⏳', running:'🔄', done:'✅', failed:'❌', cancelled:'⛔' };
   l.innerHTML = S.jobs.map(j => `
-    <div class="jobrow" style="${j.state==='running'?'background:#e8f4ff;':''}${j.awaitingCopyMedium?'flex-wrap:wrap;':''}">
+    <div class="jobrow" style="${j.state==='running'?'background:#e8f4ff;':''}${j.awaitingCopyMedium||j.outputPaths?'flex-wrap:wrap;':''}">
       <span class="jstate">${icons[j.state]||'⏳'}</span>
-      <span class="jname" title="${j.name||''}">${j.name||j.id}</span>
+      <span class="jname" title="${escAttr(j.name||'')}">${escHtml(j.name||j.id)}</span>
+      ${j.state === 'done' && j.outputPaths?.length ? `<div style="flex-basis:100%;overflow-wrap:anywhere;user-select:text;">${j.outputPaths.map(p => `<div><b>${/\.(mp3|m4a|wav|flac|ogg|opus|aac)$/i.test(p) ? "Audio" : "Video"}:</b> ${escHtml(p)} ${revealOutputButton(p)}</div>`).join("")}</div>` : ""}
       ${j.state==='running' && j.awaitingCopyMedium ? `
         <div style="flex-basis:100%;padding:6px 0;">
           <p>Quelldisc entfernen und leeren Rohling einlegen.</p>
@@ -2949,6 +3700,8 @@ async function loadBurners(force){
 
 // ── LAUNCHER-NAVIGATION (CloneCD-Stil) ──
 const FLOW_TITLES = {
+  restore:['Video restaurieren','Analysieren · Vorschau · Original erhalten · Batch · Archiv'],
+  short:['Short erstellen','Highlights · Pausen kürzen · 9:16 · Captions'],
   disccopy:['Disc kopieren','Quelllaufwerk und Brenner waehlen'],
   convert:['Konvertieren','Format waehlen und umwandeln'],
   burn:['Disc brennen','Rohling einlegen und brennen'],

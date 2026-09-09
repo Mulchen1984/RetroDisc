@@ -90,11 +90,17 @@ def check_tools() -> dict:
     import shutil
     tools = {}
 
+    if sys.platform == 'darwin' and getattr(sys, 'frozen', False):
+        bundled_ytdlp = Path(sys.executable).with_name('yt-dlp')
+        if bundled_ytdlp.is_file():tools['ytdlp'] = str(bundled_ytdlp)
+
     for name, exes in [
         ("ffmpeg",  ["ffmpeg.exe",  "ffmpeg"]),
         ("ffprobe", ["ffprobe.exe", "ffprobe"]),
         ("ytdlp",   ["yt-dlp.exe",  "yt-dlp"]),
     ]:
+        if sys.platform == "darwin":
+            exes = [exe for exe in exes if not exe.endswith(".exe")]
         # 1. Im Bundle (vendor/ direkt in EXE eingebettet)
         for exe in exes:
             p = BUNDLE_DIR / "vendor" / exe
@@ -247,14 +253,17 @@ class RetroDiscBridge:
         self.settings = AppSettings.load()
         tool_paths = check_tools()
 
-        if "ffmpeg" in tool_paths:
+        if "ffmpeg" in tool_paths and self.settings.tools.ffmpeg == "ffmpeg":
             self.settings.tools.ffmpeg = tool_paths["ffmpeg"]
-        if "ffprobe" in tool_paths:
+        if "ffprobe" in tool_paths and self.settings.tools.ffprobe == "ffprobe":
             self.settings.tools.ffprobe = tool_paths["ffprobe"]
-        if "ytdlp" in tool_paths:
+        if "ytdlp" in tool_paths and self.settings.tools.ytdlp == "yt-dlp":
             self.settings.tools.ytdlp = tool_paths["ytdlp"]
 
-        self.settings.ensure_directories()
+        try:
+            self.settings.ensure_directories()
+        except (OSError, ValueError) as exc:
+            log.warning('Zielverzeichnis ungültig; bitte Einstellungen korrigieren: %s', exc)
 
         # Core-Module
         from src.core.ffmpeg import FFmpeg
@@ -322,12 +331,20 @@ class RetroDiscBridge:
                 log.warning("UI-Ereignis %s konnte nicht zugestellt werden: %s", event, exc)
 
     def _on_complete(self, job):
+        try:
+            self.library.record_job_outputs(job, excluded_dirs=[self.settings.directories.temp_dir, self.library.thumb_dir])
+        except Exception as exc:
+            log.warning("Recent-Media-Verlauf konnte nicht gespeichert werden: %s", exc)
         self._emit("job_done", {
             "id": job.id,
             "name": job.params.get("display_name", job.id),
             "type": job.job_type.value,
             "output": str(job.output_path) if job.output_path else None,
             "elapsed": round(job.elapsed_seconds, 1),
+            **({"subtitle_paths":job.params["subtitle_paths"]} if "subtitle_paths" in job.params else {}),
+            **({"output_paths": job.params["output_paths"]} if "output_paths" in job.params else {}),
+            **({"archive": job.params["archive"]} if "archive" in job.params else {}),
+            **({"batch_summary": job.params["batch_summary"]} if "batch_summary" in job.params else {}),
         })
         if self.settings.sound.play_on_complete:
             threading.Thread(target=play_completion_sound, daemon=True).start()
@@ -440,7 +457,7 @@ class RetroDiscBridge:
 
     # ── Konvertierung ─────────────────────────────────────────────────
     def convert_file(self, input_path: str, preset_name: str,
-                     output_path: str = None, overwrite: bool = False) -> str:
+                     output_path: str = None, overwrite: bool = False, encoder: str = "auto") -> str:
         from src.config.presets import get_preset
         from src.models.media import Job, JobType
 
@@ -459,16 +476,34 @@ class RetroDiscBridge:
             output_path=Path(output_path) if output_path else None,
             preset=preset,
             params={"display_name": f"{source.name} -> {preset.display_name}",
-                    "overwrite": bool(overwrite)},
+                    "overwrite": bool(overwrite), "encoder": encoder},
         )
         async def _handler(j):
             result = await self.converter.convert_file(
                 j.input_files[0], j.preset, j.output_path, job=j,
                 overwrite=j.params["overwrite"],
+                hwaccel=j.params["encoder"] if sys.platform == "darwin" else None,
             )
             j.output_path = result
 
         return self._submit_job(job, _handler)
+
+    def get_recent_media(self) -> str:
+        from src.services.dvd_workflow import DVDWorkflow
+        rows = self.library.recent_outputs()
+        for row in rows:
+            row["can_convert"] = row["type"] in ("video", "audio")
+            row["can_burn"] = DVDWorkflow.supports_recent_source(Path(row["path"]))
+        return json.dumps(rows)
+
+    def get_encoder_options(self) -> str:
+        if sys.platform != "darwin":
+            return json.dumps([])
+        return json.dumps([
+            {"id": "auto", "name": "Automatisch – Apple Hardware bevorzugt"},
+            {"id": "videotoolbox", "name": "Apple Hardware – schnell"},
+            {"id": "cpu", "name": "CPU – maximale Qualitätskontrolle"},
+        ])
 
     def get_presets(self, category: str = None) -> str:
         from src.config.presets import ALL_PRESETS, get_presets_by_category
@@ -476,6 +511,7 @@ class RetroDiscBridge:
         return json.dumps([{
             "id": p.name, "name": p.display_name,
             "category": p.category, "container": p.container,
+            "media_type": "video" if p.video_codec else "audio",
         } for p in presets])
 
     # ── Download ──────────────────────────────────────────────────────
@@ -502,7 +538,15 @@ class RetroDiscBridge:
                     "display_name": f"Download: {url[:50]}"},
         )
         async def _handler(j):
-            result = await self.downloader.download(
+            downloader = self.downloader
+            if sys.platform == "darwin" and j.params["audio_only"]:
+                from src.core.downloader import Downloader
+                downloader = Downloader(
+                    ytdlp_path=self.downloader.ytdlp_path,
+                    ffmpeg_path=self.downloader.ffmpeg_path,
+                    output_dir=self.settings.directories.audio_dir,
+                )
+            result = await downloader.download(
                 url=j.params["url"],
                 format=j.params["format"],
                 extract_audio=j.params["audio_only"],
@@ -511,6 +555,12 @@ class RetroDiscBridge:
                 job=j,
             )
             j.output_path = result
+            if sys.platform == "darwin":
+                j.params["output_paths"] = [str(result)]
+                if not j.params["audio_only"]:
+                    audio = self.settings.directories.audio_dir / f"{result.stem[:120]}_{j.id}.mp3"
+                    audio = await self.ffmpeg.extract_audio(result, audio, job=j)
+                    j.params["output_paths"].append(str(audio))
 
         return self._submit_job(job, _handler)
 
@@ -537,15 +587,40 @@ class RetroDiscBridge:
                          "name": j.params.get("display_name", j.id),
                          "state": j.state.value,
                          "progress": j.progress,
-                         "awaiting_copy_medium": j.params.get("awaiting_copy_medium", False)})
+                         "output": str(j.output_path) if j.output_path else None,
+                         "awaiting_copy_medium": j.params.get("awaiting_copy_medium", False),
+                         **({"output_paths": j.params["output_paths"]} if "output_paths" in j.params else {})})
         for j in self.pipeline.completed_jobs[-20:]:
             jobs.append({"id": j.id,
                          "name": j.params.get("display_name", j.id),
                          "state": j.state.value,
-                         "progress": j.progress})
+                         "progress": j.progress,
+                         "output": str(j.output_path) if j.output_path else None,
+                         **({"output_paths": j.params["output_paths"]} if "output_paths" in j.params else {})})
         return json.dumps(jobs)
 
     # ── Settings ──────────────────────────────────────────────────────
+    def get_platform_info(self) -> str:
+        from src.utils.platform_ui import platform_info
+        return json.dumps(platform_info())
+
+    def get_path_status(self) -> str:
+        rows = []
+        for name, path in self.settings.directories:
+            try:
+                rows.append({'name':name, **self.settings.validate_directory(path)})
+            except (OSError, ValueError) as exc:
+                rows.append({'name':name, 'path':str(path), 'error':str(exc)})
+        internal = {'config':self.settings._default_config_path(), 'logs':LOG_DIR,
+                    'database / recent media':self.library.db_path,
+                    'thumbnails':self.library.thumb_dir,
+                    'director projects':self.library.db_path.parent / 'projects',
+                    'preview':self.settings.directories.temp_dir / 'preview'}
+        rows.extend({'name':name,'path':str(path),'exists':path.exists(),
+                     'usage':'Bei Bedarf erstellt' if not path.exists() else 'Vorhanden'}
+                    for name,path in internal.items())
+        return json.dumps(rows)
+
     def get_settings(self) -> str:
         return self.settings.model_dump_json()
 
@@ -591,6 +666,7 @@ class RetroDiscBridge:
         self.ffmpeg.ffmpeg_path = tools.ffmpeg
         self.ffmpeg.ffprobe_path = tools.ffprobe
         self.converter.output_dir = directories.output_dir
+        self.dvd_workflow.temp_dir = directories.temp_dir
         self.downloader.ytdlp_path = tools.ytdlp
         self.downloader.ffmpeg_path = tools.ffmpeg
         self.downloader.output_dir = directories.download_dir
@@ -610,6 +686,7 @@ class RetroDiscBridge:
             )
             new_settings = AppSettings.model_validate(merged)
             self._resolve_disc_tool_paths(new_settings.tools)
+            new_settings.ensure_directories()
             new_settings.save()
             self.settings = new_settings
             self._apply_runtime_settings()
@@ -618,14 +695,76 @@ class RetroDiscBridge:
             return json.dumps({"error": str(e)})
 
     def get_tool_status(self) -> str:
-        tools = check_tools()
+        import shutil
         status = {}
-        for name in ("ffmpeg", "ffprobe", "ytdlp"):
-            status[name] = {
-                "available": name in tools,
-                "path": tools.get(name, ""),
-            }
+        runtime = {'ffmpeg':(getattr(self,'ffmpeg',None),'ffmpeg_path'),
+                   'ffprobe':(getattr(self,'ffmpeg',None),'ffprobe_path'),
+                   'ytdlp':(getattr(self,'downloader',None),'ytdlp_path')}
+        for name, configured in self.settings.tools:
+            service, attribute = runtime.get(name,(getattr(self,'disc',None),name))
+            configured = getattr(service,attribute,configured)
+            resolved = shutil.which(configured)
+            status[name] = {'available': bool(resolved), 'path':resolved or configured}
         return json.dumps(status)
+
+    def diagnostics(self) -> str:
+        """Honest capability dashboard (Mission 12). Real detection only, no fake availability."""
+        groups = {"Werkzeuge": [], "KI & Sprache": [], "Encoder": [], "Restaurierung": []}
+
+        def add(cat, name, status, detail=""):
+            groups[cat].append({"name": name, "status": status, "detail": detail})
+
+        try:
+            tools = json.loads(self.get_tool_status())
+            for key, label in (("ffmpeg", "FFmpeg"), ("ffprobe", "FFprobe"), ("ytdlp", "yt-dlp")):
+                info = tools.get(key, {})
+                add("Werkzeuge", label, "available" if info.get("available") else "unavailable",
+                    info.get("path", ""))
+        except Exception as exc:
+            add("Werkzeuge", "FFmpeg/yt-dlp", "unavailable", str(exc))
+
+        # Ollama, Whisper, TTS aus dem Director-Capability-Aggregat.
+        try:
+            dc = self._async(self._director_service().capabilities()).result(timeout=10)
+            models = dc.get("llm_models", [])
+            add("KI & Sprache", "Ollama (LLM)", "available" if models else "unavailable",
+                (", ".join(models[:4]) + ("…" if len(models) > 4 else "")) if models else "kein lokales Modell")
+            whisper = dc.get("whisper", {})
+            wstatus = {"available": "available", "package_missing": "unavailable",
+                       "model_missing": "model_missing", "not_configured": "optional"}.get(whisper.get("status"), "unavailable")
+            add("KI & Sprache", "Whisper (ASR)", wstatus, whisper.get("note", ""))
+            tts = dc.get("tts", {})
+            add("KI & Sprache", "TTS (Systemstimmen)", "available" if tts.get("available") else "unavailable",
+                tts.get("engine", "") if tts.get("available") else "keine lokale TTS")
+        except Exception as exc:
+            add("KI & Sprache", "Ollama/Whisper/TTS", "unavailable", str(exc))
+
+        try:
+            sc = self._async(self._smart_editor_service().capabilities()).result(timeout=10)
+            hw = sc.get("hardware_encode", [])
+            add("Encoder", "Hardware-Encoder", "available" if hw else "optional",
+                ", ".join(hw) if hw else "nur CPU (libx264/libx265)")
+            add("Encoder", "libass (Untertitel einbrennen)",
+                "available" if sc.get("captions") else "unavailable",
+                "" if sc.get("captions") else "FFmpeg ohne libass – SRT-Export bleibt möglich")
+        except Exception as exc:
+            add("Encoder", "Encoder/libass", "unavailable", str(exc))
+
+        try:
+            rc = self._async(self._restoration_service().capabilities()).result(timeout=10)
+            level = rc.get("stabilization", {}).get("level", "none")
+            add("Restaurierung", "libvidstab (Stabilisierung)",
+                "available" if level == "advanced" else "optional" if level == "basic" else "unavailable",
+                {"advanced": "vidstab", "basic": "nur deshake (basic)", "none": "kein Stabilisierungsfilter"}.get(level, ""))
+            for key, info in rc.get("providers", {}).items():
+                add("Restaurierung", {"qtgmc": "QTGMC/VapourSynth", "realesrgan": "Real-ESRGAN",
+                    "basicvsr": "BasicVSR++", "rvrt": "RVRT/VRT", "rife": "RIFE",
+                    "vhs_decode": "vhs-decode"}.get(key, key),
+                    "optional", info.get("note", "nicht integriert"))
+        except Exception as exc:
+            add("Restaurierung", "Provider", "unavailable", str(exc))
+
+        return json.dumps({"groups": [{"category": c, "items": items} for c, items in groups.items()]})
 
     def play_sound(self) -> str:
         threading.Thread(target=play_completion_sound, daemon=True).start()
@@ -647,11 +786,10 @@ class RetroDiscBridge:
     def open_folder_for_batch(self) -> str:
         return self.open_folder_dialog()
 
-    def open_output_folder(self) -> str:
+    def open_output_folder(self, output_path: str = "") -> str:
         try:
-            import os
-            path = self.settings.directories.output_dir
-            os.startfile(str(path))
+            from src.utils.reveal import reveal_output
+            reveal_output(Path(output_path) if output_path else self.settings.directories.output_dir)
             return json.dumps({"ok": True})
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -1033,6 +1171,270 @@ class RetroDiscBridge:
 
         return self._submit_job(job, _handler)
 
+    def _restoration_service(self):
+        from src.services.restoration import Restoration
+        return Restoration(self.library,self.ffmpeg,self.settings.directories.output_dir,self.settings.directories.temp_dir)
+
+    def restoration_analyze(self, path):
+        future=None
+        try:
+            future=self._async(self._restoration_service().analyze(path))
+            return future.result(timeout=120).model_dump_json()
+        except Exception as exc:
+            if future is not None:future.cancel()
+            return json.dumps({'error':str(exc)})
+
+    def restoration_process(self, plan_json, preview=True):
+        from src.models.restoration import RestorationPlan
+        from src.models.media import Job, JobType
+        future=None
+        try:
+            plan=RestorationPlan.model_validate_json(plan_json)
+            if preview:
+                future=self._async(self._restoration_service().render(plan,preview=True))
+                return future.result(timeout=180).model_dump_json()
+            job=Job(job_type=JobType.RESTORE,input_files=[Path(plan.analysis.asset.path)],
+                    params={'display_name':'Video restaurieren: '+plan.analysis.asset.title})
+            async def handler(j):
+                await self._restoration_service().render(plan,job=j)
+            return self._submit_job(job,handler)
+        except Exception as exc:
+            if future is not None:future.cancel()
+            return json.dumps({'error':str(exc)})
+
+    def restoration_project(self, value, save=False):
+        from src.models.restoration import RestorationPlan
+        try:
+            service=self._restoration_service()
+            if save:
+                plan=RestorationPlan.model_validate_json(value);service.save(plan)
+            else:
+                plan=service.load(value)
+            return plan.model_dump_json()
+        except Exception as exc:
+            return json.dumps({'error':str(exc)})
+
+    def restoration_play(self, project_id, index):
+        try:
+            plan=self._restoration_service().load(project_id)
+            index=int(index)
+            if index not in (0,1): raise ValueError('Ungültige Vorschau.')
+            path=Path(plan.preview[index])
+            if not path.is_file() or path.suffix.lower()!='.mp4':raise ValueError('Vorschau fehlt.')
+            if sys.platform=='darwin':
+                from src.utils.subprocesses import run_hidden
+                run_hidden(['open',str(path)],check=True,timeout=10)
+            elif sys.platform=='win32':
+                os.startfile(str(path))
+            else:
+                from src.utils.subprocesses import run_hidden
+                run_hidden(['xdg-open',str(path)],check=True,timeout=10)
+            return json.dumps({'ok':True})
+        except Exception as exc:
+            return json.dumps({'error':str(exc)})
+
+    def restoration_batch(self, paths_json, adaptive=False, preset="natural", size="original"):
+        """Queue a restoration for several files/folders; one failure never stops the rest (Mission 7)."""
+        from src.models.media import Job, JobType
+        try:
+            raw = json.loads(paths_json) if isinstance(paths_json, str) else paths_json
+            paths = [Path(p) for p in raw]
+            if not paths:
+                return json.dumps({"error": "Keine Quellen ausgewählt."})
+            service = self._restoration_service()
+            sources = service.collect_sources(paths)
+            if not sources:
+                return json.dumps({"error": "Keine Videodateien in der Auswahl gefunden."})
+            job = Job(job_type=JobType.RESTORE, input_files=sources,
+                      params={"display_name": f"Batch-Restauration ({len(sources)} Dateien)", "batch_results": []})
+
+            async def handler(j):
+                def on_item(index, entry, total):
+                    j.params["batch_results"].append(entry)
+                    done = index + 1
+                    j.update_progress(done / total * 100, f"Datei {done}/{total}: {entry['status']}")
+                results = await service.batch(sources, adaptive=bool(adaptive), preset=preset,
+                                              size=size, job=j, on_item=on_item)
+                outputs = [r["output"] for r in results if r.get("output")]
+                if outputs:
+                    j.output_path = Path(outputs[-1])
+                    j.params["output_paths"] = outputs
+                j.params["batch_summary"] = {"total": len(results),
+                    "done": sum(1 for r in results if r["status"] == "done"),
+                    "errors": sum(1 for r in results if r["status"] == "error")}
+            return self._submit_job(job, handler)
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+    def restoration_archive(self, plan_json):
+        """Mission 4/5: queue a lossless FFV1 preservation master + manifest for the analysed source."""
+        from src.models.restoration import RestorationPlan
+        from src.models.media import Job, JobType
+        try:
+            plan = RestorationPlan.model_validate_json(plan_json)
+            service = self._restoration_service()
+            job = Job(job_type=JobType.CONVERT, input_files=[Path(plan.analysis.asset.path)],
+                      params={"display_name": f"Archivkopie: {plan.analysis.asset.title}"})
+
+            async def handler(j):
+                result = await service.archive(plan, job=j)
+                archive = result.archives[-1] if result.archives else None
+                if archive:
+                    # Deliberately NOT in output_paths: the preservation master must
+                    # not be promoted into Recent Media. The UI gets it via job_done.
+                    j.params["archive"] = archive
+            return self._submit_job(job, handler)
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+    def _smart_editor_service(self):
+        from src.services.smart_edit import SmartEditor
+        dirs = self.settings.directories
+        return SmartEditor(self.library, self.ffmpeg, dirs.output_dir, dirs.temp_dir)
+
+    def smart_edit_capabilities(self):
+        try:
+            return json.dumps(self._async(self._smart_editor_service().capabilities()).result(timeout=8))
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+    def smart_edit_short(self, source_path, target_duration=15, aspect_ratio="9:16",
+                         silence_preset="natural", caption_style="modern", voice_preset="clear",
+                         export_preset="youtube_shorts", remove_fillers=False):
+        """Mission 10: turn one source into a short, then queue the render (LLM optional)."""
+        from src.models.media import Job, JobType
+        from src.models.smart_edit import (CaptionStyle, SilenceSettings, SmartEditProject,
+                                            VoiceEnhanceSettings)
+        try:
+            source = Path(source_path)
+            if not source.is_file():
+                return json.dumps({"error": f"Quelle fehlt: {source}"})
+            asset = self._async(self.library.asset(source)).result(timeout=60)
+            project = SmartEditProject(source_assets=[asset], target_duration=float(target_duration),
+                aspect_ratio=aspect_ratio, silence=SilenceSettings(preset=silence_preset),
+                captions=CaptionStyle(style=caption_style), voice_enhance=VoiceEnhanceSettings(preset=voice_preset),
+                export_preset=export_preset, remove_fillers=bool(remove_fillers),
+                planner="ollama" if asset.transcript else "deterministic")
+            editor = self._smart_editor_service()
+            director = self._director_service() if asset.transcript else None
+            job = Job(job_type=JobType.SMART_EDIT, input_files=[source],
+                      params={"display_name": f"Short erstellen: {asset.title or source.name}"})
+
+            async def handler(j):
+                await editor.render_short(project, director=director, job=j)
+            return self._submit_job(job, handler)
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+    def smart_edit_project(self, value, save=False):
+        from src.models.smart_edit import SmartEditProject
+        try:
+            service = self._smart_editor_service()
+            if save:
+                project = SmartEditProject.model_validate_json(value); service.save(project)
+            else:
+                project = service.load(value)
+            return project.model_dump_json()
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+    def _director_service(self):
+        from src.services.director import Director
+        from src.services.assistant import Assistant
+        dirs = self.settings.directories
+        return Director(self.library, self.ffmpeg,
+            Assistant(model=self.settings.ai.ollama_model, host=self.settings.ai.ollama_host),
+            dirs.output_dir, dirs.audio_dir, dirs.temp_dir)
+
+    def director_capabilities(self):
+        try:
+            return json.dumps(self._async(self._director_service().capabilities()).result(timeout=8))
+        except Exception as exc:
+            return json.dumps({"error":str(exc)})
+
+    def director_assets(self, paths_json="[]"):
+        async def load():
+            paths = json.loads(paths_json)
+            if not paths:
+                paths = [r["path"] for r in self.library.recent_outputs() if r["type"] == "video"][:3]
+            if not isinstance(paths, list) or len(paths) > 20:
+                raise ValueError("Bitte höchstens 20 Assets auswählen.")
+            return [(await self.library.asset(path)).model_dump() for path in paths]
+        try:
+            return json.dumps(self._async(load()).result(timeout=60))
+        except Exception as exc:
+            return json.dumps({"error":str(exc)})
+
+    def director_plan(self, prompt, paths_json, duration=0, model="", transcribe=False):
+        future = None
+        try:
+            future = self._async(self._director_service().plan(prompt, json.loads(paths_json), float(duration),
+                model=model, transcribe=bool(transcribe), whisper_model=self.settings.ai.whisper_model))
+            return future.result(timeout=200).model_dump_json()
+        except Exception as exc:
+            if future is not None:
+                future.cancel()
+            return json.dumps({"error":str(exc)})
+
+    def director_projects(self):
+        return json.dumps(self._director_service().list_projects())
+
+    def director_load(self, project_id):
+        try:
+            return self._director_service().load(project_id).model_dump_json()
+        except Exception as exc:
+            return json.dumps({"error":str(exc)})
+
+    def director_edit(self, project_json, operation, index=0, values_json="{}"):
+        from src.models.director import ProductionProject
+        from src.services.timeline import edit
+        try:
+            return edit(ProductionProject.model_validate_json(project_json),operation,int(index),json.loads(values_json)).model_dump_json()
+        except Exception as exc:
+            return json.dumps({'error':str(exc)})
+
+    def director_save(self, project_json):
+        from src.models.director import ProductionProject
+        try:
+            project = ProductionProject.model_validate_json(project_json)
+            self._director_service().save(project)
+            return json.dumps({"id":project.id})
+        except Exception as exc:
+            return json.dumps({"error":str(exc)})
+
+    def director_translate(self, project_json, model, target_language='en'):
+        from src.models.director import ProductionProject, DubbingPlan, DubbingCue
+        from src.services.translation import LocalOllamaTranslationProvider
+        from src.services.assistant import Assistant
+        try:
+            project=ProductionProject.model_validate_json(project_json)
+            if not project.dubbing:
+                asset=next((a for a in project.assets if a.kind=='video' and (a.transcript or {}).get('segments')),None)
+                if not asset:
+                    raise ValueError('Dubbing benötigt zeitmarkiertes Transkript oder einen manuell geprüften Dubbing-Plan.')
+                project.dubbing=DubbingPlan(asset_id=asset.id,source_language=asset.transcript.get('language') or 'auto',
+                    target_language=target_language,cues=[DubbingCue(start=s['start'],end=s['end'],source_text=s['text']) for s in asset.transcript['segments']])
+            provider=LocalOllamaTranslationProvider(Assistant(model=model,host=self.settings.ai.ollama_host))
+            return self._async(self._director_service().prepare_dubbing(project,provider)).result(timeout=100).model_dump_json()
+        except Exception as exc:
+            return json.dumps({'error':str(exc)})
+
+    def director_render(self, project_json, encoder="auto"):
+        from src.models.director import ProductionProject
+        from src.models.media import Job, JobType
+        try:
+            project = ProductionProject.model_validate_json(project_json)
+        except Exception as exc:
+            return json.dumps({"error":str(exc)})
+        job = Job(job_type=JobType.DIRECTOR_RENDER,
+                  input_files=[Path(a.path) for a in project.assets],
+                  params={"display_name":f"KI-Regisseur: {project.title}", "project_id":project.id})
+        async def handler(j):
+            service=self._director_service()
+            render=service.render_dubbing if project.dubbing else service.render
+            await render(project, encoder=encoder, job=j)
+        return self._submit_job(job, handler)
+
     def run_assistant(self, prompt: str) -> str:
         prompt = (prompt or "").strip()
         if not prompt:
@@ -1116,14 +1518,18 @@ class RetroDiscBridge:
             start, end = float(start), float(end)
             if start < 0 or end <= start:
                 return json.dumps({"error": "Ungültiger Vorschau-Bereich."})
-            preview_dir = Path.home() / ".retrodisc" / "preview"
+            preview_dir = self.settings.directories.temp_dir / "preview"
             preview_dir.mkdir(parents=True, exist_ok=True)
             preview = preview_dir / f"{source.stem}_preview.mp4"
             preview.unlink(missing_ok=True)
             result = self._async(
                 self.ffmpeg.trim(source, preview, start, min(end, start + 20.0))
             ).result(timeout=180)
-            os.startfile(str(result))
+            if sys.platform == "darwin":
+                from src.utils.subprocesses import run_hidden
+                run_hidden(["open", str(result)], check=True, timeout=10)
+            else:
+                os.startfile(str(result))
             return json.dumps({"ok": True, "path": str(result)})
         except Exception as e:
             return json.dumps({"error": str(e)})
@@ -1152,7 +1558,7 @@ class RetroDiscBridge:
         return self._submit_job(job, _handler)
 
     def convert_batch(self, paths_json: str, preset: str,
-                      output_path: str = "", overwrite: bool = False) -> str:
+                      output_path: str = "", overwrite: bool = False, encoder: str = "auto") -> str:
         try:
             if isinstance(paths_json, str) and Path(paths_json).is_dir():
                 supported = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm",
@@ -1179,7 +1585,7 @@ class RetroDiscBridge:
                 from src.config.presets import get_preset
                 item_output = output_dir / (Path(path).stem + "." + get_preset(preset).container)
             result = json.loads(self.convert_file(
-                path, preset, str(item_output) if item_output else None, overwrite))
+                path, preset, str(item_output) if item_output else None, overwrite, encoder))
             if result.get("job_id"):
                 ids.append(result["job_id"])
             elif result.get("error"):
@@ -1335,19 +1741,24 @@ class RetroDiscApi:
     def open_tool_dialog(self): return self._bridge.open_tool_dialog()
     def open_folder_dialog(self): return self._bridge.open_folder_dialog()
     def open_folder_for_batch(self): return self._bridge.open_folder_for_batch()
-    def open_output_folder(self): return self._bridge.open_output_folder()
+    def open_output_folder(self, output_path=""): return self._bridge.open_output_folder(output_path)
     def probe_file(self, path): return self._bridge.probe_file(path)
     def get_mediainfo(self, path): return self._bridge.probe_file(path)
-    def convert_file(self, input_path, preset_name, output_path=None, overwrite=False): return self._bridge.convert_file(input_path, preset_name, output_path, overwrite)
+    def convert_file(self, input_path, preset_name, output_path=None, overwrite=False, encoder="auto"): return self._bridge.convert_file(input_path, preset_name, output_path, overwrite, encoder)
     def convert_batch(self, *args): return self._bridge.convert_batch(*args)
     def get_presets(self, category=None): return self._bridge.get_presets(category)
+    def get_encoder_options(self): return self._bridge.get_encoder_options()
+    def get_recent_media(self): return self._bridge.get_recent_media()
     def download_url(self, url, format="best", audio_only=False, subtitles=False): return self._bridge.download_url(url, format, audio_only, subtitles)
     def search_media(self, query, sources="[]", max_results=15): return self._bridge.search_media(query, sources, max_results)
     def get_queue(self): return self._bridge.get_queue()
     def clear_completed(self): return self._bridge.clear_completed()
+    def get_platform_info(self): return self._bridge.get_platform_info()
+    def get_path_status(self): return self._bridge.get_path_status()
     def get_settings(self): return self._bridge.get_settings()
     def save_settings(self, data): return self._bridge.save_settings(data)
     def get_tool_status(self): return self._bridge.get_tool_status()
+    def diagnostics(self): return self._bridge.diagnostics()
     def check_tools(self): return self._bridge.check_tools()
     def play_sound(self): return self._bridge.play_sound()
     def detect_burners(self): return self._bridge.detect_burners()
@@ -1360,6 +1771,25 @@ class RetroDiscApi:
     def generate_subtitles(self, *args): return self._bridge.generate_subtitles(*args)
     def upscale_video(self, *args): return self._bridge.upscale_video(*args)
     def interpolate_video(self, *args): return self._bridge.interpolate_video(*args)
+    def restoration_analyze(self,path): return self._bridge.restoration_analyze(path)
+    def restoration_process(self,plan_json,preview=True): return self._bridge.restoration_process(plan_json,preview)
+    def restoration_project(self,value,save=False): return self._bridge.restoration_project(value,save)
+    def restoration_play(self,project_id,index): return self._bridge.restoration_play(project_id,index)
+    def restoration_batch(self,paths_json,adaptive=False,preset="natural",size="original"): return self._bridge.restoration_batch(paths_json,adaptive,preset,size)
+    def restoration_archive(self,plan_json): return self._bridge.restoration_archive(plan_json)
+    def smart_edit_capabilities(self): return self._bridge.smart_edit_capabilities()
+    def smart_edit_short(self,source_path,target_duration=15,aspect_ratio="9:16",silence_preset="natural",caption_style="modern",voice_preset="clear",export_preset="youtube_shorts",remove_fillers=False): return self._bridge.smart_edit_short(source_path,target_duration,aspect_ratio,silence_preset,caption_style,voice_preset,export_preset,remove_fillers)
+    def smart_edit_project(self,value,save=False): return self._bridge.smart_edit_project(value,save)
+    def director_capabilities(self): return self._bridge.director_capabilities()
+    def director_assets(self, paths_json="[]"): return self._bridge.director_assets(paths_json)
+    def director_plan(self, prompt, paths_json, duration=0, model="", transcribe=False): return self._bridge.director_plan(prompt, paths_json, duration, model, transcribe)
+    def director_projects(self): return self._bridge.director_projects()
+    def director_load(self, project_id): return self._bridge.director_load(project_id)
+    def director_edit(self, project_json, operation, index=0, values_json="{}"):
+        return self._bridge.director_edit(project_json,operation,index,values_json)
+    def director_save(self, project_json): return self._bridge.director_save(project_json)
+    def director_translate(self, project_json, model, target_language='en'): return self._bridge.director_translate(project_json,model,target_language)
+    def director_render(self, project_json, encoder="auto"): return self._bridge.director_render(project_json, encoder)
     def run_assistant(self, *args): return self._bridge.run_assistant(*args)
     def scan_library(self, *args): return self._bridge.scan_library(*args)
     def search_library(self, *args): return self._bridge.search_library(*args)
@@ -1383,6 +1813,10 @@ def get_splash_url() -> str:
 
 def show_download_splash(missing_tools: list) -> None:
     """Zeigt einen Splash mit Download-Fortschritt für fehlende Tools."""
+    if sys.platform == "darwin":
+        log.error("Fehlende macOS-Tools: %s. Native Tools im PATH oder vendor/ bereitstellen; "
+                  "der automatische Download enthält nur Windows-Binaries.", ", ".join(missing_tools))
+        return
     try:
         import webview
 
@@ -1553,6 +1987,7 @@ def main():
     # On Windows/WebView2, file:// + http_server can put the injected
     # pywebview bridge on a different origin, leaving window.pywebview missing
     # and making the launcher buttons look clickable but do nothing.
+    from src.utils.platform_ui import native_window_options
     ui_html = BUNDLE_DIR / "src" / "ui" / "app.html"
     try:
         window = webview.create_window(
@@ -1564,6 +1999,7 @@ def main():
             min_size=(860, 560),
             background_color="#3A6EA5",
             text_select=False,
+            **native_window_options(),
         )
     except Exception as e:
         log.warning(f"Inline HTML load failed ({e}), falling back to file URL")
@@ -1576,6 +2012,7 @@ def main():
             min_size=(860, 560),
             background_color="#3A6EA5",
             text_select=False,
+            **native_window_options(),
         )
     bridge.window = window
 
@@ -1586,11 +2023,27 @@ def main():
     debug = os.environ.get("RETRODISC_DEBUG", "0") == "1"
     log.info(f"Starte Fenster (debug={debug})")
     try:
-        webview.start(debug=debug)
+        if '--webview-check' in sys.argv:
+            from src.utils.package_check import webview_check
+            report=sys.argv[sys.argv.index('--webview-check')+1]
+            webview.start(lambda:webview_check(window,report),debug=debug)
+        else:
+            webview.start(debug=debug)
     finally:
         bridge.shutdown()
     log.info("RetroDisc beendet.")
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()
+    if '--package-check' in sys.argv:
+        import argparse
+        from src.utils.package_check import run
+        parser=argparse.ArgumentParser()
+        parser.add_argument('--package-check',required=True)
+        parser.add_argument('--model')
+        parser.add_argument('--audio')
+        args=parser.parse_args()
+        raise SystemExit(run(args.package_check,args.model,args.audio))
     main()

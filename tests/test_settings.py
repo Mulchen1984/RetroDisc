@@ -13,7 +13,7 @@ from src.config.settings import AppSettings, BurnSettings
 
 @pytest.mark.parametrize(
     ("platform_name", "expected"),
-    [("Windows", "D:"), ("Linux", "/dev/sr0"), ("Darwin", "/dev/sr0")],
+    [("Windows", "D:"), ("Linux", "/dev/sr0"), ("Darwin", "")],
 )
 def test_default_burn_device_matches_platform(monkeypatch, platform_name, expected):
     monkeypatch.setattr(settings_module.platform, "system", lambda: platform_name)

@@ -106,7 +106,7 @@ def test_batch_accepts_directory_and_filters_media(tmp_path):
 
     bridge = RetroDiscBridge.__new__(RetroDiscBridge)
     captured = []
-    bridge.convert_file = lambda path, preset, output, overwrite: (
+    bridge.convert_file = lambda path, preset, output, overwrite, encoder="auto": (
         captured.append(Path(path).name)
         or json.dumps({"job_id": Path(path).stem})
     )

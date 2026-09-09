@@ -1,0 +1,63 @@
+{
+  "bytes_unique_regular_files": 266068718,
+  "mib": 253.74,
+  "largest_files": [
+    [
+      40549120,
+      "Contents/Frameworks/onnxruntime/capi/onnxruntime_pybind11_state.so"
+    ],
+    [
+      33157200,
+      "Contents/Frameworks/onnxruntime/capi/libonnxruntime.1.29.0.dylib"
+    ],
+    [
+      23047392,
+      "Contents/MacOS/RetroDisc"
+    ],
+    [
+      17122544,
+      "Contents/Frameworks/libpython3.11.dylib"
+    ],
+    [
+      12787840,
+      "Contents/Frameworks/av/__dot__dylibs/libavcodec.62.28.102.dylib"
+    ],
+    [
+      11072080,
+      "Contents/MacOS/yt-dlp"
+    ],
+    [
+      9644128,
+      "Contents/Frameworks/libavcodec.62.dylib"
+    ],
+    [
+      9547536,
+      "Contents/Frameworks/tokenizers/tokenizers.abi3.so"
+    ],
+    [
+      7818800,
+      "Contents/Frameworks/hf_xet/hf_xet.abi3.so"
+    ],
+    [
+      6827632,
+      "Contents/Frameworks/av/__dot__dylibs/libx265.216.dylib"
+    ],
+    [
+      4862416,
+      "Contents/Frameworks/libcrypto.3.dylib"
+    ],
+    [
+      4113712,
+      "Contents/Frameworks/pydantic_core/_pydantic_core.cpython-311-darwin.so"
+    ]
+  ],
+  "name_matched_components_bytes": {
+    "ffmpeg": 490520,
+    "python": 33429082,
+    "faster_whisper": 1382820,
+    "ctranslate2": 4928015,
+    "yt-dlp": 11072080,
+    "yt_dlp": 10338937
+  },
+  "note": "Symlinks excluded; modules inside PYZ and shared dependencies are not attributed exactly."
+}

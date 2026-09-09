@@ -201,3 +201,15 @@ Bevor der Mac ziehen kann, muss einmalig entschieden und eingerichtet werden:
    ```
 
 Erst danach gilt Schritt 7 dieses Dokuments.
+
+## Ergaenzung 2026-09-08: gepruefter macOS-Quellcode
+
+- VideoToolbox H.264/HEVC: **mac-verified** im Converter mit echten Outputs;
+  CPU-Fallback verifiziert. Details/Messungen im Release-Audit-Journal.
+- Download → Video/MP3: externer YouTube-Quellcode-Test erfolgreich;
+  zentrale macOS-Defaults Movies/Music, Windows-Defaults bleiben bestehen.
+- Ordneroeffnung und Queue-Pfadanzeige: gezielte automatische Regressionen gruen,
+  **visuell noch offen**. Darwin-Brennerdefault ist jetzt leer; native optische
+  Erkennung und physische Medienoperationen bleiben offen.
+- Diese Ergaenzung aktualisiert nur die genannten Quellcodepfade, keine alten
+  Artefakt-Hashes und keine Aussage ueber einen fertigen macOS-Build.

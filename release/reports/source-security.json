@@ -1,0 +1,5 @@
+{
+  "scope": "Python runtime source and launcher; no .env or key files read",
+  "literal_credential_findings": [],
+  "limitations": "Heuristic, not a comprehensive secret/security proof"
+}

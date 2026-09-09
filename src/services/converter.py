@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import structlog
 from pathlib import Path
 from typing import Optional
 
-from src.core.ffmpeg import FFmpeg
+from src.core.ffmpeg import FFmpeg, FFmpegError
 from src.config.presets import get_preset, ConversionPreset
 from src.models.media import Job, JobType, MediaFile
 
@@ -86,7 +87,7 @@ class Converter:
                  preset=p.display_name,
                  output=output_path.name)
 
-        return await self.ffmpeg.convert(
+        options = dict(
             input_path=input_path,
             output_path=output_path,
             video_codec=p.video_codec,
@@ -101,6 +102,54 @@ class Converter:
             hwaccel=hwaccel,
             overwrite=overwrite,
         )
+        apple_mode = sys.platform == "darwin" and hwaccel in (None, "auto", "videotoolbox", "cpu", "none")
+        if apple_mode:
+            # This setting selects an encoder, not FFmpeg's input decoder (-hwaccel).
+            options["hwaccel"] = None
+        encoder = {"libx264": "h264_videotoolbox", "libx265": "hevc_videotoolbox"}.get(p.video_codec)
+        if apple_mode and hwaccel not in ("cpu", "none") and encoder:
+            if encoder in await self.ffmpeg.available_video_encoders():
+                hardware = dict(options)
+                extras = []
+                source_args = iter(p.extra_args or [])
+                for arg in source_args:
+                    if arg in ("-preset", "-crf"):
+                        next(source_args, None)
+                    elif arg in ("-level", "-level:v") and encoder == "h264_videotoolbox":
+                        level = next(source_args, "0")
+                        extras += [arg, str(round(float(level) * 10)) if "." in level else level]
+                    else:
+                        extras.append(arg)
+                extras += ["-allow_sw", "0", "-pix_fmt", "yuv420p"]
+                if encoder == "hevc_videotoolbox" and output_path.suffix.lower() in (".mp4", ".mov", ".m4v"):
+                    extras += ["-tag:v", "hvc1"]
+                bitrate = p.video_bitrate
+                if bitrate is None:
+                    # Original-size HEVC preset: scale its 4K/15M reference by pixels.
+                    # CRF has no equivalent here; retain the CPU preset for exact CRF control.
+                    info = await self.ffmpeg.probe(input_path)
+                    if info.video_streams:
+                        v = info.video_streams[0]
+                        reference = get_preset("mp4_h265_4k")
+                        reference_rate = float(reference.video_bitrate.rstrip("M")) * 1_000_000
+                        bitrate = str(max(250_000, round(reference_rate * v.width * v.height / (3840 * 2160))))
+                hardware.update(video_codec=encoder, video_bitrate=bitrate, extra_args=extras)
+                try:
+                    if job:
+                        job.params["encoder"] = encoder
+                    result = await self.ffmpeg.convert(**hardware)
+                    return result
+                except FFmpegError as exc:
+                    log.warning("VideoToolbox fehlgeschlagen; CPU-Fallback", encoder=encoder, error=str(exc))
+                    if job:
+                        job.params["encoder_fallback"] = str(exc)
+                        job.update_progress(0, "Apple Hardware nicht verfügbar – CPU-Encoding")
+            elif job:
+                job.params["encoder_fallback"] = f"{encoder} nicht verfügbar"
+                job.update_progress(0, "Apple Hardware nicht verfügbar – CPU-Encoding")
+        if job and apple_mode:
+            job.params["encoder"] = p.video_codec or p.audio_codec
+        return await self.ffmpeg.convert(**options)
 
     async def batch_convert(
         self,
