@@ -1953,3 +1953,29 @@ booktype 22, disc_copy 16, fingerprint 7, main_movie 7). `verify_ui_bridge` PASS
 **Offen/Blocked:** Physische Brenn-/Kopier-/Book-Type-Verifikation braucht echte
 Laufwerke+Medien (Hardware-blockiert); Windows-Praxistest; DriveInspector-
 Capability-Parsing, Verify-Ergebnismodell-Ausbau und Disc-Health als nächste Schritte.
+
+### 2026-09-09 — Workbench Folgeschritte: Verify, Book-Type-Brennpfad, DriveInspector
+
+Fortsetzung (Next-best-Tasks 3→2→1). Windows-only, keine DRM-Umgehung, keine
+Hardware-Behauptungen. `pytest -q` = **593 passed / 19 skipped / 0 failed** (+36).
+
+- **VerifyService** (`src/services/verify.py`): `VerifyResult` mit PASS/
+  PASS_WITH_WARNINGS/FAIL/NOT_AVAILABLE + reine Prüfungen (Größe/Hash/Struktur/
+  Book-Type) und ehrlicher Aggregation. `DiscTools.verify_iso_result()` verpackt
+  das vorhandene `verify_iso` strukturiert (Hardware-Pfad unverändert). 10 Tests.
+- **Book Type im Brennpfad** (`DiscTools.burn_iso_result()`): setzt DVD-ROM-Book-Type
+  nur wenn Medienfamilie UND `dvd+rw-booktype`-Backend es können, brennt über das
+  bestehende `burn_iso`, liest den tatsächlichen Book Type zurück und liefert einen
+  `BurnResult` (Größe, Speed, Verify, Warnungen). Ehrliche Warnung statt Vortäuschen.
+  5 Orchestrierungstests (gemockt, ohne Hardware).
+- **DriveInspector** (`src/services/drive_inspector.py`): robuster, reiner
+  Capability-Parser (Vendor/Model/Firmware, DVD±R/RW/DL, BD-R/RE/XL, Write-Speeds)
+  aus `dvd+rw-mediainfo`/INQUIRY; tolerant gegen leer/Garbage/Unicode/Locale, nimmt
+  nie eine Fähigkeit an. `DiscTools.inspect_drive()` + Bridge `inspect_drive` (+Proxy).
+  10 Tests inkl. gemocktem Subprozess + fehlendem Werkzeug. **Nur Erkennen, keine
+  Firmware-Änderung.**
+
+Readiness-Matrix aktualisiert: Verify-Modell/Book-Type-Logik/DriveInspector-Parser =
+implementiert + auto-getestet; realer Brenn-/Book-Type-/Drive-Report weiterhin
+Hardware-blockiert (physischer Test erforderlich). Gates: `verify_ui_bridge` PASS
+(0 findings), `node --check` OK, `compileall` sauber, `git diff --check` sauber.
