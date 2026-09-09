@@ -2002,6 +2002,21 @@ externe Prozess dann nicht startet). 8 Unit-Tests (evaluate/Reserve/Schätzer/
 gemocktes `disk_usage`/Früh-Abbruch). `pytest -q` = 611 passed / 19 skipped / 0
 failed; compileall + diff-check sauber.
 
+### 2026-09-09 — TempManager (Mission 30, produktionsreif)
+
+`src/services/temp_manager.py`: konfigurierbarer Temp-Root (Default unter
+`tempfile.gettempdir()/RetroDisc`), eindeutige Job-Verzeichnisse (`retrodisc-job-<id>`,
+Job-ID sanitisiert → kein Pfad-Ausbruch/Wurzeltreffer), `allocate` (Artefakt im
+Job-Dir, kein Ausbruch), `ensure_space()` (nutzt `disk_space`, keine Parallelstruktur),
+`cleanup(job)`, `cleanup_stale(max_age)` (Absturz-Recovery), Context-Manager
+`session(required_bytes=…, keep_on_error=…)` (optionaler Speicher-Precheck vor dem
+Anlegen; räumt bei Erfolg auf; bei Fehler standardmäßig auch – kein Leak großer Images
+– oder Diagnoseartefakte behalten). **Löschungen hart auf eigene Job-Dirs innerhalb
+des Roots begrenzt** (nichts außerhalb wird je entfernt), Windows-Dateisperren via
+begrenztem Retry toleriert, strukturiertes Logging, saubere Exceptions. Als
+eigenständiger Service bereitgestellt (keine Wiring in aktuell von Codex bearbeitete
+Dateien, um Konflikte zu vermeiden). 12 Unit-Tests.
+
 ### 2026-09-09 — Editor V1 auf bestehender Director-Timeline
 
 - Dokumentation/Commits abgeglichen; Claudes Disc/Waveform-Arbeit erhalten. Bestehende Scene/ProductionProject erweitert: strukturierte Übergänge mit validierter Audio-/Video-Überlappung, Tempo/Freeze, Clip-Audio/Lock/Sichtbarkeit, Text/Overlay/PIP, Look-/Transform-Parameter. Alte Transitionstrings bleiben kompatibel.
