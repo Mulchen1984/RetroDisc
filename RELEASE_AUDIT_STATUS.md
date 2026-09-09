@@ -1979,3 +1979,14 @@ Readiness-Matrix aktualisiert: Verify-Modell/Book-Type-Logik/DriveInspector-Pars
 implementiert + auto-getestet; realer Brenn-/Book-Type-/Drive-Report weiterhin
 Hardware-blockiert (physischer Test erforderlich). Gates: `verify_ui_bridge` PASS
 (0 findings), `node --check` OK, `compileall` sauber, `git diff --check` sauber.
+
+### 2026-09-09 — Disc-Health-Datenmodell (Mission 14, vorbereitet)
+
+`src/services/disc_health.py`: Read-Policy-Eskalation (Normal→Retry→ReducedSpeed→
+MultipleRead→SectorCompare), `DiscHealthReport` + `DiscHealthAccumulator`, ehrlicher
+`health_score` **nur aus realen Leseergebnissen** (clean 1.0 / retried 0.8 /
+unstable 0.5 / failed 0), Status-Bänder; ohne Daten `NOT_AVAILABLE` statt 0 — keine
+erfundenen Health-Werte, kein Kopierschutz-Bypass (nur legitim lesbare Daten).
+Datenmodell/Schnittstelle vorbereitet; noch nicht von einem realen resilienten
+Lese-Backend gefüttert (Hardware). 6 Unit-Tests. `pytest -q` = 603 passed / 19
+skipped / 0 failed; compileall + diff-check sauber.
