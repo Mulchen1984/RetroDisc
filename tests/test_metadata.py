@@ -168,3 +168,94 @@ async def test_provider_priority_order(tmp_path):
     high = FakeProvider([{"title": "High"}]); high.name = "high"; high.priority = 9
     service = MetadataService(cache, [low, high])
     assert [p.name for p in service.providers] == ["high", "low"]   # nach Priorität
+
+
+@pytest.mark.asyncio
+async def test_failing_provider_does_not_stop_the_next_one(tmp_path):
+    cache = MetadataCache(tmp_path, now=Clock())
+    boom = BoomProvider(); boom.priority = 9                        # scheitert, höhere Priorität
+    good = FakeProvider([{"title": "Rettung"}]); good.name = "good"; good.priority = 1
+    service = MetadataService(cache, [boom, good])
+    cands = await service.candidates(MetadataQuery(title="Rettung"))
+    assert boom.calls and [c.title for c in cands] == ["Rettung"]   # zweiter Provider trotzdem probiert
+
+
+@pytest.mark.asyncio
+async def test_hanging_provider_times_out_and_next_runs(tmp_path):
+    import asyncio
+
+    class Hang:
+        name = "hang"; priority = 9
+        async def search(self, query):
+            await asyncio.sleep(5)
+            return []
+    good = FakeProvider([{"title": "Da"}]); good.name = "good"; good.priority = 1
+    service = MetadataService(cache=MetadataCache(tmp_path, now=Clock()),
+                              providers=[Hang(), good], provider_timeout=0.05)
+    cands = await service.candidates(MetadataQuery(title="Da"))
+    assert [c.title for c in cands] == ["Da"]                       # Hänger per Timeout übersprungen
+
+
+def test_disc_label_used_when_no_title():
+    from src.services.metadata import MetadataQuery, Metadata
+    q = MetadataQuery(disc_label="THE_MATRIX")
+    with_match = score_candidate(q, Metadata(title="THE_MATRIX"))
+    no_match = score_candidate(q, Metadata(title="Toy Story"))
+    assert with_match > no_match and with_match >= 55              # Disc-Label fließt ins Matching ein
+
+
+@pytest.mark.asyncio
+async def test_tie_break_prefers_exact_year(tmp_path):
+    # Zwei Kandidaten mit gleichem Titel (gleiche Titel-Ähnlichkeit) – Jahr entscheidet.
+    provider = FakeProvider([
+        {"title": "Dune", "year": 1984},
+        {"title": "Dune", "year": 2021},
+    ])
+    service = MetadataService(MetadataCache(tmp_path, now=Clock()), [provider])
+    cands = await service.candidates(MetadataQuery(title="Dune", year=2021))
+    assert cands[0].year == 2021                                   # deterministischer Tie-Break
+
+
+@pytest.mark.asyncio
+async def test_stale_cache_triggers_refresh_without_force(tmp_path):
+    clock = Clock(1000.0)
+    cache = MetadataCache(tmp_path, now=clock, ttl_seconds=100)
+    provider = FakeProvider([{"title": "Frisch"}])
+    service = MetadataService(cache, [provider])
+    cache.set_auto(FP, Metadata(title="Alt"))
+    clock.t = 1000.0 + 500                                         # jetzt stale
+    result = await service.lookup(MetadataQuery(fingerprint=FP, title="Frisch"))
+    assert provider.calls and result.title == "Frisch"            # ohne force refreshed
+
+
+@pytest.mark.asyncio
+async def test_manual_override_survives_service_lookup_refresh(tmp_path):
+    cache = MetadataCache(tmp_path, now=Clock())
+    provider = FakeProvider([{"title": "Vom Netz", "year": 2000}])
+    service = MetadataService(cache, [provider])
+    cache.set_auto(FP, Metadata(title="Alt"))
+    service.set_manual(FP, {"title": "Mein Titel"})
+    result = await service.lookup(MetadataQuery(fingerprint=FP, title="egal"), force_refresh=True)
+    assert result.title == "Mein Titel" and result.year == 2000   # manuell bleibt, Rest aktualisiert
+
+
+def test_migration_does_not_downgrade_newer_schema(tmp_path):
+    cache = MetadataCache(tmp_path)
+    (tmp_path / f"{FP}.json").write_text(json.dumps(
+        {"schema_version": 99, "auto": {"title": "Zukunft"}}), encoding="utf-8")
+    assert cache.get(FP).title == "Zukunft"                        # lesbar
+    raw = json.loads((tmp_path / f"{FP}.json").read_text(encoding="utf-8"))
+    assert raw["schema_version"] == 99                             # NICHT herabgestuft/überschrieben
+
+
+def test_atomic_write_failure_keeps_old_value_and_no_temp(tmp_path, monkeypatch):
+    cache = MetadataCache(tmp_path, now=Clock())
+    cache.set_auto(FP, Metadata(title="Gut"))
+
+    def boom(*a, **k):
+        raise OSError("Platte voll")
+    monkeypatch.setattr("src.services.metadata.json.dump", boom)
+    with pytest.raises(OSError):
+        cache.set_auto(FP, Metadata(title="Schlecht"))
+    assert cache.get(FP).title == "Gut"                            # Ziel unverändert
+    assert [p.name for p in tmp_path.iterdir()] == [f"{FP}.json"]  # kein verwaister Temp-Rest

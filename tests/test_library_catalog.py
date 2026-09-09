@@ -94,3 +94,54 @@ def test_metadata_json_corruption_is_tolerated(tmp_path):
     s._conn.execute("UPDATE library_items SET metadata_json='{broken' WHERE fingerprint='fp1'")
     s._conn.commit()
     assert s.get("fp1").metadata == {}          # kaputtes JSON -> leeres Dict, kein Absturz
+
+
+def test_upsert_does_not_clobber_existing_nonempty_fields(tmp_path):
+    s = svc(tmp_path)
+    s.add_or_update(LibraryItem(fingerprint="fp1", title="Film", iso_path="/x.iso",
+                                cover="/c.jpg", metadata={"director": "Ridley Scott"}))
+    # Teil-Upsert, der z.B. nur den Rip-Pfad setzt und sonst leer ist:
+    s.add_or_update(LibraryItem(fingerprint="fp1", rip_path="/r.mkv"))
+    item = s.get("fp1")
+    assert item.rip_path == "/r.mkv"                    # neues Feld gesetzt
+    assert item.title == "Film" and item.iso_path == "/x.iso" and item.cover == "/c.jpg"
+    assert item.metadata == {"director": "Ridley Scott"}   # nichts still verloren
+
+
+def test_busy_timeout_pragma_is_set(tmp_path):
+    s = svc(tmp_path)
+    assert s._conn.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
+
+
+def test_transaction_rolls_back_on_error(tmp_path):
+    s = svc(tmp_path)
+    s.add_or_update(LibraryItem(fingerprint="keep", title="Keep"))
+    with pytest.raises(RuntimeError):
+        with s._conn:                                   # Transaktion
+            s._conn.execute("INSERT INTO library_items(fingerprint,title) VALUES('temp','T')")
+            raise RuntimeError("Abbruch mitten in der Transaktion")
+    assert s.get("temp") is None and s.count() == 1     # Rollback: 'temp' nicht persistiert
+
+
+def test_corrupt_database_raises_clear_error(tmp_path):
+    from src.core.errors import LibraryError
+    bad = tmp_path / "catalog.db"
+    bad.write_bytes(b"this is definitely not a sqlite database file" * 10)
+    with pytest.raises(LibraryError):
+        LibraryService(bad)
+
+
+def test_context_manager_closes_connection(tmp_path):
+    import sqlite3 as _sq
+    with LibraryService(tmp_path / "c.db") as s:
+        s.add_or_update(LibraryItem(fingerprint="fp", title="X"))
+    with pytest.raises(_sq.ProgrammingError):
+        s.get("fp")                                     # Verbindung nach __exit__ geschlossen
+
+
+def test_close_is_idempotent_enough(tmp_path):
+    s = svc(tmp_path)
+    s.close()
+    import sqlite3 as _sq
+    with pytest.raises(_sq.ProgrammingError):
+        s.count()

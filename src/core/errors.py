@@ -67,6 +67,11 @@ class StorageError(RetroDiscError):
     default_message = "Nicht genügend Speicherplatz für diesen Vorgang."
 
 
+class LibraryError(RetroDiscError):
+    code = "library_error"
+    default_message = "Der Medienkatalog konnte nicht geöffnet werden."
+
+
 class ExternalToolError(RetroDiscError):
     code = "external_tool_error"
     default_message = "Ein benötigtes Werkzeug fehlt oder lieferte einen Fehler."

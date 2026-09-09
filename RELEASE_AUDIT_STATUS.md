@@ -2075,3 +2075,28 @@ metadata_json. Vorbereitet für spätere Player-/Library-UI. 9 Unit-Tests
 (Roundtrip, Dedupe/Upsert, Migration von altem DB-Stand, Duplikate,
 Metadata-Verknüpfung, JSON-Korruption). `pytest -q` = 653 passed / 19 skipped /
 0 failed; compileall + diff-check sauber.
+
+### 2026-09-09 — Kritischer Audit Metadata/Library + Härtung
+
+Selbstaudit der beiden Vorpakete gegen die Anforderungen; gefundene echte Lücken behoben:
+- **Atomare Writes gehärtet:** `MetadataCache._atomic_write` mit `flush()+os.fsync()`
+  vor dem Rename und `try/finally`-Temp-Cleanup → kein verwaister Temp-Rest, Ziel
+  bleibt bei Abbruch intakt.
+- **Migration forward-safe:** neuer als unterstützter Cache (version > current) wird
+  NICHT herabgestuft/überschrieben; echte v0→v1-Aufwärtsmigration.
+- **Provider-Timeout:** `MetadataService` umschließt jeden Provider mit
+  `asyncio.wait_for`; Hänger/Exception werden isoliert, der nächste Provider läuft
+  weiter.
+- **Matching:** `disc_label` fließt ein (Fallback wenn kein Titel); deterministischer
+  Tie-Break (Confidence → exaktes Jahr → Titel).
+- **Library:** `PRAGMA busy_timeout=5000` (konkurrierende Zugriffe), korrupte/ungültige
+  DB → klarer `LibraryError` statt roher SQLite-Fehler, Upsert überschreibt vorhandene
+  nicht-leere (auch manuelle) Felder NICHT mit Leerwerten, Context-Manager (`with`)
+  schließt die Verbindung sauber.
+- **Neue Tests:** +17 (Multi-Provider-Failover, Provider-Timeout, disc_label-Match,
+  Tie-Break, Stale-Refresh, manueller Override über `service.lookup`, Forward-Compat-
+  Migration, atomarer Write-Fehler; Library: Upsert-Felderhalt, busy_timeout, Rollback,
+  korrupte DB, Context-Manager/close) plus **3 Integrationstests** über die echte Kette
+  DiscFingerprint→MetadataService→MetadataCache→LibraryService (inkl. Offline-Pfad und
+  Fingerprint-Dedupe derselben Disc).
+- `pytest -q` = 670 passed / 19 skipped / 0 failed; compileall + diff-check sauber.

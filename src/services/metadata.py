@@ -7,7 +7,9 @@ auto-fetched data and win on merge, so they are never silently overwritten.
 """
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import re
 import tempfile
 import time
@@ -23,6 +25,7 @@ log = structlog.get_logger()
 
 SCHEMA_VERSION = 1
 DEFAULT_TTL_SECONDS = 30 * 24 * 3600          # 30 Tage bis Auto-Refresh
+DEFAULT_PROVIDER_TIMEOUT = 15.0               # Sekunden pro Provider
 _FP = re.compile(r"[a-f0-9]{16,64}")
 
 
@@ -72,19 +75,34 @@ class MetadataProvider(Protocol):
 
 
 # ── matching (simple, explainable) ───────────────────────────────────────────
-def score_candidate(query: MetadataQuery, meta: Metadata) -> int:
-    """0..100 from title similarity, year and runtime. No opaque AI."""
+def _title_ratio(a: str, b: str) -> float:
     import difflib
+    return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio()
+
+
+def score_candidate(query: MetadataQuery, meta: Metadata) -> int:
+    """0..100 from title/disc-label similarity, year and runtime. No opaque AI.
+
+    Falls back to the disc label when no title is given (a common disc case), so
+    disc_label genuinely participates in matching.
+    """
     score = 0.0
-    if query.title and meta.title:
-        score += 60 * difflib.SequenceMatcher(None, query.title.lower(), meta.title.lower()).ratio()
-    elif not query.title:
-        score += 20                            # kein Titel zum Abgleich -> schwaches Grundvertrauen
+    reference_title = query.title or query.disc_label
+    if reference_title and meta.title:
+        score += 60 * _title_ratio(reference_title, meta.title)
+    elif not reference_title:
+        score += 20                            # nichts zum Abgleich -> schwaches Grundvertrauen
     if query.year and meta.year and query.year == meta.year:
         score += 25
     if query.runtime and meta.runtime and abs(query.runtime - meta.runtime) <= 120:
         score += 15
     return int(round(max(0.0, min(100.0, score))))
+
+
+def _rank_key(query: MetadataQuery, meta: Metadata):
+    """Deterministic ranking with tie-breaks: confidence, then exact year, then title."""
+    year_match = 1 if (query.year and meta.year == query.year) else 0
+    return (meta.confidence, year_match, meta.title)
 
 
 class MetadataCache:
@@ -102,11 +120,18 @@ class MetadataCache:
 
     def _migrate(self, raw: dict) -> dict:
         version = raw.get("schema_version", 0)
-        # Zukünftige Migrationen hier einhängen; heute nur Schema 1.
-        if version != SCHEMA_VERSION:
-            raw = dict(raw)
-            raw.setdefault("auto", raw.get("metadata"))     # Beispiel-Aufwärtspfad
-            raw["schema_version"] = SCHEMA_VERSION
+        if version == SCHEMA_VERSION:
+            return raw
+        if version > SCHEMA_VERSION:
+            # Neuere Datei von älterer Version gelesen: NICHT herabstufen/überschreiben.
+            log.warning("metadata: neuere Cache-Version gelesen, unverändert gelassen",
+                        version=version, supported=SCHEMA_VERSION)
+            return raw
+        # Aufwärtsmigration älterer Schemata (v0: flaches 'metadata' -> 'auto').
+        raw = dict(raw)
+        if "auto" not in raw and "metadata" in raw:
+            raw["auto"] = raw.get("metadata")
+        raw["schema_version"] = SCHEMA_VERSION
         return raw
 
     def get_record(self, fingerprint: str) -> Optional[dict]:
@@ -147,10 +172,19 @@ class MetadataCache:
     def _atomic_write(self, fingerprint: str, record: dict) -> None:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         path = self._path(fingerprint)
-        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=self.cache_dir, delete=False) as handle:
-            temp = Path(handle.name)
-            json.dump(record, handle, ensure_ascii=False, indent=2)
-        temp.replace(path)                     # atomar
+        temp = None
+        try:
+            with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=self.cache_dir,
+                                             delete=False) as handle:
+                temp = Path(handle.name)
+                json.dump(record, handle, ensure_ascii=False, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())      # Daten sind vor dem Rename dauerhaft
+            temp.replace(path)                 # atomarer Rename; Ziel bleibt bei Abbruch intakt
+            temp = None
+        finally:
+            if temp is not None:
+                temp.unlink(missing_ok=True)   # kein verwaister Temp-Rest bei Fehler
 
     def set_auto(self, fingerprint: str, meta: Metadata) -> None:
         """Store auto-fetched metadata; existing manual overrides are preserved."""
@@ -180,9 +214,11 @@ class MetadataCache:
 class MetadataService:
     """Fingerprint-keyed metadata lookup over a cache and prioritised providers."""
 
-    def __init__(self, cache: MetadataCache, providers: Optional[list] = None):
+    def __init__(self, cache: MetadataCache, providers: Optional[list] = None,
+                 *, provider_timeout: float = DEFAULT_PROVIDER_TIMEOUT):
         self.cache = cache
         self.providers = sorted(providers or [], key=lambda p: -getattr(p, "priority", 0))
+        self.provider_timeout = provider_timeout
 
     @staticmethod
     def fingerprint_for(structure: dict) -> str:
@@ -192,15 +228,22 @@ class MetadataService:
         results: list[Metadata] = []
         if allow_network:
             for provider in self.providers:
+                # Ein hängender/fehlerhafter Provider darf die Kette nicht stoppen:
+                # Timeout und Exception werden isoliert, danach kommt der nächste dran.
                 try:
-                    for meta in await provider.search(query):
+                    found = await asyncio.wait_for(provider.search(query),
+                                                   timeout=self.provider_timeout)
+                    for meta in found:
                         meta.provider = meta.provider or getattr(provider, "name", "")
                         meta.confidence = score_candidate(query, meta)
                         results.append(meta)
+                except asyncio.TimeoutError:
+                    log.warning("metadata: Provider-Timeout",
+                                provider=getattr(provider, "name", ""), timeout=self.provider_timeout)
                 except Exception as exc:                      # Providerfehler blockiert nichts
                     log.warning("metadata: Provider fehlgeschlagen",
                                 provider=getattr(provider, "name", ""), error=str(exc))
-        results.sort(key=lambda m: m.confidence, reverse=True)
+        results.sort(key=lambda m: _rank_key(query, m), reverse=True)
         return results
 
     async def lookup(self, query: MetadataQuery, *, allow_network: bool = True,

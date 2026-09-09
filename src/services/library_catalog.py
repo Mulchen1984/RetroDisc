@@ -18,9 +18,15 @@ from typing import Optional
 
 import structlog
 
+from src.core.errors import LibraryError
+
 log = structlog.get_logger()
 
 SCHEMA_VERSION = 1
+# Felder, die bei einem Upsert NICHT durch leere Werte überschrieben werden dürfen
+# (manuelle bzw. mühsam ermittelte Daten bleiben erhalten).
+_PRESERVE_IF_EMPTY = ("title", "year", "source_type", "original_disc_type",
+                      "iso_path", "rip_path", "cover", "content_hash", "notes", "metadata")
 
 _COLUMNS = ("fingerprint", "title", "year", "source_type", "original_disc_type",
             "iso_path", "rip_path", "cover", "content_hash", "created",
@@ -63,9 +69,22 @@ class LibraryService:
         self.db_path = Path(db_path)
         self._now = now
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self.db_path))
-        self._conn.row_factory = sqlite3.Row
-        self._migrate()
+        try:
+            self._conn = sqlite3.connect(str(self.db_path), timeout=5.0)
+            self._conn.row_factory = sqlite3.Row
+            # Wartet bei gesperrter DB statt sofort zu scheitern (konkurrierende Zugriffe).
+            self._conn.execute("PRAGMA busy_timeout = 5000")
+            self._migrate()
+        except sqlite3.DatabaseError as exc:
+            # Ungültige/beschädigte DB-Datei -> klarer, fangbarer Fehler statt roher SQLite-Fehler.
+            raise LibraryError(f"Katalog-Datenbank ist ungültig oder beschädigt: {self.db_path}",
+                               detail=str(exc)) from exc
+
+    def __enter__(self) -> "LibraryService":
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
 
     # ── schema / migration ──────────────────────────────────────────────
     def _migrate(self) -> None:
@@ -91,13 +110,16 @@ class LibraryService:
         if not item.fingerprint:
             raise ValueError("LibraryItem benötigt einen Fingerprint.")
         existing = self.get(item.fingerprint)
-        if existing is None and item.created is None:
-            item.created = self._now()
-        elif existing is not None:
+        if existing is None:
+            if item.created is None:
+                item.created = self._now()
+        else:
             item.created = existing.created            # ursprüngliches Anlegedatum bewahren
-            # Manuelle Notizen nie ungefragt verwerfen.
-            if not item.notes:
-                item.notes = existing.notes
+            # Leere Felder eines Upserts überschreiben vorhandene (auch manuelle)
+            # Daten nicht – nur explizit gesetzte Werte gewinnen.
+            for name in _PRESERVE_IF_EMPTY:
+                if getattr(item, name) in (None, "", [], {}):
+                    setattr(item, name, getattr(existing, name))
         row = item.to_row()
         placeholders = ",".join(f":{c}" for c in _COLUMNS)
         updates = ",".join(f"{c}=excluded.{c}" for c in _COLUMNS if c != "fingerprint")
