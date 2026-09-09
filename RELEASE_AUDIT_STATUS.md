@@ -2040,3 +2040,22 @@ und absichtlich beschädigten VIDEO_TS/BDMV-Strukturen (fehlende Pflichtdatei,
 Größenabweichung, Extra-Datei=Warnung, Hash-Mismatch bei gleicher Größe). Keine
 Bridge-Verdrahtung, da `retrodisc_launcher.py` aktuell fremd-uncommitted ist
 (Konfliktvermeidung). `pytest -q` grün.
+
+### 2026-09-09 — MetadataService + lokaler Metadata-Cache (Mission 23)
+
+`src/services/metadata.py` (neu, offline-first): `Metadata`-Datenmodell (Titel/
+Originaltitel/Jahr/Laufzeit/Beschreibung/Genres/Regie/Cast/Altersfreigabe/Cover/
+Backdrop/Provider/Provider-ID/Sprache/Disc-Typ/Edition/Confidence), `MetadataQuery`,
+`MetadataProvider`-Protocol (austauschbar/priorisierbar für TMDb/OMDb/… später),
+`MetadataCache` (fingerprint-keyed JSON, **atomare Writes**, korrupte Dateien werden
+ignoriert statt Absturz, `schema_version`+Migrationshaken, TTL/Refresh, **manuelle
+Overrides getrennt von Auto-Daten – gewinnen beim Merge und überleben Auto-Refresh**),
+`MetadataService.lookup` (Cache-Hit → **kein Provider-Aufruf**; offline/kein Provider →
+nur lokaler Cache; Providerfehler blockiert nichts → Fallback), `score_candidate`
+(Titel/Jahr/Laufzeit, mehrere Kandidaten nach Confidence). Fingerprint als
+Primärschlüssel; vorhandener `fingerprint`-Service wiederverwendet, keine doppelte
+Cache/HTTP/Fingerprint-Infra. 15 Unit-Tests (R/W, unbekannt, korrupt, Schema/Migration,
+manueller Override, TTL, atomarer Write, Confidence, Cache-Hit-ohne-Provider,
+Providerfehler, offline, mehrere Kandidaten, Priorität). `pytest -q` = 644 passed /
+19 skipped / 0 failed; compileall + diff-check sauber. Keine Bridge/UI-Verdrahtung
+(Launcher/UI fremd-uncommitted → Konfliktvermeidung).
