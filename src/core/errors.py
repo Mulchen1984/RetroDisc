@@ -62,6 +62,11 @@ class VerifyError(RetroDiscError):
     default_message = "Die Überprüfung ist fehlgeschlagen."
 
 
+class StorageError(RetroDiscError):
+    code = "storage_error"
+    default_message = "Nicht genügend Speicherplatz für diesen Vorgang."
+
+
 class ExternalToolError(RetroDiscError):
     code = "external_tool_error"
     default_message = "Ein benötigtes Werkzeug fehlt oder lieferte einen Fehler."

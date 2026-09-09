@@ -174,6 +174,10 @@ class DiscTools:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Früher Abbruch statt die Platte mitten im Lauf zu füllen.
+        from src.services.disk_space import ensure_space, iso_estimate
+        ensure_space(output_path.parent, iso_estimate(source_dir))
+
         if job:
             job.update_progress(5, "ISO-Image wird erstellt...")
 

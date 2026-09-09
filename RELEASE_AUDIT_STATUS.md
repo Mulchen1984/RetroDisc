@@ -1990,3 +1990,23 @@ erfundenen Health-Werte, kein Kopierschutz-Bypass (nur legitim lesbare Daten).
 Datenmodell/Schnittstelle vorbereitet; noch nicht von einem realen resilienten
 Lese-Backend gefüttert (Hardware). 6 Unit-Tests. `pytest -q` = 603 passed / 19
 skipped / 0 failed; compileall + diff-check sauber.
+
+### 2026-09-09 — Speicherplatz-Prüfung vor großen Operationen (Mission 31)
+
+`src/services/disk_space.py`: `evaluate`/`check_path`/`ensure_space` (freier Platz
+vs. benötigt + Sicherheitsreserve = max(512 MB, 5 %)), Schätzer `directory_size`,
+`iso_estimate` (Payload + ~2 % Overhead), `transcode_estimate`. Neuer `StorageError`
+(`src/core/errors.py`). **Verdrahtet**: `DiscTools.create_iso` bricht jetzt VOR dem
+`mkisofs`-Start ab, wenn der Zielordner nicht genug Platz hat (Test beweist, dass der
+externe Prozess dann nicht startet). 8 Unit-Tests (evaluate/Reserve/Schätzer/
+gemocktes `disk_usage`/Früh-Abbruch). `pytest -q` = 611 passed / 19 skipped / 0
+failed; compileall + diff-check sauber.
+
+### 2026-09-09 — Editor V1 auf bestehender Director-Timeline
+
+- Dokumentation/Commits abgeglichen; Claudes Disc/Waveform-Arbeit erhalten. Bestehende Scene/ProductionProject erweitert: strukturierte Übergänge mit validierter Audio-/Video-Überlappung, Tempo/Freeze, Clip-Audio/Lock/Sichtbarkeit, Text/Overlay/PIP, Look-/Transform-Parameter. Alte Transitionstrings bleiben kompatibel.
+- FFmpeg bleibt Renderer; finale Hardware-/CPU-Kodierung über bestehenden Converter. Keine Dependencies/Modelle installiert. UI-Edits/Undo serialisiert, Styles/Overlay-Controls/Suggestions angebunden.
+- 17 reale synthetische Renderprüfungen mit FFprobe, Dauer/Audio, Volldecode, Recent Media und Quell-SHA-Schutz PASS; aktiver Cancel mit Cleanup PASS. Artefakt-Hashes: build/editor-acceptance/result.json.
+- Text-Capability ehrlich unavailable (lokales FFmpeg ohne drawtext). Positive Text-/Font- und kombinierte Titel-Acceptance nicht behauptet. Kein visueller Qualitätsnachweis und kein realer Windows-Test.
+- 597 passed / 19 skipped / 0 failed; UI-Bridge 0 findings, JS/compileall/diff-check PASS. Details und echte Restpunkte (Projekt-/Export-Settings, Preview, weitere Audio-/Overlay-Controls) in EDITOR_V1_STATUS.md.
+- Keine Commits/Push/neuer Branch durch Codex.
