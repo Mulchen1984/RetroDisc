@@ -1902,3 +1902,54 @@ bleibt proportional; ein späterer Zoom müsste nur die Zeilenbreite ändern. Pe
 absolute Full-Scale-Werte, die UI skaliert je Clip auf das eigene Maximum (Form gut
 sichtbar, Lautheitsvergleich zwischen Clips nicht 1:1). Sehr lange Dateien werden mit
 niedrigerer Rate analysiert (Overview-Genauigkeit, gewollt).
+
+### 2026-09-09 — Optical-Media-Workbench: P0/P1-Kernmodule (Windows-only)
+
+Ausgangspunkt `4d99c39`, sauberer Baum. Fokus: wenige vollständige, getestete
+Komponenten statt vieler Stubs. Windows-only, keine DRM-/Kopierschutz-Umgehung,
+keine Hardware-Behauptungen (alle Tests mit Mocks/synthetischen Strukturen).
+
+**Neu (rein, ohne Hardware testbar):**
+- `src/core/errors.py` — typisierte Fehler (Drive/Media/Probe/Read/Encode/Authoring/
+  Burn/Verify/ExternalTool) mit stabilem `code`, Nutzertext + `detail` (für Logs).
+- `src/services/booktype.py` — Medienklassifikation (DVD±R/RW/DL, BD, ROM),
+  Bitsetting-Capability (Medium UND Backend, nie blind), Book-Type-Kommando,
+  Result-Parsing, `BurnResult`, `describe_media()` (reichert `get_disc_info` an).
+  **Verdrahtet**: Launcher `get_disc_info` liefert jetzt `media_type` +
+  `book_type_options` je nach echter `dvd+rw-booktype`-Präsenz.
+- `src/services/disc_copy.py` — explizite Copy-State-Machine mit den kritischen
+  Garantien: Quelle nie Ziel, frische/eindeutige Zielerkennung, wieder-eingelegte
+  Quelle abgelehnt, nicht-beschreibbar/nicht-leer/zu-klein abgelehnt, Cancel in
+  jeder Phase, temporäres Abbild für Cleanup vermerkt, Fehler → definierter
+  Terminalzustand.
+- `src/services/fingerprint.py` — reihenfolgeunabhängiger, NFC-unicode-sicherer
+  Disc-Fingerprint über normalisierte Struktur (nur kleine Strukturdateien gehasht).
+- `src/services/main_movie.py` — lokale Hauptfilm-Heuristik mit Konfidenz + Gründen;
+  konservativ bei Serien/gleich-langen Titeln und Unterlänge.
+
+**Zielarchitektur-Mapping:** vorhandene `DiscTools` (create_iso/burn_iso/verify_iso/
+get_disc_info) bleibt der reale FFmpeg-/growisofs-Pfad; die neuen Module ergänzen
+BurnService-Optionen (Book Type), Copy-Statemachine, DiscFingerprint- und
+MainMovie-Heuristik lose gekoppelt. Kein zweites Job-System: bestehende
+`JobState`/`Pipeline` bleiben; die Copy-Machine ist die geführte Sequenz.
+
+**Release-Readiness-Matrix (ehrlich):**
+
+| Komponente | Implementiert | Auto-getestet | Hardware-getestet | Release-ready | Notiz |
+|---|---|---|---|---|---|
+| Typed errors | JA | JA | – | JA | reine Bibliothek |
+| Book type / bitsetting (Logik) | JA | JA | NEIN | NEIN | echter Brenner nötig |
+| Book type in get_disc_info | JA | JA (pure) | NEIN | NEIN | echte Disc/Brenner nötig |
+| Disc-Copy-State-Machine | JA | JA | NEIN | NEIN | reale Zwei-Laufwerk-Kopie offen |
+| Disc fingerprint | JA | JA | – | JA | strukturbasiert |
+| Main-movie-Heuristik | JA | JA | NEIN | teilw. | echte Disc-Titel zum Feinschliff |
+| DVD→ISO / burn_iso (Bestand) | JA | JA | NEIN | NEIN | physischer Test erforderlich |
+| Waveform-Timeline | JA | JA | – | JA | siehe eigener Block |
+
+**Tests/Gates:** `pytest -q` = **557 passed / 19 skipped / 0 failed** (+52 neu:
+booktype 22, disc_copy 16, fingerprint 7, main_movie 7). `verify_ui_bridge` PASS
+(0 findings), `node --check` OK, `compileall` sauber, `git diff --check` sauber.
+
+**Offen/Blocked:** Physische Brenn-/Kopier-/Book-Type-Verifikation braucht echte
+Laufwerke+Medien (Hardware-blockiert); Windows-Praxistest; DriveInspector-
+Capability-Parsing, Verify-Ergebnismodell-Ausbau und Disc-Health als nächste Schritte.

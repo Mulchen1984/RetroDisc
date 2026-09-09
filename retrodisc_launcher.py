@@ -393,7 +393,7 @@ class RetroDiscBridge:
                 10,  # OPEN_DIALOG
                 allow_multiple=True,
                 file_types=(
-                    "Mediendateien (*.mp4;*.mkv;*.avi;*.mov;*.mp3;*.flac;*.wav;*.iso;*.vob)",
+                    "Mediendateien (*.mp4;*.mkv;*.avi;*.mov;*.mp3;*.flac;*.wav;*.iso;*.vob;*.jpg;*.jpeg;*.png;*.webp)",
                     "Alle Dateien (*.*)",
                 )
             )
@@ -847,6 +847,10 @@ class RetroDiscBridge:
             return json.dumps({"error": "Kein optisches Laufwerk ausgewählt."})
         try:
             info = self._async(self.disc.get_disc_info(device)).result(timeout=25)
+            if isinstance(info, dict) and info.get("present"):
+                import shutil
+                from src.services.booktype import describe_media
+                info = describe_media(info, tool_available=bool(shutil.which("dvd+rw-booktype")))
             return json.dumps(info)
         except Exception as exc:
             return json.dumps({"error": str(exc), "device": device})

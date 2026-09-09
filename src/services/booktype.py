@@ -73,6 +73,21 @@ def parse_book_type(output: str) -> str:
     return match.group(1).strip() if match else "unknown"
 
 
+def describe_media(disc_info: dict, tool_available: bool) -> dict:
+    """Enrich a DiscTools.get_disc_info() dict with media family + book-type options.
+
+    Pure: derives everything from the already-probed profile/flags, so it is
+    testable without hardware and never claims unsupported capabilities.
+    """
+    info = dict(disc_info or {})
+    media_type = classify_media(info.get("profile") or info.get("type") or "")
+    info["media_type"] = media_type
+    info["bitsetting_supported"] = supports_bitsetting(media_type)
+    info["bitsetting_available"] = bitsetting_available(media_type, tool_available)
+    info["book_type_options"] = booktype_options(media_type, tool_available)
+    return info
+
+
 @dataclass
 class BurnResult:
     """Structured burn outcome; only fields with real values are filled."""

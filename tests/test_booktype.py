@@ -2,8 +2,19 @@
 import pytest
 from src.services.booktype import (
     classify_media, supports_bitsetting, bitsetting_available, booktype_options,
-    booktype_command, parse_book_type, BurnResult,
+    booktype_command, parse_book_type, BurnResult, describe_media,
 )
+
+
+def test_describe_media_enriches_disc_info_without_hardware():
+    plus = describe_media({"profile": "DVD+R", "blank": True, "writable": True}, tool_available=True)
+    assert plus["media_type"] == "DVD+R" and plus["bitsetting_available"] is True
+    assert plus["book_type_options"] == ["automatic", "native", "dvd_rom"]
+    dash = describe_media({"profile": "DVD-R Sequential"}, tool_available=True)
+    assert dash["media_type"] == "DVD-R" and dash["bitsetting_available"] is False
+    assert dash["book_type_options"] == ["automatic"]
+    no_tool = describe_media({"profile": "DVD+RW"}, tool_available=False)
+    assert no_tool["bitsetting_available"] is False    # Backend fehlt -> nicht anbieten
 
 
 @pytest.mark.parametrize("profile,expected", [
