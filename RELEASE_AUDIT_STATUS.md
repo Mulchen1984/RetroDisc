@@ -2059,3 +2059,19 @@ manueller Override, TTL, atomarer Write, Confidence, Cache-Hit-ohne-Provider,
 Providerfehler, offline, mehrere Kandidaten, Priorität). `pytest -q` = 644 passed /
 19 skipped / 0 failed; compileall + diff-check sauber. Keine Bridge/UI-Verdrahtung
 (Launcher/UI fremd-uncommitted → Konfliktvermeidung).
+
+### 2026-09-09 — LibraryService / lokaler Medienkatalog
+
+`src/services/library_catalog.py` (neu): `LibraryItem`-Datenmodell (Fingerprint,
+Titel, Jahr, source_type, original_disc_type, iso_path, rip_path, cover,
+content_hash, created, last_verified, notes, metadata) und `LibraryService` auf
+**SQLite mit `PRAGMA user_version`-Schema-Versionierung + Migrationshaken** (keine
+flache JSON-Liste; eigene catalog.db, rührt die bestehende scanned-media library.db
+nicht an). Fingerprint = Primärschlüssel → natürliche Dedupe (Upsert bewahrt
+Anlegedatum und manuelle Notizen), `content_hash`-Gruppen als zusätzliche
+Dubletten-Erkennung (`find_duplicates`), `attach_metadata` verknüpft
+MetadataService-Daten, `mark_verified`, robustes Verhalten bei kaputtem
+metadata_json. Vorbereitet für spätere Player-/Library-UI. 9 Unit-Tests
+(Roundtrip, Dedupe/Upsert, Migration von altem DB-Stand, Duplikate,
+Metadata-Verknüpfung, JSON-Korruption). `pytest -q` = 653 passed / 19 skipped /
+0 failed; compileall + diff-check sauber.
