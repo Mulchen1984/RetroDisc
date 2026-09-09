@@ -855,6 +855,16 @@ class RetroDiscBridge:
         except Exception as exc:
             return json.dumps({"error": str(exc), "device": device})
 
+    def inspect_drive(self, device: str) -> str:
+        """Report optical-drive capabilities (detection only)."""
+        if not device:
+            return json.dumps({"error": "Kein optisches Laufwerk ausgewählt."})
+        try:
+            caps = self._async(self.disc.inspect_drive(device)).result(timeout=25)
+            return json.dumps(caps.to_dict())
+        except Exception as exc:
+            return json.dumps({"error": str(exc), "device": device})
+
     # ── Gemeinsame Queue-Hilfe ─────────────────────────────────────────
     def _submit_job(self, job, handler) -> str:
         """Stellt Job und dessen unverwechselbaren Handler sicher in die Queue."""
@@ -1776,6 +1786,7 @@ class RetroDiscApi:
     def play_sound(self): return self._bridge.play_sound()
     def detect_burners(self): return self._bridge.detect_burners()
     def get_disc_info(self, *args): return self._bridge.get_disc_info(*args)
+    def inspect_drive(self, device): return self._bridge.inspect_drive(device)
     def create_dvd(self, *args): return self._bridge.create_dvd(*args)
     def copy_disc(self, *args): return self._bridge.copy_disc(*args)
     def confirm_copy_medium(self, job_id): return self._bridge.confirm_copy_medium(job_id)

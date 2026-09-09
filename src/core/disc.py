@@ -416,6 +416,20 @@ class DiscTools:
         result.verify_result = "PASS" if verify else "NOT_AVAILABLE"
         return result
 
+    async def inspect_drive(self, device: str):
+        """Detect drive capabilities via dvd+rw-mediainfo (detection only)."""
+        from src.services.drive_inspector import parse_capabilities
+        output = ""
+        try:
+            proc = await create_hidden_subprocess(
+                self.mediainfo, device, stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=20)
+            output = (stdout + b"\n" + stderr).decode("utf-8", errors="replace")
+        except (OSError, asyncio.TimeoutError) as exc:
+            log.debug("inspect_drive: Werkzeug nicht ausführbar", device=device, error=str(exc))
+        return parse_capabilities(output, drive_letter=device)
+
     @staticmethod
     def _windows_volume_info(device: str, info: dict) -> dict:
         """Ermittelt den Medienzustand eines Windows-Laufwerks am Dateisystem.
