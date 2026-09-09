@@ -111,15 +111,25 @@ async def _default_spawn(args):
         *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
 
 
-async def _drain_stderr(proc) -> str:
+_STDERR_TAIL_BYTES = 16384
+
+
+async def _pump_stderr(proc, tail: bytearray) -> None:
+    """Drain stderr concurrently into a bounded tail so a full pipe never blocks
+    (deadlock) the transcode, while keeping the end for error classification."""
     stream = getattr(proc, "stderr", None)
     if stream is None:
-        return ""
-    try:
-        data = await stream.read()
-    except Exception:
-        return ""
-    return data.decode("utf-8", "replace") if isinstance(data, (bytes, bytearray)) else str(data)
+        return
+    while True:
+        try:
+            chunk = await stream.read(65536)
+        except Exception:
+            break
+        if not chunk:
+            break
+        tail.extend(chunk if isinstance(chunk, (bytes, bytearray)) else str(chunk).encode("utf-8", "replace"))
+        if len(tail) > _STDERR_TAIL_BYTES:
+            del tail[:-_STDERR_TAIL_BYTES]
 
 
 async def run_transcode(job: TranscodingJob, args, *, total_duration: Optional[float] = None,
@@ -148,7 +158,9 @@ async def run_transcode(job: TranscodingJob, args, *, total_duration: Optional[f
                 if on_progress:
                     on_progress(snap)
 
+    stderr_tail = bytearray()
     pump_task = asyncio.create_task(pump())
+    err_task = asyncio.create_task(_pump_stderr(proc, stderr_tail))
     exit_task = asyncio.create_task(proc.wait())
     cancel_task = asyncio.create_task(cancel_event.wait()) if cancel_event else None
     waiters = [exit_task] + ([cancel_task] if cancel_task else [])
@@ -158,19 +170,21 @@ async def run_transcode(job: TranscodingJob, args, *, total_duration: Optional[f
     cancelled = bool(cancel_task is not None and cancel_task in done)
 
     async def _cleanup_tasks():
-        for task in (pump_task, exit_task, cancel_task):
+        for task in (pump_task, err_task, exit_task, cancel_task):
             if task is not None and not task.done():
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await task
 
+    def _stderr() -> str:
+        return stderr_tail.decode("utf-8", "replace")
+
     if timed_out or cancelled:
         with contextlib.suppress(Exception):
             await terminator(proc)                 # graceful terminate -> kill
         await _cleanup_tasks()
-        stderr = await _drain_stderr(proc)
         (job.cancel() if cancelled else job.timeout())
-        job.error_detail = job.error_detail or stderr[-500:]
+        job.error_detail = job.error_detail or _stderr()[-500:]
         return job
 
     # Prozess ist von selbst beendet
@@ -180,8 +194,10 @@ async def run_transcode(job: TranscodingJob, args, *, total_duration: Optional[f
             await cancel_task
     with contextlib.suppress(Exception):
         await pump_task
+    with contextlib.suppress(Exception):
+        await err_task                             # restlichen stderr einsammeln
     rc = proc.returncode
-    stderr = await _drain_stderr(proc)
+    stderr = _stderr()
     if rc == 0:
         job.mark_completed(rc)
     else:

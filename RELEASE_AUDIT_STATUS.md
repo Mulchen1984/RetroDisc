@@ -2100,3 +2100,36 @@ Selbstaudit der beiden Vorpakete gegen die Anforderungen; gefundene echte Lücke
   DiscFingerprint→MetadataService→MetadataCache→LibraryService (inkl. Offline-Pfad und
   Fingerprint-Dedupe derselben Disc).
 - `pytest -q` = 670 passed / 19 skipped / 0 failed; compileall + diff-check sauber.
+
+### 2026-09-09 — Transcoding-Backend-Schicht (neues Subpackage src/services/transcode)
+
+Zusammenhängende, UI-freie Transcoding-Grundlage; alle FFmpeg-/ffprobe-Aufrufe über
+einen injizierbaren Runner → komplett ohne echtes FFmpeg testbar. Codex-WIP nicht
+berührt.
+- **capabilities.py**: CapabilityStatus-Enum, EncoderCapability, echte Probe-Encodes
+  (lavfi, wenige Frames), HardwareAccelerationService (CPU/NVENC/QSV/AMF, AV1),
+  umgebungs-signierter CapabilityCache (ffmpeg-Version+Plattform+Host) mit TTL,
+  korrupt-sicher.
+- **profiles.py**: 7 deklarative TranscodingProfiles (strukturierte Felder, keine
+  Command-Strings). **selection.py**: EncoderSelectionEngine (Hardware nach Vendor-
+  Priorität → CPU → Fallback-Codecs; HDR/10-bit vermeidet ungeeignetes H.264;
+  transparente reasons/warnings; force/prefer/allow-hardware).
+- **probe.py**: MediaProbeService (robustes ffprobe-JSON, tolerant/korrupt-sicher).
+- **command.py**: FFmpegCommandBuilder → Argumentliste (kein Shell-String);
+  encoder-spezifische Ratecontrol/Preset-Abbildung, Downscale-only, Deinterlace,
+  Mapping, Container.
+- **progress.py**: FFmpegProgressParser (-progress pipe:1 → frame/fps/out_time/speed,
+  Prozent+ETA), toleriert unvollständige Zeilen.
+- **job.py**: TranscodingJob-Statemachine + run_transcode (Streaming-Progress,
+  Cancel/Timeout, graceful terminate→kill).
+- **verify.py**: verify_transcode (Existenz/Größe/ffprobe-lesbar/Videostream/Codec/
+  Dauer → VerifyResult; traut Exit-Code 0 nicht blind). **errors.py**:
+  FFmpegErrorClass + kompakte Klassifikation (UNKNOWN-Fallback). **service.py**:
+  TranscodeService orchestriert Probe→Caps→Profile→Selection→Command→Job→Verify.
+- **Audit-Fund + Fix**: `run_transcode` las stderr erst am Ende → volllaufende
+  stderr-Pipe hätte lange Encodes blockieren können (Deadlock). Jetzt gleichzeitiges,
+  begrenztes stderr-Draining (16 KB Tail für Fehlerklassifikation). Kein Import-Zyklus,
+  kein globaler Zustand, keine Shell-Strings.
+- Tests: 66 neue (Capabilities/Selection/Probe/Command/Progress/Job/Verify/Integration),
+  inkl. **echtem FFmpeg-Integrationstest** (skippt ohne FFmpeg, kein CI-Gate).
+  `pytest -q` = 736 passed / 19 skipped / 0 failed; compileall + diff-check sauber.

@@ -22,7 +22,11 @@ class FakeStream:
 class FakeErr:
     def __init__(self, data=b""):
         self._data = data
-    async def read(self):
+        self._sent = False
+    async def read(self, n=-1):
+        if self._sent:
+            return b""
+        self._sent = True
         return self._data
 
 
