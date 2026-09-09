@@ -57,6 +57,8 @@ class DiscTools:
         self.growisofs = growisofs_path or shutil.which("growisofs") or "growisofs"
         self.cdrecord = cdrecord_path or shutil.which("cdrecord") or shutil.which("wodim") or "cdrecord"
         self.mediainfo = mediainfo_path or shutil.which("dvd+rw-mediainfo") or "dvd+rw-mediainfo"
+        # Book type / bitsetting backend (optional; capability checked before use).
+        self.booktype = shutil.which("dvd+rw-booktype") or ""
 
     async def validate(self) -> dict[str, bool]:
         """Prüft welche Disc-Tools verfügbar sind."""
@@ -356,6 +358,63 @@ class DiscTools:
             if "konnte nicht gelesen" in text:            # Lesefehler -> nicht bewertbar
                 return VerifyResult.from_checks([Check("read", None, text)])
             return VerifyResult.from_checks([Check(name, False, text)])
+
+    # ── Book type / bitsetting ──────────────────────────────────────────
+    def book_type_available(self, media_type: str) -> bool:
+        from src.services.booktype import bitsetting_available
+        return bitsetting_available(media_type, bool(self.booktype and shutil.which(self.booktype)))
+
+    async def _run_tool(self, cmd: list[str], timeout: int = 30) -> str:
+        proc = await create_hidden_subprocess(
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        output = (stdout + b"\n" + stderr).decode("utf-8", errors="replace")
+        if proc.returncode:
+            from src.core.errors import ExternalToolError
+            raise ExternalToolError(tool=cmd[0], returncode=proc.returncode, detail=output[-800:])
+        return output
+
+    async def _read_book_type(self, device: str) -> str:
+        from src.services.booktype import parse_book_type
+        try:
+            return parse_book_type(await self._run_tool([self.booktype, "-media", device]))
+        except Exception:
+            return "unknown"
+
+    async def burn_iso_result(self, iso_path: Path, device: str = "/dev/sr0", *,
+                              disc_type: DiscType = DiscType.DVD, speed: Optional[int] = None,
+                              verify: bool = True, book_type: str = "automatic",
+                              media_type: str = "unknown", job: Optional[Job] = None):
+        """Burn and return a structured BurnResult, including book type when supported.
+
+        Book type is only set/read when the media family AND the backend support
+        it; otherwise a warning is recorded and burning proceeds normally.
+        """
+        from src.services.booktype import BurnResult, booktype_command, supports_bitsetting
+        result = BurnResult(media_type=media_type, book_type_requested=book_type)
+
+        if book_type == "dvd_rom" and supports_bitsetting(media_type):
+            if not self.book_type_available(media_type):
+                result.warnings.append("Laufwerk/Backend unterstützt kein Bitsetting; Book Type unverändert.")
+            else:
+                cmd = booktype_command(self.booktype, device, book_type, media_type)
+                try:
+                    if cmd:
+                        await self._run_tool(cmd)
+                except Exception as exc:
+                    result.warnings.append(f"Book Type konnte nicht gesetzt werden: {exc}")
+
+        await self.burn_iso(iso_path, device, speed=speed, verify=verify,
+                            disc_type=disc_type, job=job)
+        try:
+            result.written_size = Path(iso_path).stat().st_size
+        except OSError:
+            pass
+        result.burn_speed = f"{speed}x" if speed else "auto"
+        if supports_bitsetting(media_type) and self.book_type_available(media_type):
+            result.book_type_actual = await self._read_book_type(device)
+        result.verify_result = "PASS" if verify else "NOT_AVAILABLE"
+        return result
 
     @staticmethod
     def _windows_volume_info(device: str, info: dict) -> dict:
