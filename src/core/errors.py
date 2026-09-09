@@ -72,6 +72,11 @@ class LibraryError(RetroDiscError):
     default_message = "Der Medienkatalog konnte nicht geöffnet werden."
 
 
+class QueueError(RetroDiscError):
+    code = "queue_error"
+    default_message = "Die Job-Warteschlange konnte nicht geöffnet werden."
+
+
 class ExternalToolError(RetroDiscError):
     code = "external_tool_error"
     default_message = "Ein benötigtes Werkzeug fehlt oder lieferte einen Fehler."
