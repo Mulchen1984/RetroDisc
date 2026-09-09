@@ -1847,3 +1847,11 @@ sauber, `git diff --check` sauber.
 **Offen (echte Restpunkte):** xfade-Crossfade (Modell hat cut/fade/dip_black);
 Waveform-Track (Mission 13), Director 2.0, Restoration-Pro-UI-Details, Drag&Drop,
 als eigenständige spätere Blöcke; Windows-Praxistest/Vendor-libass-Caption.
+
+**Git-Checkpoint (Mission 33) — GEPUSHT:** Checkpoint-Commit `ffbf63c` (Parent
+`44af8d2`; reiner Quellcode, 69 Dateien, keine Binaries/Medien/Modelle/venv) per
+Fast-Forward auf `origin/crossplatform-2026` gepusht (`44af8d2..ffbf63c`, kein Force,
+keine Divergenz). Nach `gh auth login` (github.com/Mulchen1984, HTTPS, osxkeychain)
+gelang der zuvor an fehlenden Credentials gescheiterte Push. Verifiziert:
+`HEAD` == `origin/crossplatform-2026` == `ffbf63c`. Diese Doku-Aktualisierung folgt als
+separater Commit.
