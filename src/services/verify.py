@@ -84,6 +84,91 @@ def structure_check(expected_paths, actual_paths) -> Check:
     return Check("structure", True, f"{len(expected)} Dateien vollständig.")
 
 
+# ── real disc-structure comparison (VIDEO_TS / BDMV) ─────────────────────────
+# Required files mark a valid layout; recommended files only warn if absent.
+DVD_REQUIRED = ("VIDEO_TS/VIDEO_TS.IFO",)
+DVD_RECOMMENDED = ("VIDEO_TS/VIDEO_TS.BUP",)
+BD_REQUIRED = ("BDMV/index.bdmv", "BDMV/MovieObject.bdmv")
+BD_RECOMMENDED = ("BDMV/PLAYLIST", "BDMV/STREAM")
+
+
+def scan_tree(root, *, small_file_bytes: int = 1_048_576) -> dict:
+    """Map relative POSIX path -> {'size', 'sha'?} for every file under root."""
+    from src.services.fingerprint import build_structure
+    tree = {}
+    for entry in build_structure(root, small_file_bytes=small_file_bytes).get("files", []):
+        tree[entry["path"]] = {"size": entry.get("size", 0), "sha": entry.get("sha")}
+    return tree
+
+
+def detect_disc_kind(tree: dict) -> str:
+    lowered = {p.lower() for p in tree}
+    if "video_ts/video_ts.ifo" in lowered:
+        return "dvd"
+    if "bdmv/index.bdmv" in lowered:
+        return "bd"
+    return "unknown"
+
+
+def _present(tree: dict, rel: str) -> bool:
+    rel = rel.lower()
+    # A directory is "present" if any file lives under it.
+    return any(p.lower() == rel or p.lower().startswith(rel + "/") for p in tree)
+
+
+def layout_checks(tree: dict, kind: str) -> list[Check]:
+    required, recommended = {
+        "dvd": (DVD_REQUIRED, DVD_RECOMMENDED),
+        "bd": (BD_REQUIRED, BD_RECOMMENDED),
+    }.get(kind, ((), ()))
+    checks: list[Check] = []
+    for rel in required:
+        checks.append(Check(f"layout:{rel}", _present(tree, rel),
+                            "" if _present(tree, rel) else f"Pflichtdatei fehlt: {rel}"))
+    for rel in recommended:
+        ok = _present(tree, rel)
+        checks.append(Check(f"layout:{rel}", ok if ok else False,
+                            "" if ok else f"Empfohlene Struktur fehlt: {rel}",
+                            severity="info" if ok else "warning"))
+    return checks
+
+
+def compare_trees(expected: dict, actual: dict, *, compare_hash: bool = False) -> list[Check]:
+    """Compare two scanned trees: missing (error), extra (warning), size/hash mismatch."""
+    checks: list[Check] = []
+    missing = sorted(set(expected) - set(actual))
+    extra = sorted(set(actual) - set(expected))
+    checks.append(Check("files_missing", not missing,
+                        "" if not missing else f"{len(missing)} Datei(en) fehlen: {', '.join(missing[:5])}"))
+    checks.append(Check("files_extra", not extra,
+                        "" if not extra else f"{len(extra)} zusätzliche Datei(en): {', '.join(extra[:5])}",
+                        severity="warning" if extra else "info"))
+    size_mismatch = [p for p in sorted(set(expected) & set(actual))
+                     if expected[p]["size"] != actual[p]["size"]]
+    checks.append(Check("file_sizes", not size_mismatch,
+                        "" if not size_mismatch else
+                        f"{len(size_mismatch)} Datei(en) mit abweichender Größe: {', '.join(size_mismatch[:5])}"))
+    if compare_hash:
+        both = [p for p in sorted(set(expected) & set(actual))
+                if expected[p].get("sha") and actual[p].get("sha")]
+        hash_mismatch = [p for p in both if expected[p]["sha"] != actual[p]["sha"]]
+        checks.append(Check("file_hashes", None if not both else not hash_mismatch,
+                            "Keine Hashes vergleichbar." if not both else
+                            ("" if not hash_mismatch else
+                             f"{len(hash_mismatch)} Datei(en) mit abweichendem Inhalt: {', '.join(hash_mismatch[:5])}")))
+    return checks
+
+
+def verify_disc_structure(reference_root, target_root, *, kind: str = "auto",
+                          compare_hash: bool = False) -> VerifyResult:
+    """Structured VIDEO_TS/BDMV comparison of a target against a reference tree."""
+    reference = scan_tree(reference_root)
+    actual = scan_tree(target_root)
+    resolved_kind = kind if kind != "auto" else detect_disc_kind(reference) or detect_disc_kind(actual)
+    checks = layout_checks(actual, resolved_kind) + compare_trees(reference, actual, compare_hash=compare_hash)
+    return VerifyResult.from_checks(checks, message=f"Strukturvergleich ({resolved_kind}).")
+
+
 def booktype_check(requested: str, actual: str) -> Check:
     if not requested or requested == "automatic":
         return Check("book_type", None, "Kein Book Type angefordert.", severity="info")

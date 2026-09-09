@@ -84,6 +84,77 @@ def test_booktype_check():
     assert booktype_check("dvd_rom", "unknown").ok is None        # nicht rücklesbar -> Warnung/none
 
 
+def _make_dvd(root, *, vob_size=5000, with_bup=True):
+    vts = root / "VIDEO_TS"; vts.mkdir(parents=True)
+    (vts / "VIDEO_TS.IFO").write_bytes(b"ifo")
+    if with_bup:
+        (vts / "VIDEO_TS.BUP").write_bytes(b"bup")
+    (vts / "VTS_01_1.VOB").write_bytes(b"0" * vob_size)
+
+
+def _make_bd(root):
+    bdmv = root / "BDMV"; (bdmv / "PLAYLIST").mkdir(parents=True); (bdmv / "STREAM").mkdir()
+    (bdmv / "index.bdmv").write_bytes(b"index")
+    (bdmv / "MovieObject.bdmv").write_bytes(b"mobj")
+    (bdmv / "PLAYLIST" / "00000.mpls").write_bytes(b"mpls")
+    (bdmv / "STREAM" / "00000.m2ts").write_bytes(b"0" * 8000)
+
+
+def test_verify_disc_structure_identical_dvd_passes(tmp_path):
+    from src.services.verify import verify_disc_structure, detect_disc_kind, scan_tree
+    ref, tgt = tmp_path / "ref", tmp_path / "tgt"
+    _make_dvd(ref); _make_dvd(tgt)
+    assert detect_disc_kind(scan_tree(ref)) == "dvd"
+    assert verify_disc_structure(ref, tgt).status == PASS
+
+
+def test_verify_disc_structure_missing_required_fails(tmp_path):
+    from src.services.verify import verify_disc_structure
+    ref, tgt = tmp_path / "ref", tmp_path / "tgt"
+    _make_dvd(ref)
+    (tgt / "VIDEO_TS").mkdir(parents=True)
+    (tgt / "VIDEO_TS" / "VTS_01_1.VOB").write_bytes(b"0" * 5000)   # IFO fehlt
+    r = verify_disc_structure(tgt if False else ref, tgt, kind="dvd")
+    assert r.status == FAIL and any("VIDEO_TS.IFO" in c.detail for c in r.checks)
+
+
+def test_verify_disc_structure_missing_and_size_mismatch(tmp_path):
+    from src.services.verify import verify_disc_structure
+    ref, tgt = tmp_path / "ref", tmp_path / "tgt"
+    _make_dvd(ref, vob_size=5000); _make_dvd(tgt, vob_size=4000)   # Größe weicht ab
+    r = verify_disc_structure(ref, tgt)
+    assert r.status == FAIL and any(c.name == "file_sizes" and c.ok is False for c in r.checks)
+
+
+def test_verify_disc_structure_extra_file_is_warning(tmp_path):
+    from src.services.verify import verify_disc_structure
+    ref, tgt = tmp_path / "ref", tmp_path / "tgt"
+    _make_dvd(ref); _make_dvd(tgt)
+    (tgt / "VIDEO_TS" / "EXTRA.NFO").write_bytes(b"x")
+    assert verify_disc_structure(ref, tgt).status == PASS_WITH_WARNINGS
+
+
+def test_verify_disc_structure_bd_valid_and_broken(tmp_path):
+    from src.services.verify import verify_disc_structure, detect_disc_kind, scan_tree
+    ref, tgt = tmp_path / "ref", tmp_path / "tgt"
+    _make_bd(ref); _make_bd(tgt)
+    assert detect_disc_kind(scan_tree(ref)) == "bd"
+    assert verify_disc_structure(ref, tgt).status == PASS
+    (tgt / "BDMV" / "MovieObject.bdmv").unlink()                   # Pflichtdatei entfernt
+    assert verify_disc_structure(ref, tgt).status == FAIL
+
+
+def test_verify_disc_structure_hash_mismatch_same_size(tmp_path):
+    from src.services.verify import verify_disc_structure
+    ref, tgt = tmp_path / "ref", tmp_path / "tgt"
+    _make_dvd(ref); _make_dvd(tgt)
+    (tgt / "VIDEO_TS" / "VIDEO_TS.IFO").write_bytes(b"XXX")        # gleiche Größe, anderer Inhalt
+    ok = verify_disc_structure(ref, tgt, compare_hash=False)
+    assert ok.status == PASS                                       # ohne Hash: Größe gleich -> PASS
+    bad = verify_disc_structure(ref, tgt, compare_hash=True)
+    assert bad.status == FAIL and any(c.name == "file_hashes" and c.ok is False for c in bad.checks)
+
+
 def test_full_result_dict_is_serialisable():
     r = VerifyResult.from_checks([size_check(1000, 1000), hash_check("a", "a"),
                                   booktype_check("dvd_rom", "DVD-ROM")])

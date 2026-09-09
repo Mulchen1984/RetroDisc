@@ -2025,3 +2025,18 @@ Dateien, um Konflikte zu vermeiden). 12 Unit-Tests.
 - Text-Capability ehrlich unavailable (lokales FFmpeg ohne drawtext). Positive Text-/Font- und kombinierte Titel-Acceptance nicht behauptet. Kein visueller Qualitätsnachweis und kein realer Windows-Test.
 - 597 passed / 19 skipped / 0 failed; UI-Bridge 0 findings, JS/compileall/diff-check PASS. Details und echte Restpunkte (Projekt-/Export-Settings, Preview, weitere Audio-/Overlay-Controls) in EDITOR_V1_STATUS.md.
 - Keine Commits/Push/neuer Branch durch Codex.
+
+### 2026-09-09 — VerifyService: echter VIDEO_TS/BDMV-Strukturvergleich
+
+`src/services/verify.py` erweitert: `scan_tree` (Datei→Größe/Hash über den
+vorhandenen `fingerprint`-Walker, keine Parallelstruktur), `detect_disc_kind`
+(VIDEO_TS→dvd / BDMV→bd), `layout_checks` (Pflichtdateien: DVD `VIDEO_TS/VIDEO_TS.IFO`;
+BD `BDMV/index.bdmv`+`MovieObject.bdmv`; empfohlene als Warnung), `compare_trees`
+(fehlend=Fehler, zusätzlich=Warnung, Größenabweichung=Fehler, optional Hash-Vergleich)
+und `verify_disc_structure(reference, target, kind='auto', compare_hash=…)` →
+strukturierter `VerifyResult` (PASS/PASS_WITH_WARNINGS/FAIL/NOT_AVAILABLE) mit
+verständlichen Ursachen für UI/Logs statt bloßem Boolean. 6 neue Tests mit gültigen
+und absichtlich beschädigten VIDEO_TS/BDMV-Strukturen (fehlende Pflichtdatei,
+Größenabweichung, Extra-Datei=Warnung, Hash-Mismatch bei gleicher Größe). Keine
+Bridge-Verdrahtung, da `retrodisc_launcher.py` aktuell fremd-uncommitted ist
+(Konfliktvermeidung). `pytest -q` grün.
