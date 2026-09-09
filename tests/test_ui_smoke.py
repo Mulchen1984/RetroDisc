@@ -142,3 +142,26 @@ function directorSummarizePlan(){}
     assert r["afterEdit"] == {"undo": False, "redo": True}      # undo aktiv, redo deaktiviert
     assert r["afterUndo"] == {"undo": True, "redo": False}      # redo aktiv, undo deaktiviert
     assert r["afterRedo"] == {"undo": False, "redo": True}
+
+
+def test_waveform_slice_and_svg_stay_in_sync_with_clip():
+    code = function("slicePeaks") + function("waveformSvg") + """
+const wf={has_audio:true,duration:10,peaks:Array.from({length:100},(_,i)=>i/100)};
+const full=slicePeaks(wf,0,10);
+const trimmed=slicePeaks(wf,2.5,5);              // Trim -> Teilfenster
+const firstHalf=slicePeaks(wf,0,5);              // Split-Teil A
+const secondHalf=slicePeaks(wf,5,10);            // Split-Teil B
+const none=slicePeaks({has_audio:false,duration:0,peaks:[]},0,5);
+const svg=waveformSvg(trimmed);
+console.log(JSON.stringify({
+  fullLen:full.length, trimmed:{len:trimmed.length,first:trimmed[0],last:trimmed[trimmed.length-1]},
+  splitLens:[firstHalf.length,secondHalf.length], noneLen:none.length,
+  svgHasRects:/<rect/.test(svg), svgEmptyForNone:waveformSvg(none)===''
+}));
+"""
+    r = run_js(code)
+    assert r["fullLen"] == 100
+    assert r["trimmed"]["len"] == 25 and abs(r["trimmed"]["first"] - 0.25) < 1e-9   # Fenster [2.5,5]
+    assert r["splitLens"] == [50, 50]              # Split teilt die Wellenform korrekt
+    assert r["noneLen"] == 0 and r["svgEmptyForNone"]   # kein Audio -> leer
+    assert r["svgHasRects"]                         # echte Balken gerendert

@@ -1393,6 +1393,15 @@ class RetroDiscBridge:
         except Exception as exc:
             return json.dumps({'error':str(exc)})
 
+    def timeline_waveform(self, asset_path):
+        """Mission 35: cached real audio peaks for one source; UI slices per clip."""
+        from src.services.waveform import Waveform
+        try:
+            service = Waveform(self.ffmpeg, self.library.db_path.parent / 'waveform-cache')
+            return json.dumps(self._async(service.peaks(asset_path)).result(timeout=90))
+        except Exception as exc:
+            return json.dumps({'error': str(exc)})
+
     def director_save(self, project_json):
         from src.models.director import ProductionProject
         try:
@@ -1787,6 +1796,7 @@ class RetroDiscApi:
     def director_load(self, project_id): return self._bridge.director_load(project_id)
     def director_edit(self, project_json, operation, index=0, values_json="{}"):
         return self._bridge.director_edit(project_json,operation,index,values_json)
+    def timeline_waveform(self, asset_path): return self._bridge.timeline_waveform(asset_path)
     def director_save(self, project_json): return self._bridge.director_save(project_json)
     def director_translate(self, project_json, model, target_language='en'): return self._bridge.director_translate(project_json,model,target_language)
     def director_render(self, project_json, encoder="auto"): return self._bridge.director_render(project_json, encoder)

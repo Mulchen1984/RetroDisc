@@ -425,6 +425,14 @@ body.home-mode #homeview { display:flex; }
 .sec-btn:hover { background:#fff; border-color:#ff8a3c; color:#c75a12; }
 .sec-group-label { display:flex; align-items:center; font-size:10px; font-weight:bold; text-transform:uppercase;
   letter-spacing:.06em; color:#8a96a4; padding:0 4px 0 12px; }
+.wf-holder { margin-top:4px; height:22px; background:#0d1b2a; border:1px solid #274; border-radius:2px; overflow:hidden; }
+.wf-svg { display:block; }
+.wf-svg rect { fill:#3fa7ff; }              /* Originalton = blau */
+.wf-none { color:#8fa; font-size:10px; padding:0 4px; line-height:22px; }
+.wf-load { color:#89a; font-size:10px; padding:0 4px; line-height:22px; }
+.wf-legend { font-weight:bold; }
+.wf-orig-key { color:#3fa7ff; }             /* Originalton */
+.wf-voice-key { color:#3fd07a; }            /* Voiceover */
 #flowbar { display:none; align-items:center; gap:14px; padding:14px 30px 0; flex-shrink:0; }
 body.flow-mode #flowbar { display:flex; }
 .back { width:38px; height:38px; border-radius:10px; border:1px solid #e2e7ee; background:#fff;
@@ -3232,10 +3240,51 @@ function timelineDraw(p){
     <button class="btn98" onclick="timelineAction('delete',${i},{})">Löschen</button>
     <select aria-label="Übergang" onchange="timelineAction('transition',${i},{value:this.value})">${[['cut','Cut'],['fade','Einblenden'],['dip_black','Schwarzblende']].map(([v,n])=>`<option value="${v}" ${c.transition===v?'selected':''}>${n}</option>`).join('')}</select>
     <select aria-label="Zoom" onchange="timelineAction('zoom',${i},{value:this.value})">${[['off','Zoom aus'],['subtle','Dezent'],['dynamic','Dynamisch']].map(([v,n])=>`<option value="${v}" ${(c.zoom||'off')===v?'selected':''}>${n}</option>`).join('')}</select>
-  </div>`).join('')+'<p><b>Audio Track</b> · Originalton</p><p><b>Voiceover Track</b> · '+escHtml(p.voiceover.map(v=>`${v.position}s: ${v.text}`).join(' | ')||'leer')+'</p><p><b>Music / SFX Track</b> · '+escHtml([...(p.music||[]),...(p.sound_effects||[])].map(t=>`${t.position}s: ${asset(t.asset_id)?.title||t.asset_id}`).join(' | ')||'leer')+'</p><p><b>Caption Track</b> · Transkript-/Sprechersegmente → SRT</p>';
+    <div class="wf-holder" id="wf${i}" aria-label="Wellenform Originalton"><span class="wf-load">Wellenform…</span></div>
+  </div>`).join('')+'<p><b>Audio Track</b> · Originalton <span class="wf-legend wf-orig-key">▮</span></p><p><b>Voiceover Track</b> <span class="wf-legend wf-voice-key">▮</span> · '+escHtml(p.voiceover.map(v=>`${v.position}s: ${v.text}`).join(' | ')||'leer')+'</p><p><b>Music / SFX Track</b> · '+escHtml([...(p.music||[]),...(p.sound_effects||[])].map(t=>`${t.position}s: ${asset(t.asset_id)?.title||t.asset_id}`).join(' | ')||'leer')+'</p><p><b>Caption Track</b> · Transkript-/Sprechersegmente → SRT</p>';
   document.getElementById('timelineVolume').value=p.original_volume??1;
   document.getElementById('timelineVoice').checked=p.voiceover_enabled!==false;
   timelineUpdateButtons();
+  timelineRenderWaveforms(p);
+}
+// Mission 35: echte, gecachte Audio-Wellenform je Clip. Quelle wird einmal je
+// Asset geladen (Backend-Cache), clientseitig pro Clip-Fenster geschnitten →
+// Trim/Split/Move/Undo/Redo bleiben synchron, kein Polling.
+async function timelineWaveformFor(assetPath,assetId){
+  S.waveformCache=S.waveformCache||{}; S.waveformPending=S.waveformPending||{};
+  if(S.waveformCache[assetId]) return S.waveformCache[assetId];
+  if(S.waveformPending[assetId]) return S.waveformPending[assetId];
+  S.waveformPending[assetId]=(async()=>{
+    let wf={has_audio:false,peaks:[],duration:0};
+    try{ const r=JSON.parse(await api().timeline_waveform(assetPath)); if(!r.error) wf=r; }
+    catch(e){}
+    S.waveformCache[assetId]=wf; delete S.waveformPending[assetId]; return wf;
+  })();
+  return S.waveformPending[assetId];
+}
+function waveformSvg(peaks){
+  if(!peaks||!peaks.length) return '';
+  const max=Math.max(0.0001,...peaks), bars=Math.min(160,peaks.length), step=peaks.length/bars;
+  let rects='';
+  for(let i=0;i<bars;i++){ const v=peaks[Math.floor(i*step)]/max, h=Math.max(1,Math.round(v*20)); rects+=`<rect x="${i}" y="${(22-h)/2}" width="0.8" height="${h}"/>`; }
+  return `<svg class="wf-svg" width="100%" height="22" viewBox="0 0 ${bars} 22" preserveAspectRatio="none">${rects}</svg>`;
+}
+async function timelineRenderWaveforms(p){
+  const asset=id=>p.assets.find(a=>a.id===id);
+  await Promise.all(p.timeline.map(async(c,i)=>{
+    const holder=document.getElementById('wf'+i); if(!holder) return;
+    const a=asset(c.asset_id); if(!a){holder.innerHTML='';return;}
+    const wf=await timelineWaveformFor(a.path,a.id);
+    const holderNow=document.getElementById('wf'+i); if(!holderNow) return;   // Redraw kann zwischenzeitlich passiert sein
+    if(!wf.has_audio){ holderNow.innerHTML='<span class="wf-none">kein Audio</span>'; return; }
+    const seg=(window.slicePeaks||slicePeaks)(wf,c.start,c.end);
+    holderNow.innerHTML=seg&&seg.length?waveformSvg(seg):'<span class="wf-none">kein Audio</span>';
+  }));
+}
+function slicePeaks(wf,start,end){
+  if(!wf||!wf.has_audio||!wf.peaks.length||!wf.duration) return [];
+  const n=wf.peaks.length, lo=Math.max(0,Math.floor(start/wf.duration*n)), hi=Math.min(n,Math.ceil(end/wf.duration*n));
+  return hi>lo?wf.peaks.slice(lo,hi):[];
 }
 function timelineUpdateButtons(){
   const u=document.getElementById('timelineUndoBtn'),r=document.getElementById('timelineRedoBtn');

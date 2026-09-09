@@ -1855,3 +1855,50 @@ keine Divergenz). Nach `gh auth login` (github.com/Mulchen1984, HTTPS, osxkeycha
 gelang der zuvor an fehlenden Credentials gescheiterte Push. Verifiziert:
 `HEAD` == `origin/crossplatform-2026` == `ffbf63c`. Diese Doku-Aktualisierung folgt als
 separater Commit.
+
+### 2026-09-09 (Mission 35) — Echte gecachte Audio-Wellenform in der Timeline
+
+Ausgangspunkt `9c55f58`, sauberer Baum. Umgebung wie zuvor (macOS, ffmpeg 8.1.1,
+`.venv-test`). Pfad: Mediendatei → ffmpeg-PCM (mono, dauerabhängige Rate) →
+Peak-Buckets → Disk-Cache (Datei+mtime+size) → Timeline-UI schneidet clientseitig
+pro Clip. Keine zweite Timeline-Architektur; Codex' `edit()`/Undo-Redo unverändert.
+
+**Backend** `src/services/waveform.py` (`Waveform`): echte Max-abs-Peaks aus dem PCM
+(numpy, Fallback `array`); Rate = clamp(2_000_000/Dauer, 200..8000 Hz) begrenzt
+Speicher (≤ ~4 MB), Analyse in `asyncio.to_thread` (blockiert die UI nicht).
+Disk-Cache pro Datei+mtime+size+buckets; kein erneutes Analysieren derselben Datei.
+`peaks()` liefert kompakt `{has_audio,duration,peaks[≤buckets],rate}`; kein Vollladen
+nach JS. `slice_window()` schneidet das Clip-Fenster [start,end].
+
+**Bridge/UI:** `timeline_waveform(asset_path)` (+Api-Proxy). Client lädt Peaks EINMAL
+je Asset (`S.waveformCache`), schneidet clientseitig pro Clip → Trim/Split/Move/
+Delete/Undo/Redo bleiben synchron ohne Reanalyse, kein Polling. SVG-Balken im
+vorhandenen Timeline-Stil, Originalton (blau) und Voiceover (grün) per Legende
+unterscheidbar; Clip ohne Audio zeigt „kein Audio"; Caption-Track unverändert.
+
+**Cache-/Peak-Strategie:** buckets-Standard 1600 (Quelle) → UI-Slice je Clip; Peakzahl
+hart durch `buckets` begrenzt; Rate dauerabhängig; JSON pro Quelle wenige KB.
+
+**Reale Tests** (`tests/test_waveform.py`, echtes ffmpeg): Video mit Audio →
+variierende Peaks; **Anti-Dummy-Test**: laute Hälfte > 2× leise Hälfte (schlägt bei
+konstanten/Dummy-Peaks fehl); Video ohne Audio → sauberer No-Audio-Zustand, kein
+Fehler; reine Audiodatei → Peaks; Cache-Wiederverwendung ohne Reanalyse (2. Aufruf
+mit unbrauchbar gemachtem ffmpeg liefert Cache); Peakzahl ≤ buckets; Dateiname mit
+Leerzeichen+Umlauten. UI-Smoke (`tests/test_ui_smoke.py`): `slicePeaks`/`waveformSvg`
+— Trim = Teilfenster [2.5,5]→25 Peaks, Split = 50/50, No-Audio→leer, echte `<rect>`.
+
+**Regressionen geprüft (unverändert PASS):** Timeline-Render (2 Videos, Trim/Split/
+Move/Delete+Undo/Redo), Transitions fade/dip_black (real), Originalton keep/duck/mute
++ `original_volume`, Voiceover, Captions, Recent Media — 88 gezielte Tests + realer
+`timeline_render_realtest.py` GESAMT PASS.
+
+**Tests/Gates:** `pytest -q` = **505 passed / 19 skipped / 0 failed**. `verify_ui_bridge`
+PASS (0 findings, 67 Bridge-Methoden), `node --check` OK, `compileall` sauber,
+`git diff --check` sauber. Keine künstlichen Skips.
+
+**Verbleibende Risiken:** Timeline hat (noch) keinen horizontalen Zoom-Regler — die
+SVG-Wellenform skaliert mit der Clip-Zeilenbreite (`preserveAspectRatio=none`), Sync
+bleibt proportional; ein späterer Zoom müsste nur die Zeilenbreite ändern. Peaks sind
+absolute Full-Scale-Werte, die UI skaliert je Clip auf das eigene Maximum (Form gut
+sichtbar, Lautheitsvergleich zwischen Clips nicht 1:1). Sehr lange Dateien werden mit
+niedrigerer Rate analysiert (Overview-Genauigkeit, gewollt).
