@@ -343,6 +343,20 @@ class DiscTools:
         log.info("Disc verifiziert", iso=str(source), device=device, sha256=iso_hash)
         return True
 
+    async def verify_iso_result(self, iso_path: Path, device: str):
+        """Structured verify result (PASS/FAIL/NOT_AVAILABLE) around verify_iso."""
+        from src.services.verify import VerifyResult, Check
+        try:
+            await self.verify_iso(iso_path, device)
+            return VerifyResult.from_checks([Check("hash", True, "Prüfsumme identisch."),
+                                             Check("size", True, "Länge stimmt überein.")])
+        except DiscError as exc:
+            text = str(exc)
+            name = "size" if "kürzer" in text or "länger" in text else "hash"
+            if "konnte nicht gelesen" in text:            # Lesefehler -> nicht bewertbar
+                return VerifyResult.from_checks([Check("read", None, text)])
+            return VerifyResult.from_checks([Check(name, False, text)])
+
     @staticmethod
     def _windows_volume_info(device: str, info: dict) -> dict:
         """Ermittelt den Medienzustand eines Windows-Laufwerks am Dateisystem.
