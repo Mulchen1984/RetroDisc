@@ -127,3 +127,17 @@ async def test_cancel_during_run_marks_cancelled():
     assert job.state == TranscodingState.CANCELLED
     assert job.error_class == FFmpegErrorClass.PROCESS_CANCELLED.value
     assert proc._stop.is_set()                        # terminiert
+
+@pytest.mark.asyncio
+async def test_task_cancel_terminates_process_and_cleans_pumps():
+    proc = FakeProc(PROGRESS, run_forever=True)
+    job = TranscodingJob()
+    ready = asyncio.Event()
+    def progress(snapshot): ready.set()
+    task = asyncio.create_task(run_transcode(job, ['ffmpeg'], spawn=spawn_of(proc),
+        terminator=fake_terminator, on_progress=progress))
+    await ready.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError): await task
+    assert proc._stop.is_set()
+    assert job.state == TranscodingState.CANCELLED

@@ -2133,3 +2133,44 @@ berührt.
 - Tests: 66 neue (Capabilities/Selection/Probe/Command/Progress/Job/Verify/Integration),
   inkl. **echtem FFmpeg-Integrationstest** (skippt ohne FFmpeg, kein CI-Gate).
   `pytest -q` = 736 passed / 19 skipped / 0 failed; compileall + diff-check sauber.
+
+### 2026-09-10 — Pipeline-Handoff abgeschlossen, CPU-Workflow real geprüft
+
+- Übernommen: uncommittierte `pipeline/events.py`, `resources.py`, `scheduler.py`
+  und `test_pipeline_scheduler.py`; Claudes persistente Queue/Analyse/Recommendation
+  sowie Transcode-/Metadata-/Library-Services weiterverwendet. Editor-WIP bleibt separat.
+- Reproduziert und behoben: Cancel vor Task-Start verlor Ressourcen/Status;
+  Scheduler-Abbruch ließ Child-Tasks laufen; Parent-Retry ließ ungestartete
+  Dependency-Nachfolger dauerhaft FAILED. Fehlerfortpflanzung funktioniert jetzt
+  auch gegen die Prioritätsreihenfolge; fehlende Dependencies werden benannt.
+- Queue-Claim und Retry bedingte atomare SQLite-Updates; Metadata-Merge unter
+  Schreiblock; Rollback/Busy/Connection-Cleanup und explizites Startup-Recovery
+  getestet. Recovery setzt PREPARING/RUNNING/VERIFYING auf INTERRUPTED, startet
+  nichts automatisch und behandelt vorhandene Teil-Ausgaben nie als Erfolg.
+- Task-Cancel terminiert nun auch den echten FFmpeg-Kindprozess. Verifikation
+  lehnt stark verkürzte/zeitlich unbekannte Ausgaben und fehlendes erwartetes Audio
+  ab. `event_type=`-Fix real mit werfendem Listener und weiterlaufendem Workflow belegt.
+- `pipeline/workflow.py`: schmaler File-Adapter Analyse → Recommendation → Queue →
+  Scheduler → CPU-Transcode → Verify + vollständiges Decode → Library + Provenance/
+  Events. Bestehende Services, keine zweite Engine/DB. Exklusives Publish über
+  Hardlink im gleichen Dateisystem schützt existierende Ziele; Dateisysteme ohne
+  Hardlink-Unterstützung schlagen sicher fehl. Pro Job eigener Staging-Pfad,
+  Cleanup bei Fehler/Cancel. Ressourcen gelten innerhalb des gemeinsamen
+  ResourceManager/Event-Loops, nicht als systemweite Mehrprozess-Sperren.
+- Real auf macOS: synthetische Quelle H.264/AAC, 160×120, 2.000 s; Output CPU
+  `libx264`, H.264/AAC, 2.020 s, 68 735 Bytes. Queue/Library erneut geöffnet,
+  Progress/Events/Library-Provenance geprüft, vollständiges Decoding, Quelle
+  unverändert. Artefakte (ignoriert): `build/pipeline-acceptance/report.json`.
+  Quelle SHA-256 `70aa9ac36b84d6184a177bdaec0cc04e9c323faf459c421cb81748ccf3e8d23d`;
+  Ausgabe SHA-256 `ade0e3b4f34fcb38ec2d620b9bba28cebe02757b66594b5b2642d4bed297cea6`.
+- Gesamtdiff-Review: zusätzliche Musikdauer-Regression im älteren Editor-WIP
+  (Speed/Freeze/Overlap) minimal korrigiert und separat getestet; nicht Bestandteil
+  dieses Pipeline-Commits. Vorhandene Editor-Restpunkte bleiben bestehen.
+- Gates des gemeinsamen Worktrees: **804 passed / 19 skipped / 0 failed**;
+  `build/pipeline-regression.log`. Bridge PASS/0 Findings, Node-Syntax PASS,
+  compileall PASS, git diff --check PASS. Reale CPU-/Cancel-Tests zusätzlich zu
+  simulierten Ressourcen-/Failure-Tests. Keine physische Disc oder Windows-GPU getestet.
+- Offen: reale Windows-/NVENC-/QSV-/AMF-/Laufwerksabnahme. Der neue persistente
+  Backend-Workflow ist noch nicht in die GUI-Queue eingebunden (kein UI-Umbau
+  in diesem Auftrag). Recovery wird explizit durch den Queue-Eigentümer vor dem
+  Start aufgerufen; keine automatische Wiederaufnahme/Entfernung fremder Dateien.

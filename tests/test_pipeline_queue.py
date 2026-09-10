@@ -122,3 +122,50 @@ def test_two_connections_share_db(tmp_path):
     b.mark_running("x")
     assert a.get("x").status == JobState.RUNNING.value
     a.close(); b.close()
+
+
+def test_claim_and_retry_are_atomic_across_connections(tmp_path):
+    with JobQueue(tmp_path / 'q.db') as a, JobQueue(tmp_path / 'q.db') as b:
+        a.enqueue(PipelineJob(id='a'))
+        assert a.mark_started('a')
+        assert not b.mark_started('a')
+        a.mark_failed('a', 'fail')
+        assert b.retry('a') and not a.retry('a')
+        assert a.get('a').retry_count == 1
+        a.update_metadata('a', {'a': 1})
+        b.update_metadata('a', {'b': 2})
+        assert a.get('a').metadata == {'a': 1, 'b': 2}
+
+
+def test_sqlite_rollback_lock_and_cleanup(tmp_path):
+    with JobQueue(tmp_path / 'q.db') as a, JobQueue(tmp_path / 'q.db') as b:
+        a.enqueue(PipelineJob(id='a', source='original'))
+        with pytest.raises(sqlite3.IntegrityError):
+            a.enqueue(PipelineJob(id='a', source='duplicate'))
+        assert a.get('a').source == 'original'
+        assert not a._conn.in_transaction
+        b._conn.execute('PRAGMA busy_timeout=20')
+        a._conn.execute('BEGIN IMMEDIATE')
+        try:
+            with pytest.raises(sqlite3.OperationalError, match='locked'):
+                b.update_metadata('a', {'lost': True})
+            assert not b._conn.in_transaction
+        finally:
+            a._conn.rollback()
+        b.update_metadata('a', {'saved': True})
+        assert a.get('a').metadata == {'saved': True}
+    with pytest.raises(sqlite3.ProgrammingError): a.count()
+
+
+@pytest.mark.parametrize('state', [JobState.PREPARING, JobState.RUNNING, JobState.VERIFYING])
+def test_recovery_never_promotes_partial_output(tmp_path, state):
+    partial = tmp_path / 'partial.mp4'; partial.write_bytes(b'partial')
+    with JobQueue(tmp_path / 'q.db') as q:
+        q.enqueue(PipelineJob(id='a', destination=str(partial)))
+        q.set_status('a', state)
+    with JobQueue(tmp_path / 'q.db') as q:
+        assert q.recover() == ['a']
+        assert q.get('a').status == 'interrupted'
+        assert q.get('a').finished is None
+        assert partial.read_bytes() == b'partial'  # recovery never overwrites user files
+        assert q.retry('a') and q.get('a').status == 'queued'

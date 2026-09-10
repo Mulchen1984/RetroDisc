@@ -165,10 +165,6 @@ async def run_transcode(job: TranscodingJob, args, *, total_duration: Optional[f
     cancel_task = asyncio.create_task(cancel_event.wait()) if cancel_event else None
     waiters = [exit_task] + ([cancel_task] if cancel_task else [])
 
-    done, _pending = await asyncio.wait(waiters, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
-    timed_out = not done
-    cancelled = bool(cancel_task is not None and cancel_task in done)
-
     async def _cleanup_tasks():
         for task in (pump_task, err_task, exit_task, cancel_task):
             if task is not None and not task.done():
@@ -179,27 +175,38 @@ async def run_transcode(job: TranscodingJob, args, *, total_duration: Optional[f
     def _stderr() -> str:
         return stderr_tail.decode("utf-8", "replace")
 
-    if timed_out or cancelled:
-        with contextlib.suppress(Exception):
-            await terminator(proc)                 # graceful terminate -> kill
-        await _cleanup_tasks()
-        (job.cancel() if cancelled else job.timeout())
-        job.error_detail = job.error_detail or _stderr()[-500:]
-        return job
+    try:
+        done, _pending = await asyncio.wait(waiters, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+        timed_out = not done
+        cancelled = bool(cancel_task is not None and cancel_task in done)
 
-    # Prozess ist von selbst beendet
-    if cancel_task is not None:
-        cancel_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await cancel_task
-    with contextlib.suppress(Exception):
-        await pump_task
-    with contextlib.suppress(Exception):
-        await err_task                             # restlichen stderr einsammeln
-    rc = proc.returncode
-    stderr = _stderr()
-    if rc == 0:
-        job.mark_completed(rc)
-    else:
-        job.fail(classify_ffmpeg_error(stderr, returncode=rc), detail=stderr[-500:], exit_code=rc)
-    return job
+        if timed_out or cancelled:
+            with contextlib.suppress(Exception):
+                await terminator(proc)                 # graceful terminate -> kill
+            await _cleanup_tasks()
+            (job.cancel() if cancelled else job.timeout())
+            job.error_detail = job.error_detail or _stderr()[-500:]
+            return job
+
+        # Prozess ist von selbst beendet
+        if cancel_task is not None:
+            cancel_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await cancel_task
+        with contextlib.suppress(Exception):
+            await pump_task
+        with contextlib.suppress(Exception):
+            await err_task                             # restlichen stderr einsammeln
+        rc = proc.returncode
+        stderr = _stderr()
+        if rc == 0:
+            job.mark_completed(rc)
+        else:
+            job.fail(classify_ffmpeg_error(stderr, returncode=rc), detail=stderr[-500:], exit_code=rc)
+        return job
+    except asyncio.CancelledError:
+        await terminator(proc)
+        job.cancel()
+        raise
+    finally:
+        await _cleanup_tasks()

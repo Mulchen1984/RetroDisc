@@ -27,7 +27,8 @@ def _canon(codec: str) -> str:
 
 async def verify_transcode(output_path, probe: MediaProbeService, *,
                            expected_duration: Optional[float] = None,
-                           expected_codec: str = "", min_bytes: int = 4096) -> VerifyResult:
+                           expected_codec: str = "", min_bytes: int = 4096,
+                           expected_audio: bool = False) -> VerifyResult:
     path = Path(output_path)
     if not path.is_file():
         return VerifyResult.from_checks([Check("exists", False, "Ausgabedatei fehlt.")])
@@ -49,10 +50,13 @@ async def verify_transcode(output_path, probe: MediaProbeService, *,
         checks.append(Check("codec", ok,
                             "" if ok else f"Codec {video.codec} statt erwartet {expected_codec}"))
 
-    if expected_duration and info.duration:
+    if expected_audio:
+        checks.append(Check("audio_stream", bool(info.audio), "Audiospur fehlt." if not info.audio else ""))
+
+    if expected_duration:
         tolerance = max(1.0, expected_duration * 0.05)
-        ok = abs(info.duration - expected_duration) <= tolerance
+        ok = info.duration > 0 and abs(info.duration - expected_duration) <= tolerance
         checks.append(Check("duration", ok,
                             "" if ok else f"Dauer {info.duration:.1f}s statt ~{expected_duration:.1f}s",
-                            severity="warning"))
+                            severity="error"))
     return VerifyResult.from_checks(checks)

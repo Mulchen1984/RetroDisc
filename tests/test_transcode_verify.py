@@ -48,11 +48,11 @@ async def test_wrong_codec_fails(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_duration_mismatch_is_warning(tmp_path):
+async def test_truncated_duration_fails(tmp_path):
     out = tmp_path / "o.mkv"; out.write_bytes(b"0" * 100000)
     r = await verify_transcode(out, probe_returning(_ok_payload(duration=50.0, codec="hevc")),
                                expected_duration=100.0, expected_codec="h265")
-    assert r.status == PASS_WITH_WARNINGS       # nur Warnung, Datei ist valide
+    assert r.status == FAIL  # Decodable partial output is not a completed transcode.
 
 
 @pytest.mark.asyncio
@@ -70,3 +70,11 @@ async def test_codec_family_normalisation(tmp_path):
     r = await verify_transcode(out, probe_returning(_ok_payload(codec="hevc")),
                                expected_codec="hevc_nvenc")
     assert r.status == PASS
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('duration', [0, 100])
+async def test_missing_duration_or_expected_audio_fails(tmp_path, duration):
+    out = tmp_path / 'out.mp4'; out.write_bytes(b'0' * 10000)
+    result = await verify_transcode(out, probe_returning(_ok_payload(duration)),
+                                   expected_duration=100, expected_audio=True)
+    assert result.status == FAIL

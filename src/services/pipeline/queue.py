@@ -1,8 +1,8 @@
 """Persistent SQLite job queue that survives restarts.
 
 Jobs are stored in their own DB (PRAGMA user_version schema, busy_timeout for
-concurrency). On open, jobs that were mid-flight (running/preparing/verifying)
-are recovered to INTERRUPTED — a crashed process never leaves a phantom RUNNING
+concurrency). At application startup, recover() marks mid-flight jobs
+(running/preparing/verifying) INTERRUPTED — a crashed process leaves no phantom RUNNING
 job. Supports FIFO+priority ordering, retry, dependencies and history.
 """
 from __future__ import annotations
@@ -73,6 +73,8 @@ class PipelineJob:
         data = {k: row[k] for k in _COLUMNS if k != "metadata_json"}
         try:
             data["metadata"] = json.loads(row["metadata_json"] or "{}")
+            if not isinstance(data["metadata"], dict):
+                data["metadata"] = {}
         except (ValueError, TypeError):
             data["metadata"] = {}
         return cls(**data)
@@ -89,6 +91,8 @@ class JobQueue:
             self._conn.execute("PRAGMA busy_timeout = 5000")
             self._migrate()
         except sqlite3.DatabaseError as exc:
+            if hasattr(self, "_conn"):
+                self._conn.close()
             raise QueueError(f"Queue-Datenbank ungültig/beschädigt: {self.db_path}",
                              detail=str(exc)) from exc
 
@@ -159,8 +163,27 @@ class JobQueue:
     def set_progress(self, job_id: str, percent: float) -> bool:
         return self._set(job_id, progress=max(0.0, min(100.0, float(percent))))
 
+    def update_metadata(self, job_id: str, values: dict) -> bool:
+        with self._conn:
+            # Obtain the write lock before read/merge to avoid lost updates.
+            cur = self._conn.execute(
+                "UPDATE pipeline_jobs SET metadata_json=metadata_json WHERE id=?", (job_id,))
+            if not cur.rowcount:
+                return False
+            job = self.get(job_id)
+            metadata = dict(job.metadata)
+            metadata.update(values)
+            self._conn.execute("UPDATE pipeline_jobs SET metadata_json=? WHERE id=?",
+                               (json.dumps(metadata, ensure_ascii=False), job_id))
+        return True
+
     def mark_started(self, job_id: str) -> bool:
-        return self.set_status(job_id, JobState.PREPARING, started=self._now())
+        # Claim atomically: another queue connection must not start the same job.
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE pipeline_jobs SET status='preparing', started=? "
+                "WHERE id=? AND status='queued'", (self._now(), job_id))
+        return cur.rowcount == 1
 
     def mark_running(self, job_id: str) -> bool:
         return self.set_status(job_id, JobState.RUNNING)
@@ -187,13 +210,29 @@ class JobQueue:
         return False
 
     def retry(self, job_id: str) -> bool:
-        job = self.get(job_id)
-        if not job or job.status not in (JobState.FAILED.value, JobState.INTERRUPTED.value):
-            return False
-        if job.retry_count >= job.max_retries:
-            return False
-        return self.set_status(job_id, JobState.QUEUED, retry_count=job.retry_count + 1,
-                               error="", started=None, finished=None, progress=0.0)
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE pipeline_jobs SET status='queued', retry_count=retry_count+1, "
+                "error='', started=NULL, finished=NULL, progress=0 "
+                "WHERE id=? AND status IN ('failed','interrupted') AND retry_count<max_retries",
+                (job_id,))
+            if cur.rowcount != 1:
+                return False
+            # Only restore descendants that never ran and failed solely because
+            # of this dependency. Their own retry budgets remain untouched.
+            parents = [job_id]
+            while parents:
+                parent = parents.pop()
+                children = self._conn.execute(
+                    "SELECT id FROM pipeline_jobs WHERE depends_on=? AND status='failed' "
+                    "AND started IS NULL AND error=?",
+                    (parent, f"Abhängigkeit {parent} fehlgeschlagen")).fetchall()
+                for child in children:
+                    self._conn.execute(
+                        "UPDATE pipeline_jobs SET status='queued', error='', finished=NULL, progress=0 "
+                        "WHERE id=?", (child['id'],))
+                    parents.append(child['id'])
+        return True
 
     def remove(self, job_id: str) -> bool:
         with self._conn:

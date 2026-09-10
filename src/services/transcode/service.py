@@ -91,9 +91,10 @@ class TranscodeService:
             job.mark_verifying()
             result = await verify_transcode(destination, self.probe,
                                             expected_duration=info.duration,
-                                            expected_codec=selection.codec)
+                                            expected_codec=selection.codec,
+                                            expected_audio=bool(info.audio))
             job.verification = result.to_dict()
-            if result.status == "FAIL":
+            if result.status not in ("PASS", "PASS_WITH_WARNINGS"):
                 # Erfolg vortäuschen wäre falsch: Verifikation schlägt fehl -> Job fehlgeschlagen.
                 job.state = TranscodingState.FAILED
                 job.error_class = job.error_class or FFmpegErrorClass.OUTPUT_WRITE_ERROR.value
