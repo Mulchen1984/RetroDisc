@@ -2174,3 +2174,96 @@ berührt.
   Backend-Workflow ist noch nicht in die GUI-Queue eingebunden (kein UI-Umbau
   in diesem Auftrag). Recovery wird explizit durch den Queue-Eigentümer vor dem
   Start aufgerufen; keine automatische Wiederaufnahme/Entfernung fremder Dateien.
+
+### 2026-09-11 — Echte Blu-ray-Funktionalität (BDMV-Authoring, ISO, Brennen, Capability-Gating)
+
+Vorherige UI-Blöcke zeigten Blu-ray-Zielmedien nur an und deaktivierten sie
+pauschal ("BDMV-Authoring nicht implementiert"). Dieser Block macht die
+Unterstützung real, statt sie nur sichtbar zu machen.
+
+- Bestandsaufnahme: Blu-ray-Lesen/-Rippen war bereits real (`disc_analyzer.py`/
+  `bluray_mpls.py`, `ripper.py`); BDMV-*Authoring* fehlte komplett (nur
+  `dvdauthor`/VIDEO_TS vorhanden, kein Blu-ray-Muxing-Werkzeug installiert oder
+  vendorbar).
+- Neu: `src/services/bluray_authoring.py` (MPLS-/CLPI-/index.bdmv-/
+  MovieObject.bdmv-Writer; MPLS byte-exakt zum bereits produktiven Leser,
+  echter Round-Trip getestet) + `src/services/bluray_workflow.py`
+  (`BlurayWorkflow` analog `DVDWorkflow`) + `FFmpeg.to_bluray_stream`
+  (BDAV-M2TS via `-mpegts_m2ts_mode`, feste PIDs 0x1011/0x1100 - real gegen
+  FFmpeg verifiziert: Sync-Byte 0x47 an Offset 4 jedes 192-Byte-Pakets, PIDs
+  per ffprobe bestätigt). Ende-zu-Ende real geprüft: echter FFmpeg-Encode →
+  `author_bdmv()` → von RetroDiscs eigenem `DiscAnalyzer` korrekt zurückgelesen.
+- Realer Fund + Fix: `mkisofs -allow-limited-size` wird von der hier
+  installierten mkisofs-Variante nicht erkannt, UND der naheliegende Fallback
+  (`-udf -iso-level 3`) verwirft Dateien >4 GiB dabei stillschweigend
+  (Exit-Code 0, aber ein kaputt-kleines Image) - `DiscTools.create_iso` jetzt
+  mit Flag-Fallback plus einer Größenprüfung nach der Erstellung gehärtet.
+- Neue Bridge-Methoden: `create_bluray`, `burn_existing_iso`,
+  `check_target_medium` (Capability-Gating bereits vor dem Einreihen, nicht
+  nur in der UI); `list_target_media` meldet jetzt `authoring_available`.
+- `copy_disc`-Fix: eine kopierte Blu-ray-Quelle bekam bisher fälschlich
+  `disc_type=DVD` beim Brennen (Book-Type-Fehlklassifikation) - jetzt real
+  über `BDMV`-Erkennung korrekt durchgereicht.
+- Tests: 927 → 989 passed (+62), 19 skipped, derselbe 1 vorbestehende
+  unabhängige Fehler unverändert. `compileall`/`verify_ui_bridge`/
+  `node --check` PASS.
+- Screenshots (`artifacts/blu-ray-visibility-review/`): Startseite, Rippen mit
+  sichtbarer DVD-/Blu-ray-Erkennung, Brennen mit Zielmedienauswahl (einmal
+  DVD-only-, einmal BDXL-fähiges Laufwerk), Bibliothek als sekundäres Werkzeug.
+- Offen: kein physisches Laufwerk in dieser Umgebung (Burn-Pfad softwareseitig
+  vollständig getestet, nicht hardwareverifiziert); das produktive
+  Windows-`mkisofs.exe` (aus dem DVDStyler-Bundle) selbst nicht getestet;
+  `index.bdmv`/`MovieObject.bdmv` sind strukturell wohlgeformt, aber das
+  MovieObject trägt bewusst keine HDMV-Navigationsbefehle (kein
+  Referenz-Decoder zum Gegenprüfen vorhanden).
+
+### 2026-09-12 — DVD-/Blu-ray-Vorschau-Player (mpv per JSON-IPC)
+
+- Engine-Wahl: mpv per JSON-IPC-Socket (`--input-ipc-server`), gesteuert als
+  Subprozess wie FFmpeg/dvdauthor/growisofs. `python-mpv` (ctypes-Bindings)
+  real getestet und verworfen: stürzt beim Instanziieren reproduzierbar ab,
+  obwohl das mpv-Binary selbst fehlerfrei läuft. HTML5 `<video>` verworfen
+  (kein zuverlässiger MPEG-2-/VOB-/DTS-/Mehrspur-Support in
+  WKWebView/WebView2).
+- Neu: `src/services/player.py` (`PlayerService`, `_MpvIpcClient`),
+  `player_source.py` (Titel-Index → Datei-/Segmentliste, wiederverwendet
+  `dvd_ifo.parse_tt_srpt`/`bluray_mpls.parse_mpls` - keine parallele
+  Disc-Analyse; mehrsegmentige Titel laufen über mpvs `edl://`-Protokoll als
+  eine zusammenhängende Zeitleiste), `iso_mount.py` (`hdiutil`/
+  `Mount-DiskImage`, garantiertes Unmount), `drm_capabilities.py`
+  (CSS/AACS/BD+ ehrlich als nicht unterstützt ausgewiesen).
+- Drei real gefundene und behobene Bugs: (1) ein dauerhafter
+  Hintergrund-Reader-Task verlor unter echtem IPC-Verkehr selten eine
+  Antwort (Race) → jetzt strikt sequenziell/lock-geschützt gelesen; (2)
+  ein Titelwechsel auf derselben mpv-Instanz sah noch das
+  `file-loaded`-Ereignis der vorherigen Quelle → `clear_events()` jetzt vor
+  jedem `loadfile`; (3) ein ISO blieb dauerhaft gemountet, wenn die
+  Titelauflösung NACH erfolgreichem Mount fehlschlug → jetzt in jedem
+  Fehlerpfad garantiert ausgehängt (Regressionstest ergänzt).
+- UI: neuer Tab „Vorschau" + „Vorschau"-Button je Titel im Rippen-Tab (nutzt
+  das bereits geladene `get_disc_content`-Ergebnis, keine erneute
+  Titelerkennung im Player).
+- Real getestet (echtes MPEG-2/AC-3- bzw. H.264/AC-3-Material, keine
+  Fake-Bytes): normale Videodatei; DVD-Titel mit einem und mit mehreren
+  VOB-Segmenten; Blu-ray-Titel mit einem und mit mehreren M2TS-Clips (via
+  `bluray_authoring`); DVD-/Blu-ray-ISO (Mount → Wiedergabe → Unmount);
+  Titel-/Kapitel-/Audio-/Untertitelwechsel; Main-Movie-Flow (öffnet den von
+  `DiscAnalyzer` real identifizierten Titel); Stop/Cleanup; ungültige Quelle;
+  nicht unterstützter Codec; fehlendes Backend.
+- Tests: 1019 → 1037 passed (+18), 19 skipped, derselbe 1 vorbestehende
+  unabhängige Fehler unverändert. `compileall`/`verify_ui_bridge`/
+  `node --check` PASS.
+- Screenshots (`artifacts/player-preview-review/`): Ruhezustand, laufende
+  Wiedergabe, Titel-/Kapitelwahl, Audio-/Untertitelwahl - alle gegen echte
+  mpv-Wiedergabe über einen lokalen Test-HTTP-Shim (computer-use rendert in
+  dieser Sandbox kein natives Fenster, dieselbe bereits dokumentierte
+  Einschränkung wie in früheren Blöcken).
+- Offen: keine DVD-/Blu-ray-Menüs (HDMV/BD-J, bewusst eine spätere Funktion);
+  kein CSS/AACS/BD+; mpv ist für Windows-Produktionsbuilds noch nicht über
+  `prepare_vendor.py` vendort; der Windows-Named-Pipe-IPC-Zweig ist nach
+  mpv-Dokumentation implementiert, aber in dieser macOS-Umgebung nicht
+  laufzeitgeprüft.
+- Kombinierter Stand des gemeinsamen Worktrees nach Merge mit paralleler
+  Editor-/Timeline-/Queue-Arbeit: **1037 passed / 19 skipped / 1 vorbestehender
+  unabhängiger Fehler** (`test_every_queueing_bridge_method_returns_a_usable_job`,
+  scheitert an `convert_file`, nicht an Disc-/Player-Funktionalität).
