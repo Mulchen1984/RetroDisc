@@ -242,6 +242,11 @@ class RetroDiscBridge:
     def __init__(self, window=None):
         self.window = window
         self._splash_transition_started = False
+        # Kein threading.Lock: shutdown() wird ausschließlich sequenziell auf
+        # dem Hauptthread erreicht (window.events.closing-Handler UND der
+        # finally-Block in main() laufen nacheinander, nie parallel - siehe
+        # shutdown()-Docstring), ein einfaches Flag genügt für Idempotenz.
+        self._shutdown_done = False
         self._loop = asyncio.new_event_loop()
         self._thread = threading.Thread(
             target=lambda: self._loop.run_forever(), daemon=True
@@ -2203,7 +2208,31 @@ class RetroDiscBridge:
         return self.get_tool_status()
 
     def shutdown(self):
-        """Beendet Watcher, Queue, Datenbank und Async-Loop geordnet."""
+        """Beendet Watcher, Queue, Datenbank, Player und Async-Loop geordnet.
+
+        Zentraler Shutdown-Pfad für ALLE regulären Beendigungswege (Cmd+Q,
+        Schließen-Kreuz, normaler App-Exit über den finally-Block in
+        main()). Cmd+Q und das Schließen-Kreuz laufen auf macOS beide über
+        pywebviews should_close() (siehe webview/platforms/cocoa.py:
+        applicationShouldTerminate_ bzw. windowShouldClose_), die synchron
+        window.events.closing.set() aufruft - dieses Event wird mit
+        should_lock=True erzeugt (webview/window.py), Handler laufen also
+        blockierend auf dem Hauptthread, BEVOR AppKit bei Cmd+Q den Prozess
+        über sein eigenes exit() beendet. main()s finally-Block danach wird
+        für Cmd+Q nie erreicht - das war der eigentliche Bug (mpv blieb
+        verwaist zurück, kein gemountetes ISO wurde ausgehängt). Deshalb
+        wird dieselbe Methode zusätzlich an window.events.closing gehängt
+        (siehe main()), nicht nur im finally-Block aufgerufen.
+
+        Idempotent: ein zweiter Aufruf (z. B. einmal über
+        window.events.closing, danach nochmal über den finally-Block beim
+        normalen Fenster-Schließen) ist ein sicherer No-Op - ohne diese
+        Sperre würde er auf dem bereits gestoppten Async-Loop in jeden
+        einzelnen Timeout unten laufen, statt sofort zurückzukehren.
+        """
+        if self._shutdown_done:
+            return
+        self._shutdown_done = True
         try:
             if self._watch and self._watch._running:
                 self._async(self._watch.stop()).result(timeout=3)
@@ -2217,7 +2246,7 @@ class RetroDiscBridge:
         except Exception as exc:
             log.warning('Persistente Queue konnte nicht vollständig beendet werden: %s', exc)
         try:
-            # Beendet eine evtl. laufende mpv-Instanz und haengt einen evtl.
+            # Beendet eine evtl. laufende mpv-Instanz und hängt einen evtl.
             # gemounteten Vorschau-ISO wieder aus - kein verwaister Prozess,
             # kein dauerhafter Mount nach dem Beenden (siehe player.py/iso_mount.py).
             if getattr(self, 'player', None):
@@ -2226,8 +2255,11 @@ class RetroDiscBridge:
             log.warning('Player-Cleanup unvollständig: %s', exc)
         try:
             self.library.close()
+        except Exception as exc:
+            log.warning('Datenbank-Cleanup unvollständig: %s', exc)
         finally:
             self._loop.call_soon_threadsafe(self._loop.stop)
+        log.info("Shutdown abgeschlossen")
 
     # ── Splash fertig
     def splash_complete(self):
@@ -2572,6 +2604,15 @@ def main():
             **native_window_options(),
         )
     bridge.window = window
+
+    # Zentraler Shutdown-Hook: läuft synchron (should_lock=True) sowohl bei
+    # Cmd+Q als auch beim Schließen-Kreuz, siehe RetroDiscBridge.shutdown()
+    # für die vollständige Begründung. Ohne diesen Hook wird bridge.shutdown()
+    # bei Cmd+Q NIE erreicht, weil AppKit den Prozess danach über sein
+    # eigenes exit() beendet, statt zum finally-Block unten zurückzukehren -
+    # ein laufender mpv-Prozess und ein gemountetes Vorschau-ISO blieben
+    # dadurch verwaist zurück.
+    window.events.closing += bridge.shutdown
 
     # Maus-Zurueck/-Vorwaerts duerfen die WebView-History nie bewegen.
     # Der Hook haengt sich an, sobald das Control existiert.
