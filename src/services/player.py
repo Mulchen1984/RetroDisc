@@ -407,6 +407,29 @@ class PlayerService:
     async def set_chapter(self, index: int) -> None:
         await self._require_ipc().set_property("chapter", index)
 
+    DISCNAV_ACTIONS = ("up", "down", "left", "right", "select", "menu", "title-menu", "back")
+
+    async def discnav(self, action: str) -> None:
+        """Disc-Menü-Navigation (Pfeiltasten/OK/Menü/Zurück).
+
+        Prüft die Fähigkeit VOR jedem Versuch (siehe
+        ``src/services/disc_navigation.py``) und schlägt mit einer klaren
+        Begründung fehl, statt einen mpv-Befehl zu schicken, der in dieser
+        Version ohnehin nicht existiert (``mpv --input-cmdlist`` enthält
+        weder ``discnav`` noch ``dvdnav`` - real geprüft). Kein
+        vorgetäuschter Erfolg.
+        """
+        if action not in self.DISCNAV_ACTIONS:
+            raise PlayerError(f"Unbekannte Navigationsaktion: {action!r}")
+        from src.services.disc_navigation import describe_disc_navigation_support
+        capability = await describe_disc_navigation_support(self.mpv_path)
+        if not (capability["dvd_menu"]["supported"] or capability["bluray_hdmv_menu"]["supported"]):
+            reason = capability["dvd_menu"]["reason"]
+            raise PlayerError(f"Disc-Menü-Navigation wird nicht unterstützt: {reason}")
+        # Vorwärtskompatibel: falls eine künftige mpv-Version/Engine dies
+        # unterstützt, greift der reale IPC-Befehl hier.
+        await self._require_ipc().command("discnav", action)
+
     async def get_state(self) -> PlayerState:
         if self._ipc is None:
             return PlayerState(loaded=False)

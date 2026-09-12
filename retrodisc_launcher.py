@@ -1561,6 +1561,8 @@ class RetroDiscBridge:
         return self._player_action(self.player.disable_subtitles)
     def player_set_chapter(self, index: int) -> str:
         return self._player_action(lambda: self.player.set_chapter(index))
+    def player_discnav(self, action: str) -> str:
+        return self._player_action(lambda: self.player.discnav(action))
 
     def player_get_state(self) -> str:
         try:
@@ -1574,16 +1576,23 @@ class RetroDiscBridge:
 
     def player_check_engine(self) -> str:
         """Meldet, ob das Wiedergabe-Backend (mpv) überhaupt verfügbar ist,
-        plus die ehrliche DRM-Fähigkeitsübersicht (siehe drm_capabilities.py) -
-        für die UI, bevor sie die Player-Steuerung überhaupt anbietet."""
+        plus die ehrliche DRM- (drm_capabilities.py) und Disc-Menü-
+        Navigationsfähigkeitsübersicht (disc_navigation.py) - für die UI,
+        bevor sie die Player-/Navigationssteuerung überhaupt anbietet."""
         import shutil
+        from src.services.disc_navigation import describe_disc_navigation_support
         from src.services.drm_capabilities import describe_drm_support
         mpv_path = shutil.which("mpv")
+        try:
+            navigation = self._async(describe_disc_navigation_support(mpv_path)).result(timeout=10)
+        except Exception as exc:
+            navigation = {"error": str(exc)}
         return json.dumps({
             "engine": "mpv",
             "available": mpv_path is not None,
             "path": mpv_path,
             "drm": describe_drm_support(),
+            "navigation": navigation,
         })
 
     # ── KI/Medienwerkzeuge ─────────────────────────────────────────────
@@ -2350,6 +2359,7 @@ class RetroDiscApi:
     def player_set_subtitle_track(self, track_id): return self._bridge.player_set_subtitle_track(track_id)
     def player_disable_subtitles(self): return self._bridge.player_disable_subtitles()
     def player_set_chapter(self, index): return self._bridge.player_set_chapter(index)
+    def player_discnav(self, action): return self._bridge.player_discnav(action)
     def player_get_state(self): return self._bridge.player_get_state()
     def player_close(self): return self._bridge.player_close()
     def player_check_engine(self): return self._bridge.player_check_engine()

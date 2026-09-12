@@ -1569,6 +1569,29 @@ details summary::marker { color:#c75a12; }
                 </select>
               </div>
             </div>
+
+            <!-- Disc-Menü-Navigation: nur aktiv, wenn player_check_engine()
+                 das für die aktuelle Wiedergabe-Engine tatsächlich bestätigt
+                 (siehe src/services/disc_navigation.py). Mit mpv derzeit NIE
+                 der Fall (DVD-Menüs von mpv selbst entfernt, Blu-ray-HDMV
+                 ohne steuerbare Eingabe-Schnittstelle) - Buttons bleiben
+                 dann sichtbar, aber deaktiviert, mit Begründung; kein
+                 vorgetäuschter Erfolg. -->
+            <div class="groupbox">
+              <div class="groupbox-title">Disc-Navigation</div>
+              <div class="row" id="playerNavRow" style="align-items:center;gap:6px;flex-wrap:wrap;">
+                <button class="btn98" id="navMenu" onclick="playerDiscNav('menu')">Menü</button>
+                <button class="btn98" id="navTitleMenu" onclick="playerDiscNav('title-menu')">Titelmenü</button>
+                <button class="btn98" id="navBack" onclick="playerDiscNav('back')">Zurück</button>
+                <span style="width:8px;"></span>
+                <button class="btn98" id="navUp" onclick="playerDiscNav('up')">↑</button>
+                <button class="btn98" id="navDown" onclick="playerDiscNav('down')">↓</button>
+                <button class="btn98" id="navLeft" onclick="playerDiscNav('left')">←</button>
+                <button class="btn98" id="navRight" onclick="playerDiscNav('right')">→</button>
+                <button class="btn98" id="navSelect" onclick="playerDiscNav('select')">OK</button>
+              </div>
+              <div class="row" id="playerNavReason" style="color:#6c7884;font-size:11px;"></div>
+            </div>
           </div>
         </div>
         <div style="display:flex;gap:8px;">
@@ -2710,10 +2733,46 @@ let PLAYER_LAST_DURATION = 0;
 function startPlayerPolling(){
   stopPlayerPolling();
   refreshPlayerState();
+  refreshPlayerNavigationCapability();
   PLAYER_POLL_TIMER = setInterval(refreshPlayerState, 1000);
 }
 function stopPlayerPolling(){
   if(PLAYER_POLL_TIMER){ clearInterval(PLAYER_POLL_TIMER); PLAYER_POLL_TIMER=null; }
+}
+
+// Fragt einmal je Tab-Öffnung ab, ob die aktuelle Engine (mpv) echte Disc-
+// Menü-Navigation unterstützt (siehe disc_navigation.py) - deaktiviert die
+// Steuerung mit Begründung statt einen wirkungslosen Klick zuzulassen.
+const NAV_BUTTON_IDS = ['navMenu','navTitleMenu','navBack','navUp','navDown','navLeft','navRight','navSelect'];
+async function refreshPlayerNavigationCapability(){
+  const a=api();
+  const reasonEl=document.getElementById('playerNavReason');
+  if(!a){
+    NAV_BUTTON_IDS.forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=true; });
+    if(reasonEl) reasonEl.textContent='Backend noch nicht bereit.';
+    return;
+  }
+  try{
+    const info=JSON.parse(await a.player_check_engine());
+    const nav=info.navigation||{};
+    const supported = !!((nav.dvd_menu&&nav.dvd_menu.supported) || (nav.bluray_hdmv_menu&&nav.bluray_hdmv_menu.supported));
+    NAV_BUTTON_IDS.forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=!supported; });
+    if(reasonEl){
+      reasonEl.textContent = supported ? '' :
+        ('Disc-Menü-Navigation wird von der aktuellen Wiedergabe-Engine (mpv) nicht unterstützt: '+
+         (nav.dvd_menu ? nav.dvd_menu.reason : ''));
+    }
+  }catch(e){
+    NAV_BUTTON_IDS.forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=true; });
+    if(reasonEl) reasonEl.textContent='Fähigkeit konnte nicht geprüft werden: '+e;
+  }
+}
+
+async function playerDiscNav(action){
+  const a=api();
+  if(!a) return;
+  const r=JSON.parse(await a.player_discnav(action));
+  if(r.error) playerShowError(r.error);
 }
 
 function playerShowError(message){
