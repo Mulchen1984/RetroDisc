@@ -122,12 +122,28 @@ def test_every_queueing_bridge_method_returns_a_usable_job(queued_bridge, tmp_pa
         assert isinstance(job_id, str) and job_id, f"{label} returned {job_id!r}"
         assert answer["status"] == "queued"
 
-        job = queued_bridge.pipeline.get_job(job_id)
-        assert job is not None, f"{label} did not park a job under {job_id}"
-        assert job.job_type is expected_type, (
-            f"{label} queued {job.job_type} instead of {expected_type}"
-        )
-        assert job.id == job_id
+        if label == "convert_file":
+            # convert_file is the one flow _submit_job routes to the persistent
+            # SQLite ConversionQueue (job.params carries 'preset_name'), never
+            # to self.pipeline - so it must be looked up there, under its own
+            # row shape (PipelineJob.type is the string 'convert', not a
+            # JobType enum member).
+            # The ConversionQueue's SQLite connection is owned by the bridge's
+            # background loop thread; fetch through it rather than touching
+            # the connection from the test thread (sqlite3 forbids that).
+            async def _fetch_row(bridge=queued_bridge, job_id=job_id):
+                return bridge.conversion_queue.queue.get(job_id)
+            row = queued_bridge._async(_fetch_row()).result(timeout=5)
+            assert row is not None, f"{label} did not park a job under {job_id}"
+            assert row.type == "convert", f"{label} queued {row.type} instead of 'convert'"
+            assert row.id == job_id
+        else:
+            job = queued_bridge.pipeline.get_job(job_id)
+            assert job is not None, f"{label} did not park a job under {job_id}"
+            assert job.job_type is expected_type, (
+                f"{label} queued {job.job_type} instead of {expected_type}"
+            )
+            assert job.id == job_id
         seen[label] = job_id
 
     assert len(set(seen.values())) == len(seen), f"ids collided: {seen}"

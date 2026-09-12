@@ -2267,3 +2267,88 @@ Unterstützung real, statt sie nur sichtbar zu machen.
   Editor-/Timeline-/Queue-Arbeit: **1037 passed / 19 skipped / 1 vorbestehender
   unabhängiger Fehler** (`test_every_queueing_bridge_method_returns_a_usable_job`,
   scheitert an `convert_file`, nicht an Disc-/Player-Funktionalität).
+
+### 2026-09-12 — Disc-Navigation gesichert, letzter bekannter Testfehler behoben, Windows-Bereitschaft geprüft
+
+- Disc-Menü-Navigation (`disc_navigation.py`, Bridge-/UI-Anbindung aus dem
+  vorherigen Block) commit-et und gepusht (`6f04eda`,
+  `codex/retrodisc-download-paths`). Ab jetzt **keine weitere
+  macOS-Feature-Entwicklung**: DVD-Menü, Blu-ray-HDMV-Menü, BD-J und ein
+  eingebetteter mpv-Player bleiben dokumentierte Engine-/Architekturgrenzen
+  (Quellcode-Beleg in `disc_navigation.py`, s.o.) und werden nicht weiter
+  verfolgt.
+- `test_every_queueing_bridge_method_returns_a_usable_job` (letzter
+  bekannter Fehler) analysiert und behoben: `convert_file` ist die einzige
+  Methode, die `_submit_job` wegen `preset_name` in `job.params` in die
+  persistente SQLite-`ConversionQueue` statt in `bridge.pipeline` einreiht
+  (bewusste Architektur der parallelen Queue-Arbeit, kein Bug). Der Test
+  prüfte für diesen einen Job-Typ das falsche Objekt. Fix ist rein
+  testseitig: für `convert_file` wird jetzt gegen
+  `conversion_queue.queue.get(job_id)` geprüft (über `bridge._async(...)`,
+  da die SQLite-Connection am Hintergrund-Loop-Thread hängt), für alle
+  anderen unverändert gegen `bridge.pipeline.get_job(job_id)`.
+  Produktcode wurde für diesen Fix **nicht** verändert.
+- **Wichtiger Nebenfund (nicht behoben, nur festgestellt)**:
+  `MediaLibrary.__init__` (`src/services/library.py`) setzt `db_path`
+  ungeachtet jeder Testkonfiguration auf das echte
+  `Path.home() / ".retrodisc" / "library.db"`; `retrodisc_launcher.py`
+  übergibt beim Bridge-Aufbau nie einen abweichenden `db_path`. Die
+  `ConversionQueue` leitet ihren eigenen Dateipfad direkt aus
+  `library.db_path.parent / 'pipeline.db'` ab - das bestehende
+  `monkeypatch.setattr("src.services.library.MediaLibrary.open", ...)`-Muster
+  in den Test-Fixtures verhindert nur den `library.db`-Connect, NICHT das
+  Schreiben in die echte `~/.retrodisc/pipeline.db`. Diagnostiziert per
+  Stichprobe: die echte Datei enthält aktuell ca. 55 angesammelte
+  Fake-Einträge (`'clip.mp4' -> 'MP4 (H.264, 1080p)'`, state=`interrupted`)
+  aus wiederholten Testläufen dieses und vorheriger Blöcke, gemischt mit
+  mindestens einem echten Produktionsjob. Bewusst NICHT unilateral
+  gefixt: eine Korrektur müsste die Pfad-Konstruktion von
+  `MediaLibrary`/`ConversionQueue` (gemeinsam mit der parallelen
+  Queue-Arbeit) ändern und hätte ohne Migration Auswirkungen auf den
+  bestehenden echten Bibliothekspfad des Nutzers - das erfordert eine
+  explizite Entscheidung, keinen stillen Umbau. Empfehlung: `AppSettings`
+  ein `library_db_path`-Feld geben und `RetroDiscBridge.__init__` das
+  explizit durchreichen lassen, dann Test-Fixtures darauf umstellen.
+- Windows-Bereitschaft geprüft, so weit ohne echten Windows-Rechner/-VM/Wine
+  möglich (keins in dieser Entwicklungsumgebung verfügbar - MacBook Pro M1
+  Max, keine Virtualisierung installiert):
+  - Neu: `tests/test_windows_path_handling.py` (12 Tests). Deckt ab: die
+    Laufwerksbuchstaben-Root-Logik in `_player_open` (bare `"E:"`/`"g:"`
+    → über `PureWindowsPath` bewiesen, dass der Fix-up eine ansonsten
+    RELATIVE Windows-Pfadangabe in einen echten, verankerten Root
+    verwandelt - `PosixPath` auf diesem Rechner kann den Unterschied gar
+    nicht abbilden, das wird im Test explizit dokumentiert; separat
+    bestätigt, dass bereits getrennte Formen wie `"E:\\"`/`"F:/"` und
+    UNC-Pfade unverändert durchgereicht werden); den `_ThreadedPipeIO`-
+    Adapter aus `player.py` (reine Python-Logik des Named-Pipe-Zweigs,
+    gegen ein Fake-Handle getestet: readline/write/drain/close,
+    EOF-Verhalten, doppeltes Close, Close bei werfendem Handle); echte
+    Dateipfade mit Leerzeichen, Umlauten und Klammern durch den
+    `file`-Zweig.
+  - `create_hidden_subprocess`/`run_hidden`s `CREATE_NO_WINDOW`-Injektion
+    war bereits vorher in `tests/test_subprocess_hardening.py` real
+    getestet; die projektweite AST-Schranke
+    (`test_subprocess_visibility.py`) stellt sicher, dass JEDER
+    Windows-relevante Subprozessaufruf (PowerShell-Mount/-Unmount in
+    `iso_mount.py`, `taskkill` in `terminate_process`, mpv-Start) diesen
+    Weg nutzt - kein Umgehungspfad gefunden.
+  - UAC: Produktionsmanifest (`retrodisc.manifest`) setzt
+    `requestedExecutionLevel level="asInvoker"`; kein Code-Pfad ruft
+    `-Verb RunAs` oder eine andere Elevation auf. Erwartung: kein
+    UAC-Dialog im Normalbetrieb - nur per Code-Review bestätigt, nicht an
+    echtem Windows verifiziert.
+  - **Nicht ohne echtes Windows testbar** (explizit offen, nicht
+    vorgetäuscht): echter Named-Pipe-Verbindungsaufbau
+    (`_connect_windows_pipe`), echtes `Mount-DiskImage`/`Dismount-DiskImage`,
+    echtes sichtbares/unsichtbares Konsolenfenster-Verhalten am
+    Betriebssystem selbst, echtes UAC-Prompt-Verhalten, verwaiste
+    mpv-Prozesse/Mounts nach Abbruch. `tests/test_media_process_streams.py`
+    und `tests/test_disc_detection.py` markieren diese Fälle bereits
+    korrekt mit `skipif(os.name != "nt")` (12 + 2 der 19 aktuell
+    übersprungenen Tests) statt sie stillschweigend als bestanden
+    auszuweisen.
+- Tests: 1063 passed (nach dem Fix) → **1075 passed / 19 skipped / 0
+  bekannte Fehler**. `compileall` unverändert grün (keine Produktcode-
+  Änderung außer den beiden Testdateien).
+- Commit/Push: siehe Journal-Commit dieses Blocks,
+  `codex/retrodisc-download-paths`, `git status` sauber danach.
