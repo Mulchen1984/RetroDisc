@@ -2352,3 +2352,75 @@ Unterstützung real, statt sie nur sichtbar zu machen.
   Änderung außer den beiden Testdateien).
 - Commit/Push: siehe Journal-Commit dieses Blocks,
   `codex/retrodisc-download-paths`, `git status` sauber danach.
+
+### 2026-09-12 (Folgeblock) — MediaLibrary-/ConversionQueue-Testisolation behoben
+
+- Ursache: `MediaLibrary.__init__` setzte `db_path` immer auf das echte
+  `Path.home() / ".retrodisc" / "library.db"`, unabhängig von jeder
+  Testeinstellung; `ConversionQueue` leitet ihren eigenen SQLite-Pfad
+  direkt aus `library.db_path.parent / 'pipeline.db'` ab. Das in allen
+  Bridge-Test-Fixtures übliche
+  `monkeypatch.setattr(MediaLibrary.open, no-op)` verhinderte nur den
+  `library.db`-Connect, nicht das Schreiben in die echte `pipeline.db`.
+- Lösung: neues Feld `AppSettings.library_db_path: Path | None = None`
+  (`src/config/settings.py`). `retrodisc_launcher.py` reicht es jetzt
+  explizit durch: `MediaLibrary(ffmpeg=self.ffmpeg,
+  db_path=self.settings.library_db_path)`. `None` (Produktionsdefault,
+  unverändert) lässt `MediaLibrary` weiterhin selbst auf
+  `~/.retrodisc/library.db` auflösen; nur wenn Tests es explizit setzen,
+  wird `ConversionQueue`s Pfad transitiv mit-isoliert - ohne dass
+  `ConversionQueue` selbst angefasst werden musste.
+- Betroffen: alle 10 Testdateien, die einen echten `RetroDiscBridge()`
+  konstruieren (`test_bluray_bridge.py`, `test_burn_pipeline.py`,
+  `test_capacity_planner.py`, `test_app_shutdown.py` - beide Stellen,
+  inklusive des Kindprozess-Skripts für den echten-Cmd+Q-Test -,
+  `test_job_submission.py`, `test_disc_content.py`,
+  `test_disc_navigation.py` - 3 Fixtures -, `test_disc_flows.py`,
+  `test_windows_path_handling.py`, `test_player_bridge.py`) setzen jetzt
+  `library_db_path=tmp_path / ".retrodisc" / "library.db"`.
+- Geprüft, ob weitere Stellen produktive Pfade berühren: alle direkten
+  `MediaLibrary(...)`-Konstruktionen außerhalb der Bridge
+  (`test_library_search.py`, `test_recent_media.py`, `test_director.py`,
+  `test_integration.py`) übergaben bereits einen expliziten `db_path` -
+  unberührt. `test_macos_download_workflow.py`/`test_platform_ui.py`
+  konstruieren die Bridge über `object.__new__(RetroDiscBridge)` (umgeht
+  `__init__`/`MediaLibrary` komplett) - unberührt. `.hermes/verify_core.py`,
+  `scripts/run_acceptance.py`, `src/acceptance.py`,
+  `src/utils/package_check.py` sind bewusste Akzeptanz-/Gate-Skripte
+  gegen die echte Umgebung (kein `pytest`, laufen nie automatisch) - dort
+  ist der reale `~/.retrodisc/`-Pfad beabsichtigt, nicht Teil dieses Fixes.
+- Regressionstests: neu `tests/test_library_path_isolation.py` (6 Tests) -
+  Produktionsdefault unverändert (`MediaLibrary(ffmpeg=...)` ohne
+  `AppSettings`-Override bleibt bei `~/.retrodisc/library.db`),
+  `AppSettings().library_db_path is None`, Bridge reicht den konfigurierten
+  Pfad durch, `ConversionQueue`s `pipeline.db` liegt transitiv am
+  konfigurierten Ort, und der entscheidende End-zu-Ende-Test: ein echter
+  `convert_file()`-Lauf über die isolierte Bridge lässt die mtime der
+  echten `~/.retrodisc/pipeline.db` unverändert. Vor dem Fix testweise
+  reproduziert (Konstruktoraufruf kurzzeitig zurückgesetzt): genau die 3
+  erwarteten Regressionstests schlagen fehl, danach wieder grün - die
+  Tests sind damit nachweislich scharf, kein Blindgänger.
+- **Bestehende Fake-Einträge in der echten `~/.retrodisc/pipeline.db`
+  bewusst NICHT gelöscht oder verändert** (Nutzeranweisung), nur
+  read-only dokumentiert: 72 Zeilen insgesamt, davon 1 echter
+  Produktionsjob (`Bugs Bunny - Keule (deutsch) [SeJkiL_Vzd8].mp4`,
+  `status=completed`) und 71 Test-Artefakt-Zeilen (`clip.mp4` unter
+  `/private/var/.../pytest-of-marco/pytest-*/...`, überwiegend
+  `status=interrupted`). Zwei davon stammen aus der oben beschriebenen
+  bewussten Vorher/Nachher-Verifikation dieses Fixes selbst (kurzzeitiges
+  Zurücksetzen des Konstruktoraufrufs, um zu beweisen, dass die
+  Regressionstests wirklich etwas prüfen) - transparent hier vermerkt,
+  da auch das ein echter (wenn auch harmloser) Schreibzugriff auf die
+  reale Datei war. Alle 71 Testzeilen sind an ihrem `pytest-of-marco`-
+  Quellpfad eindeutig als Testartefakt erkennbar und von der einen echten
+  Zeile klar unterscheidbar. Entscheidung über Bereinigung bewusst beim
+  Nutzer belassen.
+- Tests: 1075 → **1081 passed / 19 skipped / 0 bekannte Fehler** (+6 für
+  `test_library_path_isolation.py`). `compileall`/`verify_ui_bridge`/
+  `node --check` PASS. Ein einzelner Ausreißer
+  (`test_shutdown_unmounts_a_mounted_preview_iso`) in einem Volllauf
+  isoliert und in einem sauberen Re-Lauf erneut grün - derselbe bereits
+  dokumentierte macOS-Disk-Arbitration-Flake wie in früheren Blöcken,
+  keine neue Regression.
+- Keine neuen Features; Produktcode-Änderung beschränkt auf die eine
+  Zeile in `retrodisc_launcher.py` plus das neue `AppSettings`-Feld.

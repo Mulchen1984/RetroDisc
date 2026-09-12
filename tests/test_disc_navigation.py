@@ -196,7 +196,7 @@ def test_bridge_player_check_engine_reports_navigation_capability(tmp_path, monk
     AppSettings(directories={
         "output_dir": tmp_path / "output", "download_dir": tmp_path / "downloads",
         "temp_dir": tmp_path / "temp",
-    }).save()
+    }, library_db_path=tmp_path / ".retrodisc" / "library.db").save()
     monkeypatch.setattr(launcher, "check_tools", lambda: {})
     monkeypatch.setattr("src.services.library.MediaLibrary.open", lambda self: None)
 
@@ -223,7 +223,7 @@ def test_bridge_player_discnav_returns_a_json_error_not_an_exception(tmp_path, m
     AppSettings(directories={
         "output_dir": tmp_path / "output", "download_dir": tmp_path / "downloads",
         "temp_dir": tmp_path / "temp",
-    }).save()
+    }, library_db_path=tmp_path / ".retrodisc" / "library.db").save()
     monkeypatch.setattr(launcher, "check_tools", lambda: {})
     monkeypatch.setattr("src.services.library.MediaLibrary.open", lambda self: None)
 
@@ -293,7 +293,7 @@ def test_dvd_iso_menu_navigation_is_rejected_and_iso_stays_cleanly_unmountable(t
     AppSettings(directories={
         "output_dir": tmp_path / "output", "download_dir": tmp_path / "downloads",
         "temp_dir": tmp_path / "temp",
-    }).save()
+    }, library_db_path=tmp_path / ".retrodisc" / "library.db").save()
     monkeypatch.setattr(launcher, "check_tools", lambda: {})
     monkeypatch.setattr("src.services.library.MediaLibrary.open", lambda self: None)
 

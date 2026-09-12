@@ -94,6 +94,10 @@ class AppSettings(BaseModel):
     language: str = "de"
     theme: str = "dark_retro"
     first_run: bool = True
+    # None = MediaLibrary's own default (~/.retrodisc/library.db in production).
+    # Only ever set to a non-None value in tests, so they never touch the real
+    # user database (see RELEASE_AUDIT_STATUS.md, Testisolationsblock).
+    library_db_path: Path | None = None
 
     def ensure_directories(self) -> None:
         """Erstellt alle konfigurierten Verzeichnisse."""

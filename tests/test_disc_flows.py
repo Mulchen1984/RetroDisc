@@ -161,7 +161,7 @@ def disc_bridge(tmp_path, monkeypatch):
         "output_dir": tmp_path / "output",
         "download_dir": tmp_path / "downloads",
         "temp_dir": tmp_path / "temp",
-    }).save()
+    }, library_db_path=tmp_path / ".retrodisc" / "library.db").save()
     monkeypatch.setattr(launcher, "check_tools", lambda: {})
     monkeypatch.setattr(
         launcher, "threading",

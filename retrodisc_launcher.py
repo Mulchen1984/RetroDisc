@@ -331,7 +331,7 @@ class RetroDiscBridge:
         from src.services.player import PlayerService
         self.player = PlayerService()
         self._player_mount = None   # aktiver ISO-Mount (falls die Quelle ein ISO war)
-        self.library = MediaLibrary(ffmpeg=self.ffmpeg)
+        self.library = MediaLibrary(ffmpeg=self.ffmpeg, db_path=self.settings.library_db_path)
         self.library.open()
         self._watch = None
         # Nicht mehr hier blockierend erzeugen: die Konstruktion (inkl. SQLite-Connect)

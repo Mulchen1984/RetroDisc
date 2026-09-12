@@ -61,7 +61,7 @@ def bridge(tmp_path, monkeypatch):
     AppSettings(directories={
         "output_dir": tmp_path / "output", "download_dir": tmp_path / "downloads",
         "temp_dir": tmp_path / "temp",
-    }).save()
+    }, library_db_path=tmp_path / ".retrodisc" / "library.db").save()
     monkeypatch.setattr(launcher, "check_tools", lambda: {})
     monkeypatch.setattr("src.services.library.MediaLibrary.open", lambda self: None)
 
@@ -253,7 +253,8 @@ from src.config.settings import AppSettings
 tmp = Path({str(tmp_path)!r})
 AppSettings._default_config_path = staticmethod(lambda: tmp / "settings.json")
 AppSettings(directories={{"output_dir": tmp / "output", "download_dir": tmp / "downloads",
-                          "temp_dir": tmp / "temp"}}).save()
+                          "temp_dir": tmp / "temp"}},
+            library_db_path=tmp / ".retrodisc" / "library.db").save()
 launcher.check_tools = lambda: {{}}
 from src.services.library import MediaLibrary
 MediaLibrary.open = lambda self: None
