@@ -402,6 +402,64 @@ class FFmpeg:
             job=job,
         )
 
+    # Feste BD-ROM-AV-PIDs (Blu-ray-Spezifikation, Teil 3 Abschnitt "Audio
+    # Visual Application Format"): primärer Videostream immer 0x1011,
+    # primärer Audiostream immer 0x1100. RetroDiscs eigener BDMV-Authoring-
+    # Pfad (``src/services/bluray_authoring.py``) und jeder spec-konforme
+    # BD-Player setzen exakt diese PIDs voraus.
+    BLURAY_VIDEO_PID = 0x1011
+    BLURAY_AUDIO_PID = 0x1100
+
+    async def to_bluray_stream(
+        self,
+        input_path: Path | str,
+        output_path: Path | str,
+        video_bitrate_bps: Optional[int] = None,
+        job: Optional[Job] = None,
+    ) -> Path:
+        """Encodes a video into a BD-ROM-compliant BDAV transport stream.
+
+        Real Blu-ray ``STREAM/*.m2ts`` clips are not plain 188-byte MPEG-TS:
+        each packet has a 4-byte timestamp prefix (192 bytes total, "M2TS"/
+        BDAV format), and the primary video/audio elementary streams sit on
+        fixed PIDs (0x1011/0x1100) so a player's PMT lookup and RetroDisc's
+        own CLIPINF (``bluray_authoring.write_clip_info``) agree on where to
+        find them. ``-mpegts_m2ts_mode`` is FFmpeg's own flag for exactly
+        this BDAV packet shape; verified locally against real output
+        (sync byte 0x47 at offset 4 of every 192-byte packet, PIDs 0x1011/
+        0x1100 confirmed via ffprobe) before this was wired in.
+
+        H.264 High Profile/Level 4.1 + AC-3 is the same combination assumed
+        mandatory-support by every BD-Video player; it is not the only
+        legal BD codec pairing, but it is the safe, universally playable
+        one and the one RetroDisc's DVD path already mirrors in spirit
+        (``to_dvd_mpeg`` also targets one fixed, always-compatible profile
+        rather than exposing every legal codec combination).
+        """
+        bitrate_bps = max(1_000_000, int(video_bitrate_bps or 15_000_000))
+        video_bitrate = str(bitrate_bps)
+        extra = [
+            "-map", "0:v:0", "-map", "0:a:0?",
+            "-profile:v", "high", "-level:v", "4.1", "-pix_fmt", "yuv420p",
+            "-maxrate", video_bitrate, "-bufsize", str(bitrate_bps * 2),
+            "-g", "24", "-keyint_min", "24", "-sc_threshold", "0",
+            "-mpegts_m2ts_mode", "1", "-muxrate", "48000000", "-pcr_period", "20",
+            "-streamid", f"0:0x{self.BLURAY_VIDEO_PID:x}",
+            "-streamid", f"1:0x{self.BLURAY_AUDIO_PID:x}",
+            "-f", "mpegts",
+        ]
+        return await self.convert(
+            input_path=input_path,
+            output_path=output_path,
+            video_codec="libx264",
+            audio_codec="ac3",
+            audio_bitrate="448k",
+            video_bitrate=video_bitrate,
+            extra_args=extra,
+            overwrite=True,
+            job=job,
+        )
+
     async def trim(
         self,
         input_path: Path | str,

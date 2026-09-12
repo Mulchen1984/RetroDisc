@@ -1,12 +1,15 @@
 """Pure project edits: no rendering, no second persisted timeline format."""
-from src.models.director import ProductionProject
+from src.models.director import ProductionProject,Scene
 
 
 def edit(project,operation,index=0,values=None):
     data=project.model_dump();scenes=data['timeline'];values=values or {}
-    if operation in ('trim','split','delete','move','transition','zoom'):
+    if operation in ('trim','split','delete','move','transition','zoom','speed','freeze','clip_audio','visibility','lock','effects','transform'):
         if not 0<=index<len(scenes):raise ValueError('Clip nicht gefunden.')
         scene=scenes[index]
+        if scene.get("freeze_duration") and operation in ("split","speed","freeze"):
+            raise ValueError("Standbild kann nicht erneut geteilt oder beschleunigt werden.")
+        if scene.get("locked") and operation!="lock":raise ValueError("Clip ist gesperrt.")
         if operation=='trim':
             scene['start']=float(values.get('start',scene['start']))
             scene['end']=float(values.get('end',scene['end']))
@@ -14,6 +17,22 @@ def edit(project,operation,index=0,values=None):
             cut=float(values['time'])
             if not scene['start']<cut<scene['end']:raise ValueError('Teilpunkt muss innerhalb des Clips liegen.')
             scenes[index:index+1]=[scene|{'end':cut},scene|{'start':cut,'transition':'cut'}]
+        elif operation=='effects':
+            from src.services.editor_filters import EFFECT_PRESETS
+            scene['effects']=EFFECT_PRESETS[values['preset']] if 'preset' in values else values
+        elif operation=='transform':
+            for key in ('rotate','flip_horizontal','flip_vertical','crop'):
+                if key in values:scene[key]=values[key]
+        elif operation=='speed':scene['speed']=float(values['value'])
+        elif operation=='freeze':
+            cut=float(values['time']);length=float(values.get('duration',2))
+            if not scene['start']<cut<scene['end']:raise ValueError('Standbild-Zeitpunkt muss innerhalb des Clips liegen.')
+            scenes[index:index+1]=[scene|{'end':cut},scene|{'start':cut,'freeze_duration':length,'transition':'cut'},scene|{'start':cut,'transition':'cut'}]
+        elif operation=='clip_audio':
+            for key in ('volume','muted','audio_fade_in','audio_fade_out'):
+                if key in values:scene[key]=values[key]
+        elif operation=='visibility':scene['visible']=bool(values['value'])
+        elif operation=='lock':scene['locked']=bool(values['value'])
         elif operation=='delete':
             if len(scenes)==1:raise ValueError('Mindestens ein Clip muss erhalten bleiben.')
             scenes.pop(index)
@@ -22,15 +41,44 @@ def edit(project,operation,index=0,values=None):
             if not 0<=target<len(scenes):raise ValueError('Ungültige Zielposition.')
             scenes.insert(target,scenes.pop(index))
         else:scene[operation]=values['value']
+    elif operation=='suggestion':
+        profile=values['profile']
+        if profile not in ('slideshow','gentle','cuts'):raise ValueError('Unbekannter Vorschlag.')
+        for i,scene in enumerate(scenes):
+            if scene.get('locked'):continue
+            overlap=min(.5,Scene.model_validate(scene).duration/2,Scene.model_validate(scenes[i-1]).duration/2) if i else 0
+            scene['transition']={'type':'dissolve','duration':overlap} if profile!='cuts' and overlap>=.25 else 'cut'
+            if profile=='slideshow':scene['zoom']='subtle'
+            if profile=='gentle':scene['effects']={'warmth':.2,'saturation':1.03}
+    elif operation=='add_text':data['text_clips'].append(values)
+    elif operation=='add_overlay':
+        asset=values['asset']
+        if not any(a['id']==asset['id'] for a in data['assets']):data['assets'].append(asset)
+        data['overlays'].append(values['overlay'])
+    elif operation in ('text_control','overlay_control'):
+        collection=data['text_clips'] if operation=='text_control' else data['overlays']
+        if not 0<=index<len(collection):raise ValueError('Track nicht gefunden.')
+        item=collection[index]
+        if item.get('locked') and any(k!='locked' for k in values):raise ValueError('Track ist gesperrt.')
+        if operation=='text_control' and 'preset' in values:
+            from src.services.editor_filters import TEXT_PRESETS
+            values=TEXT_PRESETS[values['preset']]
+        if values.get('remove'):collection.pop(index)
+        else:item.update(values)
     elif operation=='audio':
         for key in ('original_volume','original_audio','voiceover_enabled'):
             if key in values:data[key]=values[key]
     else:raise ValueError('Unbekannte Timeline-Aktion.')
     position=0
     for scene in scenes:
-        scene['position']=position;position+=scene['end']-scene['start']
+        model=Scene.model_validate(scene)
+        position-=model.overlap
+        scene['position']=position;position+=model.duration
     # Tracks stay at their explicit absolute positions. Never silently drop speech/music.
     data['target_duration']=max(data['target_duration'],position)
+    for old_index,old in enumerate(project.timeline):
+        if old.locked and not (operation=='lock' and old_index==index) and old.model_dump() not in scenes:
+            raise ValueError('Änderung würde einen gesperrten Clip verschieben.')
     return ProductionProject.model_validate(data)
 
 
@@ -93,3 +141,12 @@ class TimelineHistory:
         return {'plan': self._states[self._index],
                 'can_undo': self.can_undo, 'can_redo': self.can_redo,
                 'depth': len(self._states), 'index': self._index}
+
+
+def suggestions(project):
+    images=all(next(a for a in project.assets if a.id==s.asset_id).kind=='image' for s in project.timeline)
+    if images:
+        return [{'profile':'slideshow','title':'Ruhige Slideshow','detail':'Dezenter Zoom und kurze Überblendungen; keine Motiverkennung.'}]
+    if project.duration/len(project.timeline)<3:
+        return [{'profile':'cuts','title':'Kurze Clips klar schneiden','detail':'Cuts statt langer Übergänge. Begründung: kurze Cliplängen, keine Action-Erkennung.'}]
+    return [{'profile':'gentle','title':'Sanfter Schnitt','detail':'Kurze Dissolves und leichter Warm-Look. Vorschlag nur anhand der Cliplängen.'}]

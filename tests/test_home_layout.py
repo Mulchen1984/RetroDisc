@@ -141,17 +141,57 @@ def test_the_pen_keeps_its_tilt_under_the_animation():
 
 
 def test_the_gestures_are_calm_and_can_be_switched_off():
-    assert "@keyframes cc-write" in STYLE, "Die Schreibbewegung fehlt"
-    assert "@keyframes cc-scan" in STYLE, "Die Lesebewegung fehlt"
-    assert "prefers-reduced-motion" in STYLE, (
-        "Die Bewegungen lassen sich nicht abschalten"
+    """Alle vier Hauptaktionen bekommen dieselbe Behandlung: eine kurze,
+    thematisch passende Geste (Klasse -> Keyframe), die NUR bei Hover/Focus
+    läuft - im Ruhezustand steht alles still (kein Dauerzappeln), und die
+    Bewegung lässt sich global abschalten."""
+    class_to_keyframe = {
+        "cc-pen": "cc-write", "cc-glasses": "cc-scan", "cc-flow": "cc-flow",
+        "cc-transfer": "cc-transfer",
+    }
+    for keyframe in class_to_keyframe.values():
+        assert f"@keyframes {keyframe}" in STYLE, f"Die Geste {keyframe} fehlt"
+    assert "prefers-reduced-motion" in STYLE, "Die Bewegungen lassen sich nicht abschalten"
+    reduced_motion_block = STYLE.split("prefers-reduced-motion: reduce)", 1)[1]
+    for css_class in class_to_keyframe:
+        assert f".{css_class}" in reduced_motion_block.split("}", 1)[0], (
+            f"{css_class} wird im reduzierten-Bewegungs-Modus nicht abgeschaltet"
+        )
+
+    # Ruhezustand: alle Gesten sind pausiert, bis Hover/Focus sie startet -
+    # keine dauerhaft laufende Hintergrundanimation mehr. Wichtig: die
+    # animation-Kurzschreibweise setzt nicht genannte Teil-Eigenschaften
+    # (auch animation-play-state) beim Anwenden stillschweigend auf ihren
+    # Anfangswert "running" zurück - eine frühere, separate
+    # "animation-play-state:paused"-Regel für dieselbe Klasse reicht darum
+    # NICHT: "paused" muss in derselben Regel wie die Kurzschreibweise stehen.
+    for css_class, keyframe in class_to_keyframe.items():
+        own_rule = re.search(rf"\.{css_class}\b[^{{]*\{{([^}}]*animation:\s*{keyframe}\s+[\d.]+s[^}}]*)\}}", STYLE)
+        assert own_rule, f"{css_class} hat keine eigene animation-Regel"
+        assert "animation-play-state:paused" in own_rule.group(1).replace(" ", ""), (
+            f"{css_class} ist nicht in derselben Regel wie die animation-Kurzschreibweise pausiert "
+            f"(eine spätere animation-Kurzschreibweise hätte eine frühere, separate 'paused'-Regel "
+            f"stillschweigend auf 'running' zurückgesetzt)"
+        )
+    for trigger in (":hover", ":focus-visible"):
+        assert trigger in STYLE, f"Kein {trigger}-Auslöser für die Gesten vorhanden"
+    running_rules = re.findall(r"(?:\.cbtn:hover|\.cbtn:focus-visible)[^{]*\{([^}]*)\}", STYLE)
+    assert any("animation-play-state:running" in rule.replace(" ", "") for rule in running_rules), (
+        "Hover/Focus setzt die Gesten nie in Bewegung"
     )
-    # Keine hektischen Effekte: beide Gesten laufen ueber mehrere Sekunden.
-    for name in ("cc-write", "cc-scan"):
-        durations = re.findall(rf"animation:{name}\s+([\d.]+)s", STYLE.replace(" ", " "))
-        assert durations, f"{name} wird nicht verwendet"
-        assert all(float(value) >= 5 for value in durations), (
-            f"{name} laeuft zu schnell fuer eine dezente Geste"
+    for css_class in class_to_keyframe:
+        assert any(f".{css_class}" in trigger_selector
+                  for trigger_selector, _ in re.findall(r"([^{}]*?:(?:hover|focus-visible)[^{]*)\{([^}]*)\}", STYLE)
+                  if "animation-play-state:running" in _.replace(" ", "")), (
+            f"{css_class} startet nie bei Hover/Focus"
+        )
+
+    # Keine hektischen Effekte: auch als kurze Hover-Geste bleibt jede Animation unhurried.
+    for css_class, keyframe in class_to_keyframe.items():
+        durations = re.findall(rf"\.{css_class}\b[^{{]*\{{[^}}]*animation:\s*{keyframe}\s+([\d.]+)s", STYLE)
+        assert durations, f"{css_class} verwendet die Geste {keyframe} nicht"
+        assert all(float(value) >= 2 for value in durations), (
+            f"{css_class} läuft zu schnell für eine dezente Geste"
         )
 
 
@@ -160,9 +200,9 @@ def test_the_start_screen_draws_its_own_artwork():
     home = re.search(r'<div id="homeview">(.*?)\n  </div>', UI, re.DOTALL)
     assert home, "Startseite nicht gefunden"
     markup = home.group(1)
-    assert "<img" not in markup, "Die Startseite laedt eine Bilddatei"
-    # url(#...) verweist auf einen Verlauf im selben SVG; alles andere waere
+    assert "<img" not in markup, "Die Startseite lädt eine Bilddatei"
+    # url(#...) verweist auf einen Verlauf im selben SVG; alles andere wäre
     # eine fremde Grafik.
     external = re.findall(r"url\(\s*(?!#)([^)]*)\)", markup)
-    assert not external, f"Die Startseite laedt fremde Grafiken: {external}"
-    assert markup.count("<svg") == 5, "Nicht jede Aktion zeichnet ihr eigenes SVG"
+    assert not external, f"Die Startseite lädt fremde Grafiken: {external}"
+    assert markup.count("<svg") == 4, "Nicht jede Aktion zeichnet ihr eigenes SVG"

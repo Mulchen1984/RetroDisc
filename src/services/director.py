@@ -12,8 +12,9 @@ from dataclasses import replace
 from pathlib import Path
 
 from src.config.presets import get_preset
-from src.models.director import ProductionProject, Scene, PlanProposal, Voiceover
+from src.models.director import ProductionProject, Scene, PlanProposal, Voiceover, AudioPlacement
 from src.services.converter import Converter
+from src.services.editor_filters import tempo,join_graph,clip_filters
 from src.services.subtitle import SubtitleGenerator
 from src.services.voice import LocalVoice
 from src.utils.subprocesses import (create_hidden_subprocess, communicate_with_job,
@@ -184,12 +185,13 @@ class Director:
                 continue
         return result
 
-    async def _command(self,args,job):
+    async def _command(self,args,job,cwd=None):
         proc=await create_hidden_subprocess(self.ffmpeg.ffmpeg_path,'-hide_banner','-loglevel','error','-nostdin',*args,
-            stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+            cwd=cwd,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
         _,err=await communicate_with_job(proc,job)
         if proc.returncode:
-            raise RuntimeError(err.decode('utf-8',errors='replace'))
+            from src.core.errors import EncodeError
+            raise EncodeError('Editor-Rendering fehlgeschlagen. Filter, Quelle und Ausgabeverzeichnis prüfen.',detail=err.decode('utf-8',errors='replace'))
 
     @staticmethod
     def subtitle_segments(project, voice_lengths=()):
@@ -200,10 +202,11 @@ class Director:
         assets={a.id:a for a in project.assets}
         segments=[]
         for scene in project.timeline:
+            if scene.freeze_duration:continue
             for seg in (assets[scene.asset_id].transcript or {}).get('segments',[]):
                 start=max(scene.start,float(seg['start']));end=min(scene.end,float(seg['end']))
                 if end>start:
-                    segments.append({'start':scene.position+start-scene.start,'end':scene.position+end-scene.start,'text':seg['text']})
+                    segments.append({'start':scene.position+(start-scene.start)/scene.speed,'end':scene.position+(end-scene.start)/scene.speed,'text':seg['text']})
         return sorted(segments,key=lambda seg:seg['start'])
 
     async def prepare_dubbing(self, project, provider):
@@ -263,30 +266,34 @@ class Director:
                 audio_parts=[]
                 for i,scene in enumerate(project.timeline):
                     asset=assets[scene.asset_id]
-                    duration=scene.end-scene.start
+                    duration=scene.duration
                     input_path=asset.path
                     if asset.kind=='image':
                         input_path=work/f'image-{i}.mkv'
-                        await self._command(['-loop','1','-i',asset.path,'-t',str(duration),'-vf',
+                        await self._command(['-loop','1','-i',asset.path,'-t',str(scene.end-scene.start),'-vf',
                             'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1',
                             '-r','30','-c:v','ffv1',str(input_path)],job)
                     visual='1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1'
                     if scene.zoom!='off':
                         step=0.0003 if scene.zoom=='subtle' else 0.0008
                         visual+=f",zoompan=z='min(1.12,1+on*{step})':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s=1280x720:fps=30"
-                    if scene.transition!='cut':
-                        fade=min(.35,duration/3)
-                        visual+=f',fade=t=in:d={fade}'
-                        if scene.transition=='dip_black':visual+=f',fade=t=out:st={duration-fade}:d={fade}'
+                    local=scene.transition if isinstance(scene.transition,str) else scene.transition.type
+                    if not scene.overlap and local!='cut':
+                        fade=min(.35,duration/3) if isinstance(scene.transition,str) else scene.transition.duration
+                        if local in ('fade','fade_from_black','dip_black'):visual+=f',fade=t=in:d={fade}'
+                        if local in ('fade_to_black','dip_black'):visual+=f',fade=t=out:st={duration-fade}:d={fade}'
                     preset=replace(get_preset('mp4_h264_720p'),audio_codec=None,audio_bitrate=None,fps=30,
-                        resolution=visual,
-                        extra_args=['-preset','medium','-crf','23','-ss',str(0 if asset.kind=='image' else scene.start),'-t',str(duration),'-an'])
+                        resolution=None,
+                        extra_args=['-preset','medium','-crf','23','-t',str(duration),'-vf',
+                            f'trim=start={0 if asset.kind=="image" else scene.start}:duration={scene.end-scene.start},setpts=(PTS-STARTPTS)/{scene.speed},'+
+                            (f'select=eq(n\\,0),tpad=stop_mode=clone:stop_duration={duration},' if scene.freeze_duration else '')+
+                            (','.join(clip_filters(scene))+',' if clip_filters(scene) else '')+'scale='+visual+(',drawbox=c=black:t=fill' if not scene.visible else ''),'-an'])
                     clip=await Converter(self.ffmpeg).convert_file(input_path,preset,work/f'{i}.mp4',hwaccel=encoder,job=job)
                     clips.append(clip)
                     audio=work/f'{i}.wav'
-                    if asset.audio_codec and project.original_audio!='mute':
+                    if asset.audio_codec and project.original_audio!='mute' and not scene.muted and not scene.freeze_duration:
                         await self.ffmpeg.convert(asset.path,audio,audio_codec='pcm_s16le',sample_rate=48000,
-                            extra_args=['-ss',str(scene.start),'-t',str(duration),'-vn','-ac','2','-af','apad'],job=job)
+                            extra_args=['-t',str(duration),'-vn','-ac','2','-af',f'atrim=start={scene.start}:end={scene.end},asetpts=PTS-STARTPTS,'+tempo(scene.speed)+f',volume={scene.volume},afade=t=in:d={scene.audio_fade_in},afade=t=out:st={max(0,duration-scene.audio_fade_out)}:d={scene.audio_fade_out},apad'],job=job)
                     else:
                         with wave.open(str(audio),'wb') as stream:
                             stream.setparams((2,2,48000,0,'NONE','not compressed'))
@@ -296,14 +303,25 @@ class Director:
                                 stream.writeframes(b'\0'*(count*4))
                                 remaining-=count
                     audio_parts.append(audio)
-                joined=await self.ffmpeg.merge(clips,work/'joined.mp4',job=job)
                 original=work/'original.wav'
-                with wave.open(str(original),'wb') as combined:
-                    combined.setparams((2,2,48000,0,'NONE','not compressed'))
-                    for part in audio_parts:
-                        with wave.open(str(part),'rb') as stream:
-                            while data:=stream.readframes(48000):
-                                combined.writeframes(data)
+                if any(s.overlap for s in project.timeline):
+                    graph,v,a=join_graph(project.timeline)
+                    inputs=[]
+                    for clip,audio in zip(clips,audio_parts):inputs+=['-i',str(clip),'-i',str(audio)]
+                    lossless=work/'transitions.mkv'
+                    await self._command(inputs+['-filter_complex_threads','1','-filter_complex',';'.join(graph),
+                        '-map',f'[{v}]','-an','-c:v','ffv1',str(lossless),'-map',f'[{a}]','-vn','-c:a','pcm_s16le',str(original)],job)
+                    joined=await Converter(self.ffmpeg).convert_file(lossless,replace(get_preset('mp4_h264_720p'),resolution=None,audio_codec=None),work/'joined.mp4',hwaccel=encoder,job=job)
+                else:
+                    joined=await self.ffmpeg.merge(clips,work/'joined.mp4',job=job)
+                    original=work/'original.wav'
+                    with wave.open(str(original),'wb') as combined:
+                        combined.setparams((2,2,48000,0,'NONE','not compressed'))
+                        for part in audio_parts:
+                            with wave.open(str(part),'rb') as stream:
+                                while data:=stream.readframes(48000):
+                                    combined.writeframes(data)
+                joined=await self.compose(project,assets,joined,work,encoder,job)
                 args=['-i',str(joined),'-i',str(original)]
                 filters=[f'[1:a]volume={project.original_volume}[original]']
                 labels=['[original]']
@@ -332,7 +350,7 @@ class Director:
                 if project.original_audio == 'duck' and generated:
                     intervals='+'.join(f'between(t,{cue.position},{cue.position+length})' for cue,length in voice_lengths)
                     filters[0]=f"[1:a]volume={project.original_volume},volume=0.2:enable='{intervals}'[original]"
-                for i,track in enumerate(project.music+project.sound_effects):
+                for i,track in enumerate(project.music+project.sound_effects+[AudioPlacement(asset_id=o.asset_id,position=o.start,start=o.source_start,duration=o.duration,volume=o.volume,duck=False) for o in project.overlays if not o.muted and o.volume and assets[o.asset_id].audio_codec]):
                     asset=assets[track.asset_id]
                     args+=['-i',asset.path]
                     length=track.duration
@@ -375,3 +393,33 @@ class Director:
             for path in generated:
                 path.unlink(missing_ok=True)
             raise
+
+    async def compose(self,project,assets,joined,work,encoder,job):
+        overlays=[o for o in project.overlays if o.visible]
+        texts=[t for t in project.text_clips if t.visible]
+        if not overlays and not texts:return joined
+        proc=await create_hidden_subprocess(self.ffmpeg.ffmpeg_path,'-hide_banner','-filters',stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+        out,_=await communicate_with_job(proc,job,max_output_bytes=1024*1024)
+        names=set(re.findall(r'^\s*[.A-Z|]{2,3}\s+(\w+)\s',out.decode(),re.M))
+        if texts and 'drawtext' not in names:raise ValueError('Texteinblendung nicht verfügbar: FFmpeg ohne drawtext/Font-Unterstützung.')
+        if overlays and 'overlay' not in names:raise ValueError('Overlay-Filter nicht verfügbar.')
+        args=['-i',str(joined)];graph=['[0:v]format=yuv420p[base]'];label='base'
+        for i,o in enumerate(overlays):
+            asset=assets[o.asset_id]
+            if asset.kind=='image':args+=['-loop','1']
+            args+=['-i',asset.path]
+            graph.append(f'[{i+1}:v]trim=start={o.source_start}:duration={o.duration},setpts=PTS-STARTPTS+{o.start}/TB,scale={o.width}:{o.height},format=rgba,colorchannelmixer=aa={o.opacity}[overlay{i}]')
+            graph.append(f'[{label}][overlay{i}]overlay=x={o.x}:y={o.y}:eof_action=pass:enable=\'between(t,{o.start},{o.start+o.duration})\'[layer{i}]')
+            label=f'layer{i}'
+        for i,t in enumerate(texts):
+            (work/f'text{i}.txt').write_text(t.text,encoding='utf-8')
+            x={'bottom_left':'40','bottom_right':'w-tw-40'}.get(t.position,{'left':'40','center':'(w-tw)/2','right':'w-tw-40'}[t.alignment])
+            y={'top':'40','center':'(h-th)/2'}.get(t.position,'h-th-40')
+            alpha=str(t.opacity)
+            if t.fade_in:alpha+=f'*min(1,max(0,(t-{t.start})/{t.fade_in}))'
+            if t.fade_out:alpha+=f'*min(1,max(0,({t.start+t.duration}-t)/{t.fade_out}))'
+            graph.append(f"[{label}]drawtext=textfile=text{i}.txt:expansion=none:fontsize={t.font_size}:fontcolor=white:x={x}:y={y}:alpha='{alpha}':enable='between(t,{t.start},{t.start+t.duration})'[text{i}]")
+            label=f'text{i}'
+        raw=work/'composition.mkv'
+        await self._command(args+['-filter_complex_threads','1','-filter_complex',';'.join(graph),'-map',f'[{label}]','-an','-t',str(project.duration),'-c:v','ffv1',str(raw)],job,cwd=work)
+        return await Converter(self.ffmpeg).convert_file(raw,replace(get_preset('mp4_h264_720p'),resolution=None,audio_codec=None),work/'composition.mp4',hwaccel=encoder,job=job)

@@ -25,14 +25,28 @@
   --steel:       #3a4654;   /* dunkles Metall (Titel/Header) */
   --steel-deep:  #2b3542;
   --panel-bg:    #eef1f5;
+  --surface: #ffffff;
+  --surface-soft: #f5f7fa;
+  --text-sm: 12px;
+  --text-body: 13px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --focus: #2563a6;
+  --danger: #b42332;
+  --success: #216a43;
+  --warning: #855b12;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow: hidden; }
 
 body {
-  font-family: "Verdana", "Tahoma", "Segoe UI", sans-serif;
-  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: var(--text-body);
+  line-height: 1.5;
   color: var(--ink);
   background: radial-gradient(ellipse at 50% 0%, #2a5c86 0%, #16344e 55%, #0c2236 100%);
 }
@@ -389,7 +403,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--accent-deep); 
 
 /* ════════ LAUNCHER-ARCHITEKTUR (CloneCD-Stil) ════════ */
 #win { background: linear-gradient(180deg,#ffffff 0%,#f4f7fb 60%,#eef2f7 100%) !important; }
-#rightpanel { background: transparent !important; padding: 22px 30px !important; }
+#rightpanel { background: transparent !important; padding: clamp(16px, 2vw, 28px) !important; min-width:0; }
 #maincontent { background: linear-gradient(180deg,#fbfcfe,#f1f5f9); }
 #leftpanel { background: linear-gradient(180deg,#f4f7fb,#e9eef4) !important; }
 body.home-mode #toolbar, body.home-mode #strip,
@@ -447,7 +461,7 @@ body.flow-mode #flowbar { display:flex; }
 .sect { background:#fff; border:1px solid #e2e7ee; border-radius:14px;
   margin-bottom:16px; box-shadow:0 2px 8px rgba(40,60,90,.05); overflow:hidden; }
 .sect-title { background:#fff !important; color:#c75a12 !important;
-  font-size:11px !important; font-weight:bold; letter-spacing:1.2px; text-transform:uppercase;
+  font-size:15px !important; font-weight:650; letter-spacing:0; text-transform:none;
   padding:14px 20px 4px !important; text-shadow:none !important; }
 .sect-body { padding:8px 20px 18px !important; background:#fff !important; }
 
@@ -484,7 +498,10 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 .ai-sect { background:#fff; border:1px solid #f0d6bc; border-radius:12px; padding:16px 18px; }
 
 /* Mehr Luft zwischen den Karten im Flow */
-#rightpanel .tabpanel { max-width:840px; }
+#rightpanel .tabpanel { width:100%; min-width:0; }
+/* Auf sehr breiten Fenstern nicht bis zum Rand sprawlen (Formulare/Listen bleiben
+   lesbar); Editor/Timeline (#tab-ai) nutzt weiterhin die volle Breite. */
+#rightpanel .tabpanel:not(#tab-ai) { max-width:1200px; margin-inline:auto; }
 
 
 /* ── Brenner- & Rohling-Karten (CloneCD-Kernerlebnis) ── */
@@ -495,6 +512,16 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 .dev-info p { font-size:12px; color:#6c7884; margin-top:2px; }
 .dev-caps { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
 .dev-cap { font-size:10px; background:#eef4ff; color:#2f6fc0; padding:2px 9px; border-radius:10px; font-weight:bold; }
+/* Sichtbare Disc-/Ziel-Art (DVD vs. Blu-ray) sowie Laufwerks-Fähigkeiten -
+   echte Werte aus DiscContent bzw. DriveCapabilities, nie geraten. */
+.disc-type-badge { display:inline-block; padding:2px 10px; border-radius:10px; font-size:11px; font-weight:bold; background:#eef4ff; color:#2f6fc0; }
+.disc-type-badge.type-bluray { background:#f3eaff; color:#7a3fc4; }
+.cap-badge { display:inline-block; padding:1px 9px; border-radius:10px; font-size:10px; font-weight:bold; margin-right:4px; }
+.cap-badge.cap-yes { background:#eefaf1; color:var(--success); }
+.cap-badge.cap-no { background:#f5f5f5; color:#9aa6b2; }
+.target-media-option { display:block; padding:3px 0; font-size:12px; }
+.target-media-option.disabled { color:#aab2bb; }
+.target-media-reason { font-size:10px; color:var(--danger); margin-left:6px; font-style:italic; }
 .media-row { display:flex; align-items:center; gap:18px; }
 .media-disc { width:60px; height:60px; border-radius:50%; flex-shrink:0; position:relative;
   background:radial-gradient(circle at 38% 30%,#e8eef5,#b8c4d2 55%,#8c9aab);
@@ -567,12 +594,14 @@ select, input[type="text"], input[type="url"], input[type="number"] {
   padding:clamp(4px,0.8vh,8px) clamp(8px,1.4vw,16px); }
 
 
-/* ── Retro-Gesten: Stift schreibt, Brille liest ──
-   Beide Bewegungen sind bewusst klein und stehen den groessten Teil des
-   Zyklus still - eine gelegentliche Geste, kein Blinken und kein Dauerzappeln.
-   Die Transformationen sitzen auf eigenen Gruppen, damit sie die
-   transform-Attribute der gezeichneten Teile nicht ueberschreiben, und sie
-   veraendern kein Layout. */
+/* ── Retro-Gesten: eine kleine, dezente Geste je Hauptaktion ──
+   Alle fünf Haupticons bekommen dieselbe Behandlung: eine kurze,
+   thematisch passende Bewegung (Stift schreibt, Brille liest, Pfeil
+   fließt/wandert/wird hervorgehoben), die NUR bei Hover/Focus läuft - im
+   Ruhezustand steht alles still, kein Dauerzappeln, kein Blinken. Die
+   Transformationen sitzen auf eigenen Gruppen, damit sie die transform-
+   Attribute der gezeichneten Teile nicht überschreiben, und sie verändern
+   kein Layout. */
 @keyframes cc-write {
   0%, 8%    { transform:translate(0,0) rotate(0deg); }
   12%       { transform:translate(-2.4px,1.3px) rotate(-2.2deg); }
@@ -586,19 +615,182 @@ select, input[type="text"], input[type="url"], input[type="number"] {
   32%       { transform:translate(3.4px,-0.5px); }
   42%, 100% { transform:translate(0,0); }
 }
-.cc-pen { transform-box:view-box; transform-origin:70px 42px;
-  animation:cc-write 6.5s ease-in-out infinite; }
-.cc-glasses { transform-box:view-box; transform-origin:46px 17px;
-  animation:cc-scan 7s ease-in-out infinite; }
-.cbtn:hover .cc-pen { animation-duration:2.8s; }
-.cbtn:hover .cc-glasses { animation-duration:3.2s; }
+/* Konvertieren: der Umwandlungspfeil fließt kurz vorwärts. */
+@keyframes cc-flow {
+  0%, 12%   { transform:translate(0,0); }
+  32%       { transform:translate(3px,0); }
+  55%       { transform:translate(-1px,0); }
+  80%, 100% { transform:translate(0,0); }
+}
+/* Disc kopieren: der Pfeil wandert kurz von der Quell- zur Zieldisc. */
+@keyframes cc-transfer {
+  0%, 15%   { transform:translate(0,0); }
+  38%       { transform:translate(2.6px,-1.2px); }
+  62%       { transform:translate(-1px,0.5px); }
+  85%, 100% { transform:translate(0,0); }
+}
+/* animation-play-state steht bewusst NACH dem animation-Kurzschreibweise-Wert
+   in derselben Regel: die Kurzschreibweise setzt alle nicht genannten
+   Teil-Eigenschaften (auch animation-play-state) sonst stillschweigend auf
+   ihren Anfangswert "running" zurück, selbst wenn eine frühere Regel schon
+   "paused" gesetzt hatte. */
+.cc-pen, .cc-glasses, .cc-flow, .cc-transfer { transform-box:view-box; }
+.cc-pen      { transform-origin:70px 42px; animation:cc-write 2.6s ease-in-out infinite; animation-play-state:paused; }
+.cc-glasses  { transform-origin:46px 17px; animation:cc-scan 3s ease-in-out infinite; animation-play-state:paused; }
+.cc-flow     { transform-origin:45px 31px; animation:cc-flow 2.2s ease-in-out infinite; animation-play-state:paused; }
+.cc-transfer { transform-origin:45px 14px; animation:cc-transfer 2.4s ease-in-out infinite; animation-play-state:paused; }
+.cbtn:hover .cc-pen, .cbtn:hover .cc-glasses, .cbtn:hover .cc-flow, .cbtn:hover .cc-transfer,
+.cbtn:focus-visible .cc-pen, .cbtn:focus-visible .cc-glasses, .cbtn:focus-visible .cc-flow,
+.cbtn:focus-visible .cc-transfer { animation-play-state:running; }
 @media (prefers-reduced-motion: reduce) {
-  .cc-pen, .cc-glasses { animation:none; }
+  .cc-pen, .cc-glasses, .cc-flow, .cc-transfer { animation:none; }
+}
+
+
+/* Shared UI refinement: preserve the launcher, icons, IDs and workflow components. */
+#maincontent { min-height:0; min-width:0; }
+#leftpanel { width:clamp(200px, 22vw, 270px); min-width:0; }
+#filebox { margin:var(--space-2); border:1px solid #e0e5ec; box-shadow:none; border-radius:8px; }
+.frow { align-items:flex-start; gap:var(--space-2); padding:var(--space-3); font-size:var(--text-body); }
+.frow-info { min-width:0; flex:1; }
+.frow-name { white-space:normal; overflow-wrap:anywhere; line-height:1.4; }
+.frow .frow-meta, .ssub { font-size:var(--text-sm); color:var(--ink-soft); }
+.frow.sel { background:#a94d10; }
+.frow.sel .frow-meta { color:#fff0df; }
+#fileInfoPanel { padding:var(--space-3); overflow-wrap:anywhere; }
+#flowbar { padding:var(--space-4) clamp(16px, 2vw, 28px) 0; }
+#flowbar h1 { font-size:24px; line-height:1.25; }
+#flowbar .sub { margin-top:var(--space-1); font-size:var(--text-sm); }
+.sect, .sgroup { border-color:#e0e5ec; box-shadow:0 2px 6px rgba(40,60,90,.04); }
+.sect-title { line-height:1.5; }
+.sect-body { padding-bottom:var(--space-6) !important; }
+.sect-body > p, .sect-body > label { display:block; margin:var(--space-2) 0; }
+.sect-body > p { max-width:70ch; }
+.row { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2) var(--space-3); margin:var(--space-3) 0; }
+.row > *, .srow > *, .sect-body, .dev-info { min-width:0; max-width:100%; }
+.row > label, .slbl { font-size:var(--text-body); font-weight:600; }
+.row > label { flex-shrink:0; }
+.row > input[type="text"], .row > input[type="url"] { flex:1 1 180px; }
+.srow { gap:var(--space-3); flex-wrap:wrap; padding:var(--space-3) 0; }
+.sgtitle { font-size:var(--text-body); text-transform:none; letter-spacing:0; }
+.groupbox-title { font-size:var(--text-sm); }
+select, input[type="text"], input[type="url"], input[type="number"], textarea {
+  font-family:inherit; font-size:var(--text-body); color:var(--ink);
+  background:var(--surface); border:1px solid #adb7c5; border-radius:7px;
+  padding:7px 10px; max-width:100%;
+}
+select, input[type="text"], input[type="url"], input[type="number"] { height:36px; }
+textarea { line-height:1.5; resize:vertical; min-height:64px; }
+input[type="number"] { padding-inline:5px; }
+select:disabled, input:disabled, textarea:disabled { background:#edf0f4; color:#6c7581; cursor:not-allowed; }
+.btn98, .btn98.default, .addfiles-btn {
+  min-height:36px; padding:8px 14px; font-size:var(--text-body); line-height:1.4;
+  font-family:inherit; font-weight:600; border-radius:8px; max-width:100%;
+  white-space:normal; overflow-wrap:anywhere; text-shadow:none;
+}
+.btn98, .addfiles-btn { background:var(--surface); border-color:#b7c1cf; box-shadow:none; }
+.btn98:hover:not(:disabled), .addfiles-btn:hover:not(:disabled) { background:#fff4e9; border-color:#ba692c; color:#8d400c; }
+.btn98.default { background:#aa4d0c; border-color:#944109; color:white; box-shadow:0 2px 4px #aa4d0c20; }
+.btn98.default:hover:not(:disabled) { background:#8d400c; color:white; filter:none; }
+.btn98.danger, .addfiles-btn.danger { background:#fff5f5; color:var(--danger); border-color:#dfa4aa; }
+.btn98.danger:hover:not(:disabled), .addfiles-btn.danger:hover:not(:disabled) { background:#fce4e7; color:#8e1724; border-color:var(--danger); }
+.btn98:active:not(:disabled), .addfiles-btn:active:not(:disabled) { transform:translateY(1px); box-shadow:inset 0 1px 3px #0002; }
+.btn98:disabled, .addfiles-btn:disabled { background:#edf0f4; color:#737d89; border-color:#d7dde5; opacity:1; box-shadow:none; filter:none; cursor:not-allowed; transform:none; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible,
+[tabindex]:focus-visible { outline:3px solid var(--focus); outline-offset:2px; box-shadow:none; }
+.btn98[aria-busy="true"] { cursor:progress; }
+.ai-sect-title { font-size:15px; }
+.jobrow, .librow { font-size:var(--text-body); padding:var(--space-3); }
+.jobrow { flex-wrap:wrap; }
+.jname { min-width:100px; white-space:normal; overflow-wrap:anywhere; }
+.jpct { font-variant-numeric:tabular-nums; font-size:var(--text-sm); }
+.bstep { font-size:var(--text-body); }
+.bstep.done { color:var(--success); }
+/* Gemeinsame Statusfarben fuer Job-Zeilen: nur Zustaende, die S.jobs/job.state
+   tatsaechlich liefert (pending/running/done/failed/cancelled). */
+.jobrow.st-running { background:#e8f4ff; }
+.jobrow.st-done { background:#eefaf1; }
+.jobrow.st-failed { background:#fff2f2; }
+.jobrow.st-cancelled { background:#f5f5f5; color:#6c7581; }
+.status-chip { display:inline-block; padding:1px 9px; border-radius:10px; font-size:var(--text-sm); white-space:nowrap; }
+.status-chip.st-pending { background:#f5f5f5; color:#6c7581; }
+.status-chip.st-running { background:#e8f4ff; color:#1144aa; }
+.status-chip.st-done { background:#eefaf1; color:var(--success); }
+.status-chip.st-failed { background:#fff2f2; color:var(--danger); }
+.status-chip.st-cancelled { background:#f5f5f5; color:#6c7581; }
+.progbar-outer { border-color:#d8dfe8; border-radius:7px; height:22px; }
+#statusbar { min-height:28px; height:auto; }
+.sbar-cell { font-size:11px; min-width:0; padding:5px 10px; overflow-wrap:anywhere; }
+.sbar-cell:first-child { flex:1; }
+#tab-ai section[aria-label="Timeline"] { border:1px solid #d8dfe8 !important; border-radius:10px; padding:var(--space-4) !important; margin-block:var(--space-4); background:var(--surface-soft); }
+#tab-ai section[aria-label="Timeline"] > .btn98 { margin:4px 2px; }
+#directorPrompt { min-height:88px; margin-top:var(--space-3); }
+#directorPlan { font-size:var(--text-sm); margin-top:var(--space-3); }
+#directorAssets, #directorCaps, #directorPlanSummary { line-height:1.6; }
+#directorOutputs, #directorResult, #shortResult, #batchResult, #restorationResult { overflow-wrap:anywhere; }
+
+/* Block 3: AI-Regisseur als 5-Phasen-Workflow (Medien/Aufgabe/KI-Plan/Bearbeiten/Rendern). */
+.director-steps { display:flex; flex-direction:column; gap:var(--space-4); }
+/* Block 4: Schrittstatus - nur reale UI-Zustaende (Assets/Plan/Outputs), kein Raten. */
+.director-step-status { display:flex; flex-wrap:wrap; gap:var(--space-2); padding:var(--space-3) var(--space-4);
+  background:#fff; border:1px solid #e2e7ee; border-radius:12px; box-shadow:0 2px 8px rgba(40,60,90,.05); }
+.director-step-chip { font-size:var(--text-sm); font-weight:600; padding:2px 10px; border-radius:10px; white-space:nowrap; }
+.director-step-chip.is-done { background:#eefaf1; color:var(--success); }
+.director-step-chip.is-current { background:#fff4e9; color:#a94d10; }
+.director-step-chip.is-upcoming { background:#f5f5f5; color:#8a939e; }
+.director-step-chip.is-error { background:#fff2f2; color:var(--danger); }
+.director-step-num {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:22px; height:22px; margin-right:8px; border-radius:50%;
+  background:#c75a12; color:#fff !important; font-size:12px; font-weight:700; vertical-align:middle;
+}
+.director-step-sub { color:var(--ink-soft); font-size:var(--text-sm); margin:0 0 var(--space-2); max-width:none; }
+.director-tools-divider {
+  margin:var(--space-6) 0 var(--space-3); padding-top:var(--space-3);
+  border-top:1px solid #e2e7ee; color:var(--ink-soft); font-size:var(--text-sm); font-weight:600;
+}
+/* Timeline als breite Arbeitsflaeche: Werkzeugleisten oben/unten, Canvas dazwischen bleibt breit. */
+.director-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-2); margin:var(--space-2) 0; }
+.director-toolbar-secondary { opacity:.85; font-size:var(--text-sm); }
+.director-toolbar-secondary .btn98 { padding:6px 11px; font-size:var(--text-sm); }
+.director-canvas-body { background:#fff; border:1px solid #e2e7ee; border-radius:8px; }
+#timelineTracks > div:hover { background:#fbfbfd; }
+
+/* Einheitliches Muster fuer bestehende Details/Experteneinstellungen-Aufklappbereiche. */
+details { border:1px solid #e2e7ee; border-radius:8px; padding:0 12px; margin:var(--space-2) 0; background:var(--surface-soft); }
+details[open] { padding-bottom:var(--space-3); }
+details summary { cursor:pointer; font-weight:600; font-size:var(--text-body); color:#5a6672; padding:var(--space-2) 0; }
+details summary::marker { color:#c75a12; }
+
+/* Gemeinsames Feedback-System: Info/Erfolg/Warnung/Fehler/Laeuft. Farbe ist nie
+   das einzige Signal - Icon + Wortlabel stehen immer mit dabei. */
+.feedback { display:flex; flex-wrap:wrap; align-items:flex-start; gap:6px 8px; padding:8px 12px; border-radius:8px; margin-top:var(--space-2); font-size:var(--text-body); line-height:1.5; }
+.feedback-icon { flex-shrink:0; }
+.feedback-label { flex-shrink:0; font-weight:700; }
+.feedback-msg { overflow-wrap:anywhere; }
+.feedback-detail { flex-basis:100%; margin:var(--space-2) 0 0; font-size:var(--text-sm); }
+.feedback-info { background:#eef4fb; color:#1c4e80; }
+.feedback-success { background:#eefaf1; color:var(--success); }
+.feedback-warning { background:#fff8e8; color:#855b12; }
+.feedback-error { background:#fff2f2; color:var(--danger); }
+.feedback-loading { background:#f2f4f7; color:#4a5568; }
+.feedback-loading .feedback-icon { display:inline-block; animation:feedback-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion:reduce) { .feedback-loading .feedback-icon { animation:none; } }
+@keyframes feedback-pulse { 0%,100%{opacity:1;} 50%{opacity:.45;} }
+@media (max-width:900px) {
+  #leftpanel { width:200px; }
+  #rightpanel { padding:var(--space-3) !important; }
+  .sect-body { padding:var(--space-3) !important; }
+  .sect-title { padding:var(--space-3) !important; }
+  .btn98, .btn98.default { padding:7px 11px; }
+  #flowbar h1 { font-size:21px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .tabpanel { animation:none; }
+  .btn98:active:not(:disabled) { transform:none; }
 }
 
 </style>
-</head>
-
 </head>
 <body>
 
@@ -640,12 +832,38 @@ select, input[type="text"], input[type="url"], input[type="number"] {
   <div id="homeview">
     <div class="cc-stage">
       <div class="cc-row">
+        <div class="cbtn" onclick="openFlow('rip')">
+          <div class="cc-ico">
+            <!-- Rippen = Einstiegspunkt: Disc einlegen und als Abbild sichern. -->
+            <svg width="92" height="80" viewBox="0 0 92 80">
+              <defs><radialGradient id="gRip" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
+              <g transform="translate(46,52)">
+                <ellipse cx="0" cy="0" rx="25" ry="23.0" fill="url(#gRip)" stroke="#9a5e0e" stroke-width="1.5"/>
+                <ellipse cx="0" cy="0" rx="8.25" ry="7.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
+                <ellipse cx="0" cy="0" rx="3.0" ry="2.75" fill="#f0a830"/>
+              </g>
+              <!-- Rippen = Disc + Brille. Die Gruppe traegt die Lesebewegung. -->
+              <g class="cc-glasses" fill="#eaf6ff" fill-opacity="0.9" stroke="#26313d" stroke-width="2.6" stroke-linecap="round">
+                <rect x="13" y="9" width="24" height="16" rx="7"/>
+                <rect x="55" y="9" width="24" height="16" rx="7"/>
+                <path d="M37 17 L55 17" fill="none"/>
+                <path d="M13 17 L5 22" fill="none"/>
+                <path d="M79 17 L87 22" fill="none"/>
+              </g>
+            </svg>
+          </div>
+          <div class="cc-label">Rippen</div>
+        </div>
         <div class="cbtn" onclick="openFlow('disccopy')">
           <div class="cc-ico">
+            <!-- Disc kopieren = eigener Schnellweg neben Rippen. -->
             <svg width="92" height="80" viewBox="0 0 92 80">
               <defs><radialGradient id="gCopyA" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffe6a8"/><stop offset="55%" stop-color="#e09a22"/><stop offset="100%" stop-color="#b56f10"/></radialGradient><radialGradient id="gCopyB" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
-              <path d="M31 14 L55 14" stroke="#2f6fc0" stroke-width="4" fill="none" stroke-linecap="round"/>
-              <path d="M51 8 L59 14 L51 20" stroke="#2f6fc0" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- Kopierpfeil trägt die Wander-Geste (siehe .cc-transfer). -->
+              <g class="cc-transfer">
+                <path d="M31 14 L55 14" stroke="#2f6fc0" stroke-width="4" fill="none" stroke-linecap="round"/>
+                <path d="M51 8 L59 14 L51 20" stroke="#2f6fc0" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              </g>
               <g transform="translate(23,46)">
                 <ellipse cx="0" cy="0" rx="19" ry="17.48" fill="url(#gCopyA)" stroke="#9a5e0e" stroke-width="1.5"/>
                 <ellipse cx="0" cy="0" rx="6.27" ry="5.7" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
@@ -663,8 +881,9 @@ select, input[type="text"], input[type="url"], input[type="number"] {
         <div class="cbtn" onclick="openFlow('convert')">
           <div class="cc-ico">
             <!-- Konvertieren: Quelldatei -> Zieldatei mit Umwandlungspfeil.
-                 Bewusst keine Discs: das Doppel-Disc-Symbol steht jetzt fuer
-                 "Disc kopieren". -->
+                 Bewusst keine Discs: das Doppel-Disc-Symbol steht für
+                 "Disc kopieren". Wirkt hier bewusst als Schritt NACH dem
+                 Rippen, nicht als erste Aktion auf einer eingelegten Disc. -->
             <svg width="92" height="80" viewBox="0 0 92 80">
               <g>
                 <rect x="6" y="13" width="30" height="38" rx="3" fill="#ffffff" stroke="#8a94a0" stroke-width="1.6"/>
@@ -682,8 +901,11 @@ select, input[type="text"], input[type="url"], input[type="number"] {
                 <rect x="74" y="44" width="3.4" height="12" rx="1.7" fill="#2f6fc0"/>
                 <rect x="80" y="49" width="3.4" height="7" rx="1.7" fill="#2f6fc0"/>
               </g>
-              <path d="M39 31 L52 31" stroke="#2f6fc0" stroke-width="3.4" fill="none" stroke-linecap="round"/>
-              <path d="M48 27 L53 31 L48 35" stroke="#2f6fc0" stroke-width="3.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- Vorwärts-Pfeil trägt die Fluss-Geste (siehe .cc-flow). -->
+              <g class="cc-flow">
+                <path d="M39 31 L52 31" stroke="#2f6fc0" stroke-width="3.4" fill="none" stroke-linecap="round"/>
+                <path d="M48 27 L53 31 L48 35" stroke="#2f6fc0" stroke-width="3.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+              </g>
               <path d="M53 46 L40 46" stroke="#8a94a0" stroke-width="3.4" fill="none" stroke-linecap="round"/>
               <path d="M44 42 L39 46 L44 50" stroke="#8a94a0" stroke-width="3.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
@@ -692,6 +914,8 @@ select, input[type="text"], input[type="url"], input[type="number"] {
         </div>
         <div class="cbtn" onclick="openFlow('burn')">
           <div class="cc-ico">
+            <!-- Brennen setzt bereits vorhandenen Inhalt voraus - deshalb als
+                 letzter Schritt positioniert, nicht davor. -->
             <svg width="92" height="80" viewBox="0 0 92 80">
               <defs><radialGradient id="gBurn" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
               <g transform="translate(36,48)">
@@ -713,44 +937,8 @@ select, input[type="text"], input[type="url"], input[type="number"] {
           </div>
           <div class="cc-label">Brennen</div>
         </div>
-        <div class="cbtn" onclick="openFlow('rip')">
-          <div class="cc-ico">
-            <svg width="92" height="80" viewBox="0 0 92 80">
-              <defs><radialGradient id="gRip" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
-              <g transform="translate(46,52)">
-                <ellipse cx="0" cy="0" rx="25" ry="23.0" fill="url(#gRip)" stroke="#9a5e0e" stroke-width="1.5"/>
-                <ellipse cx="0" cy="0" rx="8.25" ry="7.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
-                <ellipse cx="0" cy="0" rx="3.0" ry="2.75" fill="#f0a830"/>
-              </g>
-              <!-- Rippen = Disc + Brille. Die Gruppe traegt die Lesebewegung. -->
-              <g class="cc-glasses" fill="#eaf6ff" fill-opacity="0.9" stroke="#26313d" stroke-width="2.6" stroke-linecap="round">
-                <rect x="13" y="9" width="24" height="16" rx="7"/>
-                <rect x="55" y="9" width="24" height="16" rx="7"/>
-                <path d="M37 17 L55 17" fill="none"/>
-                <path d="M13 17 L5 22" fill="none"/>
-                <path d="M79 17 L87 22" fill="none"/>
-              </g>
-            </svg>
-          </div>
-          <div class="cc-label">Rippen</div>
-        </div>
-        <div class="cbtn" onclick="openFlow('download')">
-          <div class="cc-ico">
-            <svg width="92" height="80" viewBox="0 0 92 80">
-              <defs><radialGradient id="gDownload" cx="38%" cy="30%"><stop offset="0%" stop-color="#ffedbe"/><stop offset="55%" stop-color="#f0a830"/><stop offset="100%" stop-color="#c47d12"/></radialGradient></defs>
-              <g transform="translate(46,54)">
-                <ellipse cx="0" cy="0" rx="25" ry="23.0" fill="url(#gDownload)" stroke="#9a5e0e" stroke-width="1.5"/>
-                <ellipse cx="0" cy="0" rx="8.25" ry="7.5" fill="#fff" stroke="#9a5e0e" stroke-width="1"/>
-                <ellipse cx="0" cy="0" rx="3.0" ry="2.75" fill="#f0a830"/>
-              </g>
-              <path d="M46 4 L46 24" stroke="#2f6fc0" stroke-width="5" fill="none" stroke-linecap="round"/>
-              <path d="M35 17 L46 29 L57 17" stroke="#2f6fc0" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
-          <div class="cc-label">Download</div>
-        </div>
       </div>
-      <div class="cc-sub">Fünf Medien-Aktionen oben — Erstellen und Retten unten.</div>
+      <div class="cc-sub">Rippen zuerst - danach Konvertieren oder Brennen. Disc kopieren als eigener Schnellweg. Weitere Werkzeuge unten.</div>
       <div class="secondary">
         <span class="sec-group-label">Erstellen</span>
         <div class="sec-btn" onclick="openFlow('ai')">KI-Regisseur</div>
@@ -758,10 +946,12 @@ select, input[type="text"], input[type="url"], input[type="number"] {
         <span class="sec-group-label">Retten</span>
         <div class="sec-btn" onclick="openFlow('restore')">Video restaurieren</div>
         <span class="sec-group-label">Werkzeuge</span>
+        <div class="sec-btn" onclick="openFlow('player')">Vorschau</div>
         <div class="sec-btn" onclick="openFlow('search')">Suche</div>
         <div class="sec-btn" onclick="openFlow('edit')">Bearbeiten</div>
         <div class="sec-btn" onclick="openFlow('library')">Bibliothek</div>
         <div class="sec-btn" onclick="openFlow('queue')">Job Queue</div>
+        <div class="sec-btn" onclick="openFlow('download')">Download</div>
         <div class="sec-btn" onclick="openFlow('settings')">Einstellungen</div>
       </div>
     </div>
@@ -993,7 +1183,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
       </div>
       <button class="addfiles-btn" onclick="openFileDialog()">📂 Dateien hinzufügen...</button>
       <button class="addfiles-btn" onclick="openFolderBatch()" style="background:linear-gradient(180deg,#eeffee,#cceecc);">📁 Ordner (Batch)...</button>
-      <button class="addfiles-btn" style="margin-top:0;" onclick="clearFiles()">✕ Liste leeren</button>
+      <button class="addfiles-btn danger" style="margin-top:0;" onclick="clearFiles()">✕ Liste leeren</button>
     </div>
 
     <!-- RIGHT: CONTENT PANELS -->
@@ -1102,7 +1292,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
           <div class="sect-title">🔥 Disc brennen</div>
           <div class="sect-body">
 
-            <p style="font-size:11px;">Rohlingtypen: DVD-R / DVD-RW · DVD+R / DVD+RW · CD-R / CD-RW · Blu-ray BD-R / BD-RE.<br>Dieser Bereich erstellt Video-DVDs; CD-/Blu-ray-Authoring ist hier noch nicht angebunden.</p>
+            <p style="font-size:11px;">Rohlingtypen: DVD-R / DVD-RW · DVD+R / DVD+RW · CD-R / CD-RW · Blu-ray BD-R / BD-RE.<br>Video-DVD (VIDEO_TS/dvdauthor) und BDMV (Blu-ray-Struktur, echtes BD-25/50/BDXL-100/128) werden beide erzeugt. Die Zielmedium-Auswahl unten zeigt echte Zielgrößen; ein Ziel ist nur aktivierbar, wenn Backend UND das gewählte Laufwerk es tatsächlich unterstützen - sonst bleibt es sichtbar, aber deaktiviert, mit Begründung.</p>
             <div class="disc-icons-row">
               <div class="disc-card sel" onclick="selDisc(this)">
                 <svg width="38" height="38" viewBox="0 0 40 40" style="display:block"><ellipse cx="20" cy="22" rx="15" ry="13" fill="#cc6600" stroke="#884400" stroke-width="1.5"/><ellipse cx="20" cy="22" rx="15" ry="13" fill="white" opacity="0.15"/><ellipse cx="20" cy="22" rx="4.5" ry="4" fill="#bb5500"/><ellipse cx="20" cy="22" rx="1.8" ry="1.6" fill="#ffaa66"/></svg>
@@ -1122,9 +1312,13 @@ select, input[type="text"], input[type="url"], input[type="number"] {
               <div class="groupbox-title">Brenner-Einstellungen</div>
               <div class="row">
                 <label style="width:140px;">Brenner:</label>
-                <select style="width:260px;" id="burnerSelect">
+                <select style="width:260px;" id="burnerSelect" onchange="refreshBurnerCapabilities()">
                   <option>Bitte "Neu suchen" klicken</option>
                 </select>
+              </div>
+              <div class="row" id="burnerCapsRow" style="display:none;">
+                <label style="width:140px;">Fähigkeiten:</label>
+                <span id="burnerCapsBadges"></span>
               </div>
               <div class="row">
                 <label style="width:140px;">Schreibgeschwindigkeit:</label>
@@ -1133,6 +1327,25 @@ select, input[type="text"], input[type="url"], input[type="number"] {
               <div class="row">
                 <label style="width:140px;">DVD-Standard:</label>
                 <select style="width:140px;" id="dvdStandard"><option value="PAL">PAL (Europa)</option><option value="NTSC">NTSC (USA/Japan)</option></select>
+              </div>
+            </div>
+
+            <!-- Zielmedium: echte Zielgrößen aus der vorhandenen CapacityPlanner-
+                 Registry (list_target_media), niemals BD-5/BD-9 als physische
+                 Blu-ray. Verfügbarkeit richtet sich nach dem tatsächlichen
+                 Authoring-Backend (nur DVD-Video/dvdauthor implementiert) und,
+                 wo relevant, nach echten Laufwerksfähigkeiten - nie vorgetäuscht. -->
+            <div class="groupbox">
+              <div class="groupbox-title">Zielmedium</div>
+              <div class="row" style="align-items:center;">
+                <span id="targetMediaTypeBadge" class="disc-type-badge">Ziel: DVD</span>
+              </div>
+              <div id="targetMediaList">Wird geladen…</div>
+              <div class="row" id="customSizeRow" style="display:none;">
+                <label style="width:140px;">Custom-Größe (GB):</label>
+                <input type="number" min="0.1" step="0.1" value="4.7" style="width:90px;" id="customSizeGb" onchange="onTargetMediumChange()">
+                <label style="margin-left:16px;"><input type="radio" name="customFormat" value="dvd_video" checked onchange="onTargetMediumChange()"> DVD-Struktur</label>
+                <label style="margin-left:8px;"><input type="radio" name="customFormat" value="bdmv" onchange="onTargetMediumChange()"> BDMV-Struktur</label>
               </div>
             </div>
 
@@ -1238,7 +1451,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
               <div class="groupbox-title">Laufwerk</div>
               <div class="row">
                 <label style="width:120px;">Disc-Laufwerk:</label>
-                <select style="width:280px;" id="ripDriveSelect">
+                <select style="width:280px;" id="ripDriveSelect" onchange="refreshRipDiscInfo()">
                   <option>Bitte Laufwerk erkennen</option>
                 </select>
               </div>
@@ -1252,12 +1465,114 @@ select, input[type="text"], input[type="url"], input[type="number"] {
                 </select>
               </div>
             </div>
+            <!-- Sichtbare Disc-Art (DVD/Blu-ray), Label und Größe statt nur
+                 technischer Details im Hintergrund - nutzt das vorhandene
+                 DiscContent-Modell (get_disc_content) aus P0 Block 1. -->
+            <div class="groupbox" id="ripInfoBox" style="display:none;">
+              <div class="groupbox-title">Erkannte Disc</div>
+              <div class="row" style="align-items:center;">
+                <span id="ripDiscTypeBadge" class="disc-type-badge">Wird geprüft…</span>
+                <span id="ripDiscLabel" style="margin-left:8px;color:#6c7884;"></span>
+              </div>
+              <div class="row">
+                <label style="width:120px;">Größe:</label>
+                <span id="ripDiscSize">–</span>
+              </div>
+              <div class="row" id="ripDiscError" style="display:none;color:var(--danger);"></div>
+            </div>
+            <!-- Titel aus demselben DiscContent (get_disc_content), das oben
+                 bereits geladen wurde - keine erneute Titelerkennung. Jede
+                 Vorschau öffnet GENAU diesen Titel im Player. -->
+            <div class="groupbox" id="ripTitleBox" style="display:none;">
+              <div class="groupbox-title">Titel</div>
+              <div id="ripTitleList"></div>
+            </div>
           </div>
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn98 default" onclick="goRip()">📥 Rippen starten</button>
-          <button class="btn98" onclick="showDiscInfo()">Disc-Info anzeigen</button>
+          <button class="btn98" onclick="refreshRipDiscInfo()">Disc-Info anzeigen</button>
           <button class="btn98" onclick="goHome()">Abbrechen</button>
+        </div>
+      </div>
+
+      <!-- ══ VORSCHAU / PLAYER ══
+           Steuert eine echte mpv-Instanz per JSON-IPC (src/services/player.py).
+           Zeigt nur an, was der Player wirklich meldet - keine geschätzten
+           Werte. Kein eigenes DVD-/Blu-ray-Menü (BD-J/HDMV-Navigation ist
+           ausdrücklich ein späterer, eigener Block, siehe CLAUDE.md). -->
+      <div class="tabpanel" id="tab-player">
+        <div class="sect">
+          <div class="sect-title">🎬 Vorschau</div>
+          <div class="sect-body">
+            <div class="groupbox">
+              <div class="groupbox-title">Quelle</div>
+              <div class="row">
+                <label style="width:120px;">Datei/Disc:</label>
+                <button class="btn98" onclick="playerOpenFileDialog()">Datei öffnen…</button>
+                <span id="playerSourceName" style="margin-left:8px;color:#6c7884;">Keine Quelle geladen.</span>
+              </div>
+              <div class="row" id="playerErrorRow" style="display:none;color:var(--danger);"></div>
+            </div>
+
+            <div class="groupbox">
+              <div class="groupbox-title">Wiedergabe</div>
+              <div class="row" style="align-items:center;gap:8px;">
+                <button class="btn98" id="playerBtnPlay" onclick="playerPlay()">▶ Play</button>
+                <button class="btn98" id="playerBtnPause" onclick="playerPause()">⏸ Pause</button>
+                <button class="btn98" onclick="playerStop()">⏹ Stop</button>
+                <button class="btn98" onclick="playerToggleFullscreen()">⛶ Vollbild</button>
+                <span id="playerTimeLabel" style="margin-left:8px;">00:00 / 00:00</span>
+              </div>
+              <div class="row">
+                <label style="width:120px;">Position:</label>
+                <input type="range" id="playerSeekBar" min="0" max="1000" value="0"
+                       style="flex:1;" onchange="playerSeekTo(this.value)">
+              </div>
+              <div class="row">
+                <label style="width:120px;">Lautstärke:</label>
+                <input type="range" id="playerVolume" min="0" max="100" value="100"
+                       style="width:200px;" onchange="playerSetVolume(this.value)">
+              </div>
+            </div>
+
+            <div class="groupbox">
+              <div class="groupbox-title">Titel / Kapitel</div>
+              <div class="row">
+                <label style="width:120px;">Titel:</label>
+                <select id="playerTitleSelect" style="width:260px;" onchange="playerSelectTitleFromDropdown()">
+                  <option value="">–</option>
+                </select>
+                <button class="btn98" id="playerBtnMainMovie" style="margin-left:6px;display:none;"
+                        onclick="playerPlayMainMovie()">🎬 Hauptfilm</button>
+              </div>
+              <div class="row">
+                <label style="width:120px;">Kapitel:</label>
+                <select id="playerChapterSelect" style="width:260px;" onchange="playerSetChapterFromDropdown()">
+                  <option value="">–</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="groupbox">
+              <div class="groupbox-title">Audio / Untertitel</div>
+              <div class="row">
+                <label style="width:120px;">Audiospur:</label>
+                <select id="playerAudioSelect" style="width:260px;" onchange="playerSetAudioFromDropdown()">
+                  <option value="">–</option>
+                </select>
+              </div>
+              <div class="row">
+                <label style="width:120px;">Untertitel:</label>
+                <select id="playerSubtitleSelect" style="width:260px;" onchange="playerSetSubtitleFromDropdown()">
+                  <option value="off">Aus</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn98" onclick="goHome()">Schließen</button>
         </div>
       </div>
 
@@ -1339,10 +1654,10 @@ select, input[type="text"], input[type="url"], input[type="number"] {
           <div id="restorationOptions"></div>
           <label>Ausgabe <select id="restorationSize" onchange="restorationOptions()"><option value="original">Originalauflösung</option><option value="720p">720p</option><option value="1080p">1080p</option></select></label>
           <p>Stark kann Texturen entfernen. Stabilisierung kann Ränder verändern. Unklare Field Order vor Rendern prüfen. Keine KI-Detailerfindung.</p>
-          <button class="btn98" onclick="restorationRun(true)">Vorschau erzeugen (bis 6 s)</button>
+          <button class="btn98" id="restorationPreviewBtn" onclick="restorationRun(true)">Vorschau erzeugen (bis 6 s)</button>
           <button class="btn98" onclick="restorationPlay(0)">Originalvorschau abspielen</button>
           <button class="btn98" onclick="restorationPlay(1)">Restaurierte Vorschau abspielen</button>
-          <button class="btn98" onclick="restorationRun(false)">Geprüften Plan restaurieren</button>
+          <button class="btn98 default" id="restorationRunBtn" onclick="restorationRun(false)">Geprüften Plan restaurieren</button>
           <details><summary>Details / Experteneinstellungen / Projekt</summary>
             <textarea id="restorationPlan" style="width:100%;height:210px;box-sizing:border-box;font-family:monospace;"></textarea>
             <button class="btn98" onclick="restorationSave()">Plan speichern</button>
@@ -1366,13 +1681,13 @@ select, input[type="text"], input[type="url"], input[type="number"] {
           <div class="row" style="flex-wrap:wrap;gap:6px;">
             <button class="btn98" onclick="batchAddFiles()">Dateien hinzufügen…</button>
             <button class="btn98" onclick="batchAddFolder()">Ordner hinzufügen…</button>
-            <button class="btn98" onclick="batchClear()">Liste leeren</button>
+            <button class="btn98 danger" onclick="batchClear()">Liste leeren</button>
           </div>
           <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:6px;">
             <label>Preset <select id="batchPreset"><option value="natural">Natürlich</option><option value="balanced">Verbessert</option><option value="strong">Stark – möglicher Detailverlust</option></select></label>
             <label>Ausgabe <select id="batchSize"><option value="original">Original</option><option value="720p">720p</option><option value="1080p">1080p</option></select></label>
             <label><input type="checkbox" id="batchAdaptive"> Szenenadaptiv</label>
-            <button class="btn98" onclick="batchRun()">Batch restaurieren</button>
+            <button class="btn98 default" id="batchRunBtn" onclick="batchRun()">Batch restaurieren</button>
           </div>
           <div id="batchList" style="background:white;border:2px solid;border-color:#808080 #fff #fff #808080;min-height:60px;margin-top:6px;font-size:11px;"></div>
           <div id="batchResult" style="overflow-wrap:anywhere;margin-top:4px;font-size:11px;color:#444;"></div>
@@ -1405,7 +1720,7 @@ select, input[type="text"], input[type="url"], input[type="number"] {
           </div>
           <div id="shortCaptionNote" style="font-size:10px;color:#a33;"></div>
           <div class="row" style="flex-wrap:wrap;gap:6px;">
-            <button class="btn98" id="shortRunBtn" onclick="shortRun()">Short erstellen</button>
+            <button class="btn98 default" id="shortRunBtn" onclick="shortRun()">Short erstellen</button>
             <button class="btn98" onclick="shortMakeSrt()">Untertiteldatei (SRT) erstellen</button>
           </div>
           <div id="shortResult" style="white-space:pre-wrap;overflow-wrap:anywhere;margin-top:6px;"></div>
@@ -1415,9 +1730,12 @@ select, input[type="text"], input[type="url"], input[type="number"] {
 
       <!-- ══ AI ══ -->
       <div class="tabpanel" id="tab-ai">
-        <div class="sect">
-          <div class="sect-title">🎬 KI-Regisseur</div>
+        <div class="director-steps">
+        <div id="directorStepStatus" class="director-step-status" role="status" aria-live="polite"></div>
+        <div class="sect director-step">
+          <div class="sect-title"><span class="director-step-num">1</span>Medien</div>
           <div class="sect-body">
+            <p class="director-step-sub">Welche Aufnahmen soll der KI-Regisseur verwenden?</p>
             <div id="directorCaps" style="font-size:11px;">Lokale Fähigkeiten werden beim Öffnen geprüft.</div>
             <div class="row">
               <button class="btn98" onclick="directorSelect(false)">Ausgewählte Dateien übernehmen</button>
@@ -1425,44 +1743,85 @@ select, input[type="text"], input[type="url"], input[type="number"] {
               <button class="btn98" onclick="showTab('library',document.getElementById('tbtn-library'))">Medienbibliothek</button>
             </div>
             <div id="directorAssets" style="max-height:100px;overflow:auto;overflow-wrap:anywhere;">Noch keine Assets ausgewählt.</div>
+          </div>
+        </div>
+
+        <div class="sect director-step">
+          <div class="sect-title"><span class="director-step-num">2</span>Aufgabe</div>
+          <div class="sect-body">
+            <p class="director-step-sub">Was soll aus dem Material entstehen?</p>
             <textarea id="directorPrompt" style="width:100%;box-sizing:border-box;height:65px;" placeholder="Erstelle einen kurzen Zusammenschnitt aus diesen Videos. Beschreibe Ziel, Stimmung und Hauptmaterial."></textarea>
             <div class="row" style="flex-wrap:wrap;">
               <label>Zieldauer (s, 0 = Prompt): <input id="directorDuration" type="number" min="0" max="600" value="0" style="width:55px;"></label>
               <select id="directorModel"><option value="">Rohschnitt aus Metadaten (ohne LLM)</option></select>
               <label><input id="directorTranscribe" type="checkbox" disabled> Whisper-Transkription (optional)</label>
-              <button class="btn98" onclick="directorMakePlan()">Plan erstellen / erneut erzeugen</button>
+              <button class="btn98 default" id="directorMakePlanBtn" onclick="directorMakePlan()">Plan erstellen / erneut erzeugen</button>
             </div>
-            <label for="directorPlan">Produktionsplan / Timeline – vor dem Rendern prüfen und bearbeiten (JSON)</label>
+          </div>
+        </div>
+
+        <div class="sect director-step">
+          <div class="sect-title"><span class="director-step-num">3</span>KI-Plan</div>
+          <div class="sect-body">
+            <p class="director-step-sub">Vorschlag prüfen, bevor bearbeitet oder gerendert wird.</p>
             <div id="directorPlanSummary" style="white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0;"></div>
-            <section aria-label="Timeline" style="border:1px solid #888;padding:8px;">
-              <strong>Timeline</strong>
-              <button class="btn98" id="timelineUndoBtn" onclick="timelineUndo(false)" disabled>Rückgängig</button>
-              <button class="btn98" id="timelineRedoBtn" onclick="timelineUndo(true)" disabled>Wiederholen</button>
-              <div id="timelineTracks" style="overflow:auto;max-height:320px;"></div>
-              <label>Originalton <input id="timelineVolume" type="number" min="0" max="2" step="0.1" value="1" onchange="timelineAudio()"></label>
-              <label><input id="timelineVoice" type="checkbox" checked onchange="timelineAudio()">Voiceover aktiv</label>
-              <button class="btn98" onclick="timelineSlideshow()">Aus gewählten Bildern: Slideshow</button>
-              <button class="btn98" onclick="timelineMusic()">Gewählte Audiodatei als Musik</button>
+            <details>
+              <summary>Experten-Ansicht (Produktionsplan als JSON)</summary>
+              <label for="directorPlan">Produktionsplan / Timeline – vor dem Rendern prüfen und bearbeiten (JSON)</label>
+              <textarea oninput="directorSummarizePlan()" id="directorPlan" style="width:100%;box-sizing:border-box;height:190px;font-family:monospace;"></textarea>
+            </details>
+          </div>
+        </div>
+
+        <div class="sect director-step">
+          <div class="sect-title"><span class="director-step-num">4</span>Bearbeiten</div>
+          <div class="sect-body">
+            <p class="director-step-sub">Timeline, Titel, Overlays und Ton anpassen.</p>
+            <section aria-label="Timeline" class="director-canvas">
+              <div class="director-toolbar">
+                <button class="btn98" onclick="timelineSuggestions()">Smart Suggestions</button>
+                <button class="btn98" onclick="timelineAddText()">Titel hinzufügen</button>
+                <button class="btn98" onclick="timelineAddOverlay()">Gewähltes Bild/Video als Overlay/PIP</button>
+                <button class="btn98" id="timelineUndoBtn" onclick="timelineUndo(false)" disabled>Rückgängig</button>
+                <button class="btn98" id="timelineRedoBtn" onclick="timelineUndo(true)" disabled>Wiederholen</button>
+              </div>
+              <div id="timelineSuggestions"></div>
+              <div id="timelineTracks" class="director-canvas-body" style="overflow:auto;max-height:320px;"></div>
+              <div class="director-toolbar director-toolbar-secondary">
+                <label>Originalton <input id="timelineVolume" type="number" min="0" max="2" step="0.1" value="1" onchange="timelineAudio()"></label>
+                <label><input id="timelineVoice" type="checkbox" checked onchange="timelineAudio()">Voiceover aktiv</label>
+                <button class="btn98" onclick="timelineSlideshow()">Aus gewählten Bildern: Slideshow</button>
+                <button class="btn98" onclick="timelineMusic()">Gewählte Audiodatei als Musik</button>
+              </div>
               <p style="font-size:11px;">Schnittwerte sind Quellsekunden. Änderungen werden erst beim Rendern gerechnet. Sprach-/Musikpositionen bleiben absolut; unpassende Tracks werden nicht still gelöscht.</p>
             </section>
-            <textarea oninput="directorSummarizePlan()" id="directorPlan" style="width:100%;box-sizing:border-box;height:190px;font-family:monospace;"></textarea>
+            <div class="director-toolbar director-toolbar-secondary">
+              <label>Originalton <select id="directorAudio" onchange="directorEditAudio()"><option value="duck">Unter Sprecher absenken</option><option value="keep">Behalten</option><option value="mute">Stumm</option></select></label>
+              <label>Stimme <select id="directorVoice" onchange="directorEditAudio(true)"><option value="">Automatisch (Deutsch bevorzugt)</option></select></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="sect director-step">
+          <div class="sect-title"><span class="director-step-num">5</span>Rendern</div>
+          <div class="sect-body">
+            <p class="director-step-sub">Encoder wählen, Projekt sichern und rendern.</p>
             <div class="row" style="flex-wrap:wrap;">
               <select id="directorEncoder"><option value="auto">Automatisch</option></select>
               <button class="btn98" onclick="directorSavePlan()">Projekt speichern</button>
-              <button class="btn98" onclick="directorRenderPlan()">Geprüften Plan rendern</button>
+              <button class="btn98 default" id="directorRenderPlanBtn" onclick="directorRenderPlan()">Geprüften Plan rendern</button>
               <select id="directorProjects"></select>
               <button class="btn98" onclick="directorLoadPlan()">Projekt laden</button>
               <select id="directorDubLanguage"><option value="en">Dubbing: Englisch</option><option value="de">Dubbing: Deutsch</option></select>
               <button class="btn98" onclick="directorTranslatePlan()">Dubbing übersetzen (lokal)</button>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0;">
-              <label>Originalton <select id="directorAudio" onchange="directorEditAudio()"><option value="duck">Unter Sprecher absenken</option><option value="keep">Behalten</option><option value="mute">Stumm</option></select></label>
-              <label>Stimme <select id="directorVoice" onchange="directorEditAudio(true)"><option value="">Automatisch (Deutsch bevorzugt)</option></select></label>
-            </div>
             <div id="directorOutputs" style="overflow-wrap:anywhere;"></div>
             <div id="directorResult" style="overflow-wrap:anywhere;user-select:text;"></div>
           </div>
         </div>
+        </div>
+
+        <p class="director-tools-divider">🧰 Weitere Werkzeuge — unabhängig vom Produktionsplan oben</p>
 
         <div class="sect">
           <div class="sect-title">🤖 KI-Assistent (Ollama)</div>
@@ -1850,7 +2209,7 @@ window.onBackendEvent = function(payload) {
       S.jobs.push({id:data.id, name:data.name, state:'pending', prog:0, status:''});
       renderJobs(); updateJobBadge(); break;
     case 'job_progress':
-      if(data.id===S.batchJobId){ const br=document.getElementById('batchResult'); if(br) br.textContent='Fortschritt: '+(data.status||''); }
+      if(data.id===S.batchJobId){ renderFeedback('batchResult','loading','Fortschritt: '+(data.status||'')); }
       const jp = S.jobs.find(j=>j.id===data.id);
       if(jp){ jp.prog=data.progress; jp.status=data.status; jp.state='running'; }
       if(S.jobs.find(j=>j.state==='running')){
@@ -1865,10 +2224,10 @@ window.onBackendEvent = function(payload) {
     case 'job_done':
       refreshRecentMedia();
       if(data.id===S.batchJobId){ batchOnDone(data); }
-      else if(data.type==='restore') { S.restorationOutput=data.output; document.getElementById('restorationResult').innerHTML='Fertig: '+escHtml(data.output||'')+' '+revealOutputButton(data.output||''); }
+      else if(data.type==='restore') { S.restorationOutput=data.output; renderFeedback('restorationResult','success','Fertig: '+(data.output||''),{html:revealOutputButton(data.output||'')}); }
       if(data.type==='smart_edit' && data.id===S.shortJobId){ shortShowResult(finalOutputPaths(data)); }
       if(data.archive){ archiveShowResult(data.archive); }
-      if (data.type === 'director_render') { document.getElementById('directorResult').textContent = 'Rendering abgeschlossen.'; directorShowOutputs([...finalOutputPaths(data),...(data.subtitle_paths||[])]); }
+      if (data.type === 'director_render') { renderFeedback('directorResult','success','Rendering abgeschlossen.'); directorShowOutputs([...finalOutputPaths(data),...(data.subtitle_paths||[])]); }
       const jd = S.jobs.find(j=>j.id===data.id);
       if(jd){ jd.state='done'; jd.prog=100; jd.outputPaths=finalOutputPaths(data); }
       document.getElementById('curjob').style.display='none';
@@ -1878,8 +2237,8 @@ window.onBackendEvent = function(payload) {
       if(data.type==='burn_dvd') animBurnDone();
       break;
     case 'job_failed':
-      if(data.id===S.shortJobId){ const b=document.getElementById('shortRunBtn'); if(b) b.disabled=false; const sr=document.getElementById('shortResult'); if(sr) sr.textContent='Short fehlgeschlagen: '+(data.error||''); }
-      if(data.id===S.batchJobId){ const br=document.getElementById('batchResult'); if(br) br.textContent='Batch fehlgeschlagen: '+(data.error||''); S.batchJobId=null; }
+      if(data.id===S.shortJobId){ const b=document.getElementById('shortRunBtn'); if(b) b.disabled=false; renderFeedback('shortResult','error','Short fehlgeschlagen: '+(data.error||'')); }
+      if(data.id===S.batchJobId){ renderFeedback('batchResult','error','Batch fehlgeschlagen: '+(data.error||'')); S.batchJobId=null; }
       const jf = S.jobs.find(j=>j.id===data.id);
       if(jf){ jf.state='failed'; }
       document.getElementById('curjob').style.display='none';
@@ -1951,7 +2310,9 @@ async function goBurn(){
   if(a){
     try{
       const paths=JSON.stringify(S.files.map(f=>f.path));
-      const r=JSON.parse(await a.create_dvd(paths,t,standard,aspect,true,device,speed,verify,eject));
+      const r = selectedTargetMediumIsBdmv()
+        ? JSON.parse(await a.create_bluray(paths,t,selectedTargetMediumId(),true,device,speed,verify,eject))
+        : JSON.parse(await a.create_dvd(paths,t,standard,aspect,true,device,speed,verify,eject));
       if(r.error) alert('Fehler: '+r.error);
       else { showTab('queue',document.getElementById('tbtn-queue')); }
     }catch(e){ alert('Brennen konnte nicht gestartet werden: '+e); }
@@ -1991,12 +2352,13 @@ async function goDL(){
 async function doSearch(){
   const q=document.getElementById('sinp').value; if(!q)return;
   const res=document.getElementById('sresults');
-  res.innerHTML='<div style="padding:8px;font-size:11px;color:#666;">Suche läuft...</div>';
+  renderFeedback('sresults','loading','Suche läuft…');
   const a=api();
   if(a){
     const raw=JSON.parse(await a.search_media(q, '[]', 15));
-    if(raw.error){res.innerHTML='<div style="padding:8px;color:red;font-size:11px;">'+raw.error+'</div>';return;}
-    if(!raw.length){res.innerHTML='<div style="padding:8px;font-size:11px;color:#666;">Keine Ergebnisse für "'+q+'".</div>';return;}
+    if(raw.error){renderFeedback('sresults','error',raw.error);return;}
+    if(!raw.length){renderFeedback('sresults','info','Keine Ergebnisse für "'+q+'".');return;}
+    res.className='';
     res.innerHTML=raw.map((r,i)=>`
       <div class="frow" style="padding:4px 6px;" data-url="${escAttr(r.url)}" data-title="${escAttr(r.title)}" onclick="toggleSearchSel(this)">
         <span style="font-size:16px;">${r.source==='youtube'?'▶️':'📺'}</span>
@@ -2010,7 +2372,7 @@ async function doSearch(){
       </div>`).join('');
     updateSearchSelButtons();
   } else {
-    res.innerHTML='<div style="padding:8px;font-size:11px;color:#a55;">Backend noch nicht bereit — Suche nicht möglich.</div>';
+    renderFeedback('sresults','warning','Backend noch nicht bereit — Suche nicht möglich.');
   }
 }
 
@@ -2061,16 +2423,15 @@ async function downloadSelectedResults(){
 
 async function doAI(){
   const v=document.getElementById('aiinp').value; if(!v)return;
-  const r=document.getElementById('airesp');
-  r.textContent='KI analysiert...';
+  renderFeedback('airesp','loading','KI analysiert…');
   const a=api();
   if(a){
     try {
       const res=JSON.parse(await a.run_assistant(v));
-      r.textContent = res.message || JSON.stringify(res, null, 2);
-    } catch(e){ r.textContent='Fehler: '+e; }
+      renderFeedback('airesp','info', res.message || JSON.stringify(res, null, 2));
+    } catch(e){ renderFeedback('airesp','error',String(e)); }
   } else {
-    r.textContent='Backend noch nicht bereit — Assistent nicht verfügbar.';
+    renderFeedback('airesp','warning','Backend noch nicht bereit — Assistent nicht verfügbar.');
   }
 }
 
@@ -2110,6 +2471,32 @@ async function openOutputFolderDialog(){
 // Hilfsfunktionen
 function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function escAttr(s){ return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// Gemeinsames Feedback-System (Info/Erfolg/Warnung/Fehler/Laeuft) fuer bestehende
+// Ergebnis-/Fehlertext-Container. text = Klartext (wird escaped); opts.html = optionale
+// bereits aufbereitete HTML-Ergaenzung (z.B. ein Reveal-Button), wird unveraendert angehaengt.
+const FEEDBACK_META = {
+  info:{icon:'ℹ️',label:'Info'}, success:{icon:'✅',label:'Erfolg'},
+  warning:{icon:'⚠️',label:'Hinweis'}, error:{icon:'❌',label:'Fehler'},
+  loading:{icon:'⏳',label:'Läuft'}
+};
+function renderFeedback(id, kind, text, opts){
+  const el=document.getElementById(id);
+  if(!el) return;
+  const o=opts||{};
+  if(text==null || text===''){ el.className=''; el.innerHTML=''; return; }
+  const meta=FEEDBACK_META[kind]||FEEDBACK_META.info;
+  const raw=String(text);
+  const firstLine=raw.split('\n')[0];
+  const main=(raw.length>160||raw.includes('\n'))?firstLine.slice(0,160):raw;
+  const hasDetail=main!==raw;
+  el.className='feedback feedback-'+kind;
+  el.innerHTML='<span class="feedback-icon" aria-hidden="true">'+meta.icon+'</span>'+
+    '<span class="feedback-label">'+meta.label+':</span>'+
+    '<span class="feedback-msg">'+escHtml(main)+'</span>'+
+    (o.html||'')+
+    (hasDetail?'<details class="feedback-detail"><summary>Technische Details</summary><div style="white-space:pre-wrap;overflow-wrap:anywhere;">'+escHtml(raw)+'</div></details>':'');
+}
 
 function animBurnDone(){
   document.querySelectorAll('.bstep').forEach(el=>{
@@ -2207,7 +2594,9 @@ async function createISO() {
     const paths = JSON.stringify(S.files.map(f => f.path));
     const standard=document.getElementById('dvdStandard')?.value||'PAL';
     const aspect=document.querySelector('input[name="aspect"]:checked')?.value||'16:9';
-    const r = JSON.parse(await a.create_dvd(paths, t, standard, aspect, false, '', null, false, false));
+    const r = selectedTargetMediumIsBdmv()
+      ? JSON.parse(await a.create_bluray(paths, t, selectedTargetMediumId(), false, '', null, false, false))
+      : JSON.parse(await a.create_dvd(paths, t, standard, aspect, false, '', null, false, false));
     if (r.error) alert('Fehler: ' + r.error);
     else showTab('queue', document.getElementById('tbtn-queue'));
   } else {
@@ -2232,18 +2621,389 @@ async function goRip() {
   }
 }
 
-async function showDiscInfo(){
+function discTypeBadgeText(discType){
+  if(discType==='bluray') return 'Blu-ray (BDMV)';
+  if(discType==='dvd') return 'DVD';
+  if(discType==='cd') return 'CD / Daten';
+  return (discType||'unbekannt').toUpperCase();
+}
+function formatDiscSize(bytes){
+  if(bytes==null) return 'unbekannt';
+  return (bytes/1e9).toFixed(2)+' GB';
+}
+let RIP_DISC_CONTENT = null;   // vollständiges DiscContent der zuletzt geprüften Disc (für die Titelliste)
+
+async function refreshRipDiscInfo(){
   const a=api();
   const device=document.getElementById('ripDriveSelect')?.value||'';
-  if(!a || !device){ alert('Bitte zuerst ein Disc-Laufwerk auswählen!'); return; }
+  const box=document.getElementById('ripInfoBox');
+  const badge=document.getElementById('ripDiscTypeBadge');
+  const labelEl=document.getElementById('ripDiscLabel');
+  const sizeEl=document.getElementById('ripDiscSize');
+  const errEl=document.getElementById('ripDiscError');
+  const titleBox=document.getElementById('ripTitleBox');
+  if(!box || !badge || !labelEl || !sizeEl || !errEl) return;
+  if(!a || !device){ box.style.display='none'; if(titleBox) titleBox.style.display='none'; return; }
+  box.style.display='';
+  badge.textContent='Wird geprüft…'; badge.className='disc-type-badge';
+  labelEl.textContent=''; sizeEl.textContent='–';
+  errEl.style.display='none'; errEl.textContent='';
+  if(titleBox) titleBox.style.display='none';
+  RIP_DISC_CONTENT = null;
   try{
-    const info=JSON.parse(await a.get_disc_info(device));
-    if(info.error){ alert('Fehler: '+info.error); return; }
-    if(!info.present){ alert('In '+device+' ist kein Medium eingelegt.'); return; }
-    const capacity=info.capacity_gb!=null?'\nKapazität: '+info.capacity_gb+' GB':'';
-    alert('Laufwerk: '+device+'\nMedium: '+(info.profile||info.type||'unbekannt')+
-      '\nStatus: '+(info.blank?'leer':(info.readable?'lesbar':'eingelegt'))+capacity);
-  }catch(e){ alert('Disc-Info konnte nicht gelesen werden: '+e); }
+    const info=JSON.parse(await a.get_disc_content(device));
+    if(info.error){
+      badge.textContent='Unbekannt';
+      errEl.style.display=''; errEl.textContent=info.error;
+      return;
+    }
+    badge.textContent=discTypeBadgeText(info.disc_type);
+    badge.className='disc-type-badge'+(info.disc_type==='bluray'?' type-bluray':'');
+    labelEl.textContent=info.label ? ('„'+info.label+'“') : '(kein Label)';
+    sizeEl.textContent=formatDiscSize(info.capacity_bytes);
+    RIP_DISC_CONTENT = info;
+    renderRipTitleList(device, info);
+  }catch(e){
+    badge.textContent='Fehler';
+    errEl.style.display=''; errEl.textContent=String(e);
+  }
+}
+
+function formatDurationShort(seconds){
+  if(seconds==null) return 'unbekannt';
+  const total=Math.round(seconds);
+  const m=Math.floor(total/60), s=total%60;
+  return m+':'+String(s).padStart(2,'0');
+}
+
+// Rendert genau die Titel aus dem bereits geladenen DiscContent - keine
+// erneute Titelerkennung. "Vorschau" oeffnet GENAU diesen Titel im Player.
+function renderRipTitleList(device, content){
+  const titleBox=document.getElementById('ripTitleBox');
+  const list=document.getElementById('ripTitleList');
+  if(!titleBox || !list) return;
+  if(!content.titles || !content.titles.length){ titleBox.style.display='none'; return; }
+  titleBox.style.display='';
+  list.innerHTML = content.titles.map(t => {
+    const dur=formatDurationShort(t.duration_seconds);
+    const chapters=t.chapters ? t.chapters.length : 0;
+    const mainBadge = t.is_main_movie ? ' <span class="disc-type-badge">Hauptfilm</span>' : '';
+    return '<div class="row" style="align-items:center;">'+
+      '<span style="width:70px;">Titel '+t.index+'</span>'+
+      '<span style="width:90px;color:#6c7884;">'+dur+'</span>'+
+      '<span style="width:110px;color:#6c7884;">'+chapters+' Kapitel</span>'+
+      mainBadge+
+      '<button class="btn98" style="margin-left:6px;" onclick="openPlayerForDiscTitle(\''+
+        escAttr(device)+'\',\''+escAttr(content.disc_type)+'\','+t.index+')">Vorschau</button>'+
+      '</div>';
+  }).join('');
+}
+
+// ── Vorschau-/Preview-Player (src/services/player.py, mpv per JSON-IPC) ───
+// Zeigt ausschließlich, was player_get_state() tatsächlich meldet - keine
+// geschätzten Werte. Kein eigenes DVD-/Blu-ray-Menü: BD-J/HDMV-Navigation
+// ist ausdrücklich ein späterer, eigener Block (siehe CLAUDE.md).
+let PLAYER_SOURCE = null;      // {kind, device, discType, path}, für Titel-/Dropdown-Wechsel
+let PLAYER_POLL_TIMER = null;
+let PLAYER_LAST_DURATION = 0;
+
+function startPlayerPolling(){
+  stopPlayerPolling();
+  refreshPlayerState();
+  PLAYER_POLL_TIMER = setInterval(refreshPlayerState, 1000);
+}
+function stopPlayerPolling(){
+  if(PLAYER_POLL_TIMER){ clearInterval(PLAYER_POLL_TIMER); PLAYER_POLL_TIMER=null; }
+}
+
+function playerShowError(message){
+  const row=document.getElementById('playerErrorRow');
+  if(!row) return;
+  if(message){ row.style.display=''; row.textContent=message; }
+  else { row.style.display='none'; row.textContent=''; }
+}
+
+async function playerOpenSource(source, label){
+  const a=api();
+  if(!a){ playerShowError('Backend noch nicht bereit — Vorschau nicht möglich.'); return; }
+  playerShowError('');
+  const nameEl=document.getElementById('playerSourceName');
+  if(nameEl) nameEl.textContent='Wird geladen…';
+  try{
+    const r=JSON.parse(await a.player_open(JSON.stringify(Object.assign({label:label||''}, source))));
+    if(r.error){ playerShowError(r.error); if(nameEl) nameEl.textContent='Keine Quelle geladen.'; return; }
+    PLAYER_SOURCE = source;
+    if(nameEl) nameEl.textContent = r.label || r.path || '(Quelle)';
+    await refreshPlayerState();
+  }catch(e){
+    playerShowError('Wiedergabe konnte nicht gestartet werden: '+e);
+  }
+}
+
+async function openPlayerForDiscTitle(device, discType, titleIndex){
+  openFlow('player');
+  const kind = discType==='bluray' ? 'bluray_title' : 'dvd_title';
+  await playerOpenSource({kind, device, title_index: titleIndex}, device+' – Titel '+titleIndex);
+}
+
+function playerPlayMainMovie(){
+  if(!RIP_DISC_CONTENT || !RIP_DISC_CONTENT.titles) return;
+  const main = RIP_DISC_CONTENT.titles.find(t => t.is_main_movie);
+  if(!main){ alert('Kein Hauptfilm auf dieser Disc erkannt.'); return; }
+  const device=document.getElementById('ripDriveSelect')?.value||'';
+  openPlayerForDiscTitle(device, RIP_DISC_CONTENT.disc_type, main.index);
+}
+
+async function playerOpenFileDialog(){
+  const a=api();
+  if(!a) return;
+  const r=JSON.parse(await a.open_file_dialog());
+  if(r.error || !r.files || !r.files.length) return;
+  openFlow('player');
+  const f=r.files[0];
+  await playerOpenSource({kind:'file', path:f.path}, f.name);
+}
+
+async function playerPlay(){ const a=api(); if(a) await a.player_play(); refreshPlayerState(); }
+async function playerPause(){ const a=api(); if(a) await a.player_pause(); refreshPlayerState(); }
+async function playerStop(){ const a=api(); if(a) await a.player_stop(); refreshPlayerState(); }
+async function playerToggleFullscreen(){
+  const a=api(); if(!a) return;
+  const state=JSON.parse(await a.player_get_state());
+  await a.player_set_fullscreen(!state.fullscreen);
+  refreshPlayerState();
+}
+async function playerSetVolume(value){ const a=api(); if(a) await a.player_set_volume(Number(value)); }
+async function playerSeekTo(sliderValue){
+  const a=api(); if(!a || !PLAYER_LAST_DURATION) return;
+  const target = (Number(sliderValue)/1000) * PLAYER_LAST_DURATION;
+  await a.player_seek(target, false);
+  refreshPlayerState();
+}
+
+async function playerSetChapterFromDropdown(){
+  const a=api(); const sel=document.getElementById('playerChapterSelect');
+  if(!a || !sel || sel.value==='') return;
+  await a.player_set_chapter(Number(sel.value));
+  refreshPlayerState();
+}
+async function playerSetAudioFromDropdown(){
+  const a=api(); const sel=document.getElementById('playerAudioSelect');
+  if(!a || !sel || sel.value==='') return;
+  await a.player_set_audio_track(Number(sel.value));
+  refreshPlayerState();
+}
+async function playerSetSubtitleFromDropdown(){
+  const a=api(); const sel=document.getElementById('playerSubtitleSelect');
+  if(!a || !sel) return;
+  if(sel.value==='off') await a.player_disable_subtitles();
+  else await a.player_set_subtitle_track(Number(sel.value));
+  refreshPlayerState();
+}
+async function playerSelectTitleFromDropdown(){
+  const sel=document.getElementById('playerTitleSelect');
+  if(!sel || sel.value==='' || !PLAYER_SOURCE || !PLAYER_SOURCE.device) return;
+  await openPlayerForDiscTitle(PLAYER_SOURCE.device, PLAYER_SOURCE.discTypeForDropdown, Number(sel.value));
+}
+
+function populateSelect(select, options, currentValue){
+  if(!select) return;
+  select.innerHTML = options.map(o =>
+    '<option value="'+escAttr(o.value)+'"'+(String(o.value)===String(currentValue)?' selected':'')+'>'+
+      escHtml(o.label)+'</option>'
+  ).join('');
+}
+
+async function refreshPlayerState(){
+  const a=api();
+  if(!a) return;
+  let state;
+  try{ state=JSON.parse(await a.player_get_state()); }
+  catch(e){ return; }
+  if(state.error){ playerShowError(state.error); }
+
+  PLAYER_LAST_DURATION = state.duration_seconds || 0;
+  const timeLabel=document.getElementById('playerTimeLabel');
+  if(timeLabel){
+    timeLabel.textContent = formatDurationShort(state.position_seconds)+' / '+formatDurationShort(state.duration_seconds);
+  }
+  const seekBar=document.getElementById('playerSeekBar');
+  if(seekBar && state.duration_seconds){
+    seekBar.value = Math.round(((state.position_seconds||0)/state.duration_seconds)*1000);
+  }
+  const volume=document.getElementById('playerVolume');
+  if(volume && document.activeElement!==volume) volume.value = Math.round(state.volume||0);
+
+  const playBtn=document.getElementById('playerBtnPlay');
+  const pauseBtn=document.getElementById('playerBtnPause');
+  if(playBtn) playBtn.disabled = state.loaded && !state.paused;
+  if(pauseBtn) pauseBtn.disabled = state.loaded && state.paused;
+
+  const chapterSel=document.getElementById('playerChapterSelect');
+  if(chapterSel){
+    const options=[];
+    for(let i=0;i<(state.chapter_count||0);i++) options.push({value:i, label:'Kapitel '+i});
+    populateSelect(chapterSel, options.length?options:[{value:'',label:'–'}], state.chapter);
+  }
+  const audioSel=document.getElementById('playerAudioSelect');
+  if(audioSel){
+    const audioTracks=(state.tracks||[]).filter(t=>t.type==='audio');
+    const options=audioTracks.map(t=>({value:t.id, label:'Spur '+t.id+(t.lang?' ('+t.lang+')':'')}));
+    populateSelect(audioSel, options.length?options:[{value:'',label:'–'}], state.audio_track);
+  }
+  const subSel=document.getElementById('playerSubtitleSelect');
+  if(subSel){
+    const subTracks=(state.tracks||[]).filter(t=>t.type==='sub');
+    const options=[{value:'off', label:'Aus'}].concat(
+      subTracks.map(t=>({value:t.id, label:'Spur '+t.id+(t.lang?' ('+t.lang+')':'')}))
+    );
+    populateSelect(subSel, options, state.subtitle_track==null ? 'off' : state.subtitle_track);
+  }
+  const titleSel=document.getElementById('playerTitleSelect');
+  const mainBtn=document.getElementById('playerBtnMainMovie');
+  if(titleSel && RIP_DISC_CONTENT && RIP_DISC_CONTENT.titles && RIP_DISC_CONTENT.titles.length){
+    const options=RIP_DISC_CONTENT.titles.map(t=>({value:t.index, label:'Titel '+t.index+(t.is_main_movie?' (Hauptfilm)':'')}));
+    const device=document.getElementById('ripDriveSelect')?.value||'';
+    if(PLAYER_SOURCE) PLAYER_SOURCE.device = PLAYER_SOURCE.device || device;
+    if(PLAYER_SOURCE) PLAYER_SOURCE.discTypeForDropdown = RIP_DISC_CONTENT.disc_type;
+    populateSelect(titleSel, options, PLAYER_SOURCE && PLAYER_SOURCE.title_index);
+    if(mainBtn) mainBtn.style.display = RIP_DISC_CONTENT.titles.some(t=>t.is_main_movie) ? '' : 'none';
+  }
+}
+
+// ── Zielmedium (Brennen): echte Zielgrößen + Capability-Gating ──────────
+// Nutzt die vorhandene CapacityPlanner-Zielmedien-Registry (list_target_media)
+// und die vorhandene Laufwerks-Capability-Erkennung (inspect_drive). Es wird
+// hier bewusst keine neue Backend-Logik eingeführt - nur die UI-Anbindung.
+let TARGET_MEDIA_LIST = null;
+let BURNER_CAPS = null;
+const CUSTOM_TARGET_MEDIUM = {
+  id: 'custom', display_name: 'Benutzerdefiniert', is_physical_bluray: null, requires_bdxl: false,
+};
+
+// Spiegelt exakt die serverseitige Schichtung aus
+// target_medium_capability_issue() (src/config/target_media.py), die
+// create_bluray/burn_existing_iso vor dem Brennen ohnehin durchsetzen -
+// hier nur zur Anzeige, keine eigene Logik. Reihenfolge: Software-
+// Authoring zuerst (medium.authoring_available kommt echt aus
+// list_target_media(), seit BDMV-Authoring implementiert ist), dann
+// Laufwerks-Schreibfähigkeit der richtigen Medienfamilie, dann BDXL.
+function targetMediumAvailability(medium, caps){
+  if(medium.authoring_available===false){
+    return {ok:false, reason:'BDMV-Authoring-Backend ist nicht verfügbar (FFmpeg fehlt).'};
+  }
+  if(caps){
+    if(medium.is_physical_bluray && !(caps.bd_r||caps.bd_re)){
+      return {ok:false, reason:'Dieses Laufwerk kann keine Blu-ray-Rohlinge beschreiben.'};
+    }
+    if(!medium.is_physical_bluray && !caps.dvd_write){
+      return {ok:false, reason:'Dieses Laufwerk kann keine DVD-Rohlinge beschreiben.'};
+    }
+  }
+  if(medium.requires_bdxl){
+    if(!caps) return {ok:null, reason:'BDXL-Fähigkeit des Laufwerks ist nicht bekannt.'};
+    if(!caps.bd_xl) return {ok:false, reason:'Dieses Laufwerk/Backend meldet keine BDXL-Unterstützung.'};
+  }
+  if(!caps) return {ok:null, reason:'Laufwerksfähigkeit noch nicht geprüft'};
+  return {ok:true, reason:''};
+}
+
+function formatCapacityGb(bytes){
+  return bytes==null ? '?' : (bytes/1e9).toFixed(1);
+}
+
+function renderTargetMediaOptions(){
+  const list=document.getElementById('targetMediaList');
+  if(!list) return;
+  if(!TARGET_MEDIA_LIST){ list.textContent='Wird geladen…'; return; }
+  const all=TARGET_MEDIA_LIST.concat([CUSTOM_TARGET_MEDIUM]);
+  const current=document.querySelector('input[name="targetMedium"]:checked')?.value || 'dvd5';
+  list.innerHTML = all.map(m => {
+    const avail = m.id==='custom' ? {ok:true, reason:''} : targetMediumAvailability(m, BURNER_CAPS);
+    const disabled = avail.ok===false;
+    const unknown = avail.ok===null;
+    const checked = m.id===current ? ' checked' : '';
+    const capText = m.id==='custom' ? '' : (' — '+formatCapacityGb(m.nominal_capacity_bytes)+' GB');
+    const reasonHtml = avail.reason ? '<span class="target-media-reason">'+escHtml(avail.reason)+'</span>' : '';
+    return '<label class="target-media-option'+(disabled?' disabled':'')+'">'+
+      '<input type="radio" name="targetMedium" value="'+escAttr(m.id)+'"'+checked+
+      (disabled?' disabled':'')+' onchange="onTargetMediumChange()"> '+
+      escHtml(m.display_name)+capText+
+      (unknown ? '<span class="target-media-reason">(Verfügbarkeit ungeprüft)</span>' : reasonHtml)+
+      '</label>';
+  }).join('');
+  onTargetMediumChange();
+}
+
+function onTargetMediumChange(){
+  const selected=document.querySelector('input[name="targetMedium"]:checked')?.value;
+  const all=(TARGET_MEDIA_LIST||[]).concat([CUSTOM_TARGET_MEDIUM]);
+  const medium=all.find(m=>m.id===selected);
+  const customRow=document.getElementById('customSizeRow');
+  if(customRow) customRow.style.display = selected==='custom' ? '' : 'none';
+  const badge=document.getElementById('targetMediaTypeBadge');
+  if(!badge) return;
+  let isBluray;
+  if(selected==='custom'){
+    isBluray = document.querySelector('input[name="customFormat"]:checked')?.value==='bdmv';
+  } else {
+    isBluray = !!(medium && medium.authoring_format==='bdmv');
+  }
+  badge.textContent = 'Ziel: '+(isBluray?'Blu-ray':'DVD');
+  badge.className = 'disc-type-badge'+(isBluray?' type-bluray':'');
+}
+
+// Welches Zielmedium ist gerade gewählt, und braucht es den BDMV- statt den
+// DVD-Authoring-Pfad? "custom" zählt nur dann als BDMV, wenn der Nutzer das
+// dort explizit als Format gewählt hat (customFormat-Radio).
+function selectedTargetMediumId(){
+  return document.querySelector('input[name="targetMedium"]:checked')?.value || 'dvd5';
+}
+
+function selectedTargetMediumIsBdmv(){
+  const selected=selectedTargetMediumId();
+  if(selected==='custom'){
+    return document.querySelector('input[name="customFormat"]:checked')?.value==='bdmv';
+  }
+  const medium=(TARGET_MEDIA_LIST||[]).find(m=>m.id===selected);
+  return !!(medium && medium.authoring_format==='bdmv');
+}
+
+async function loadTargetMediaList(){
+  const a=api();
+  if(!a) return;
+  try{
+    TARGET_MEDIA_LIST = JSON.parse(await a.list_target_media());
+  }catch(e){
+    TARGET_MEDIA_LIST = [];
+  }
+  renderTargetMediaOptions();
+}
+
+function renderCapabilityBadges(caps){
+  const items=[['DVD',caps.dvd_write],['Blu-ray',caps.bd_r||caps.bd_re],['BDXL',caps.bd_xl]];
+  return items.map(([label,ok]) =>
+    '<span class="cap-badge '+(ok?'cap-yes':'cap-no')+'">'+label+(ok?' ✓':' ✗')+'</span>'
+  ).join('');
+}
+
+async function refreshBurnerCapabilities(){
+  const a=api();
+  const device=document.getElementById('burnerSelect')?.value||'';
+  const row=document.getElementById('burnerCapsRow');
+  const badges=document.getElementById('burnerCapsBadges');
+  if(!row || !badges) return;
+  if(!a || !device){ row.style.display='none'; BURNER_CAPS=null; renderTargetMediaOptions(); return; }
+  row.style.display='';
+  badges.textContent='Wird geprüft…';
+  try{
+    const caps=JSON.parse(await a.inspect_drive(device));
+    if(caps.error){ badges.textContent='Nicht ermittelbar: '+caps.error; BURNER_CAPS=null; }
+    else { BURNER_CAPS=caps; badges.innerHTML=renderCapabilityBadges(caps); }
+  }catch(e){
+    badges.textContent='Nicht ermittelbar: '+e; BURNER_CAPS=null;
+  }
+  renderTargetMediaOptions();
 }
 
 // ── Einstellungen speichern ──────────────────────────────────────
@@ -2427,6 +3187,7 @@ async function startup() {
   // einen Disc-Bereich oeffnet.
   // Alle 2 Sekunden Queue aktualisieren
   setInterval(refreshQueue, 2000);
+  directorUpdateSteps();
 }
 
 // Echte onPythonEvent-Verbindung (von Python via evaluate_js gesendet)
@@ -2883,7 +3644,7 @@ function restorationShow(plan){
   document.getElementById('restorationPlan').value=JSON.stringify(plan,null,2);
   document.getElementById('restorationProjectId').value=plan.id;
   S.restorationOutput=plan.outputs.at(-1)||null;
-  if(S.restorationOutput) document.getElementById('restorationResult').innerHTML='Output: '+escHtml(S.restorationOutput)+' '+revealOutputButton(S.restorationOutput);
+  if(S.restorationOutput) renderFeedback('restorationResult','success','Output: '+S.restorationOutput,{html:revealOutputButton(S.restorationOutput)});
   document.getElementById('restorationPreset').value=plan.preset;
   document.getElementById('restorationSize').value=plan.options.size;
   const a=plan.analysis;
@@ -2898,13 +3659,13 @@ function restorationOptions(){
     p.options.size=document.getElementById('restorationSize').value;
     document.querySelectorAll('#restorationOptions input').forEach(input=>{p.options[input.dataset.option]=input.checked;});
     document.getElementById('restorationPlan').value=JSON.stringify(p,null,2);
-    document.getElementById('restorationResult').textContent='Optionen geändert: vor dem Rendern eine passende Vorschau erzeugen.';
-  }catch(e){document.getElementById('restorationResult').textContent='Zuerst analysieren: '+e.message;}
+    renderFeedback('restorationResult','info','Optionen geändert: vor dem Rendern eine passende Vorschau erzeugen.');
+  }catch(e){renderFeedback('restorationResult','error','Zuerst analysieren: '+e.message);}
 }
 async function restorationAnalyze(path){
-  document.getElementById('restorationResult').textContent='Technische Analyse läuft…';
-  try{restorationShow(JSON.parse(await api().restoration_analyze(path)));document.getElementById('restorationResult').textContent='Plan prüfen und Vorschau erzeugen.';}
-  catch(e){document.getElementById('restorationResult').textContent=e.message;}
+  renderFeedback('restorationResult','loading','Technische Analyse läuft…');
+  try{restorationShow(JSON.parse(await api().restoration_analyze(path)));renderFeedback('restorationResult','success','Plan prüfen und Vorschau erzeugen.');}
+  catch(e){renderFeedback('restorationResult','error',e.message);}
 }
 async function restorationChoose(){
   try{
@@ -2912,29 +3673,32 @@ async function restorationChoose(){
     if(r.error) throw new Error(r.error);
     const file=(r.files||[r])[0];
     if(file?.path) await restorationAnalyze(file.path);
-  }catch(e){document.getElementById('restorationResult').textContent=e.message;}
+  }catch(e){renderFeedback('restorationResult','error',e.message);}
 }
 async function restorationRecent(){
   const rows=JSON.parse(await api().get_recent_media());
   const video=rows.find(r=>r.type==='video');
   if(video) await restorationAnalyze(video.path);
-  else document.getElementById('restorationResult').textContent='Kein zuletzt erzeugtes Video vorhanden.';
+  else renderFeedback('restorationResult','info','Kein zuletzt erzeugtes Video vorhanden.');
 }
 async function restorationRun(preview){
+  const previewBtn=document.getElementById('restorationPreviewBtn'), runBtn=document.getElementById('restorationRunBtn');
   try{
     const p=document.getElementById('restorationPlan').value;
     if(!preview && JSON.parse(p).preview?.length!==2) throw new Error('Bitte zuerst eine Vorher/Nachher-Vorschau erzeugen.');
     if(!preview && !confirm('Vorschau geprüft? Restaurierung mit diesem Plan starten?')) return;
-    document.getElementById('restorationResult').textContent=preview?'Vorschau wird erzeugt…':'Rendering wird eingereiht…';
+    if(previewBtn) previewBtn.disabled=true; if(runBtn) runBtn.disabled=true;
+    renderFeedback('restorationResult','loading',preview?'Vorschau wird erzeugt…':'Rendering wird eingereiht…');
     const r=JSON.parse(await api().restoration_process(p,preview));
     if(r.error) throw new Error(r.error);
-    if(preview){restorationShow(r);document.getElementById('restorationResult').textContent='Beide Vorschauen sind bereit.';}
+    if(preview){restorationShow(r);renderFeedback('restorationResult','success','Beide Vorschauen sind bereit.');}
     else openFlow('queue');
-  }catch(e){document.getElementById('restorationResult').textContent=e.message;}
+  }catch(e){renderFeedback('restorationResult','error',e.message);}
+  finally{ if(previewBtn) previewBtn.disabled=false; if(runBtn) runBtn.disabled=false; }
 }
 async function restorationHandoff(target){
   const path=S.restorationOutput;
-  if(!path){document.getElementById('restorationResult').textContent='Zuerst ein fertiges Restaurierungsergebnis erzeugen oder Projekt laden.';return;}
+  if(!path){renderFeedback('restorationResult','warning','Zuerst ein fertiges Restaurierungsergebnis erzeugen oder Projekt laden.');return;}
   if(target==='short'){
     shortSetSource(path, path.split(/[\\/]/).pop());
     openFlow('short');
@@ -2942,9 +3706,10 @@ async function restorationHandoff(target){
   }
   if(target==='ai'){
     const assets=JSON.parse(await api().director_assets(JSON.stringify([path])));
-    if(assets.error){document.getElementById('restorationResult').textContent=assets.error;return;}
+    if(assets.error){renderFeedback('restorationResult','error',assets.error);return;}
     S.directorAssets=assets;
     document.getElementById('directorAssets').textContent=assets.map(a=>a.title).join(' · ');
+    directorUpdateSteps();
     openFlow('ai');
   }else{
     openFlow(target);
@@ -2953,38 +3718,35 @@ async function restorationHandoff(target){
 }
 async function restorationPlay(index){
   const r=JSON.parse(await api().restoration_play(document.getElementById('restorationProjectId').value,index));
-  if(r.error) document.getElementById('restorationResult').textContent=r.error;
+  if(r.error) renderFeedback('restorationResult','error',r.error);
 }
 async function restorationSave(){
   try{restorationShow(JSON.parse(await api().restoration_project(document.getElementById('restorationPlan').value,true)));}
-  catch(e){document.getElementById('restorationResult').textContent=e.message;}
+  catch(e){renderFeedback('restorationResult','error',e.message);}
 }
 async function restorationLoad(){
   try{restorationShow(JSON.parse(await api().restoration_project(document.getElementById('restorationProjectId').value,false)));}
-  catch(e){document.getElementById('restorationResult').textContent=e.message;}
+  catch(e){renderFeedback('restorationResult','error',e.message);}
 }
 
 // ── Archivkopie (FFV1 Preservation Master) ───────────────────────────
 async function restorationArchive(){
-  const out=document.getElementById('archiveResult');
   const planText=document.getElementById('restorationPlan').value;
-  if(!planText.trim()){ out.textContent='Bitte zuerst eine Quelle analysieren.'; return; }
+  if(!planText.trim()){ renderFeedback('archiveResult','warning','Bitte zuerst eine Quelle analysieren.'); return; }
   try{
     const r=JSON.parse(await api().restoration_archive(planText));
     if(r.error) throw new Error(r.error);
-    out.textContent='Archivkopie wird erstellt (verlustloses FFV1) – Fortschritt im Job-Bereich.';
+    renderFeedback('archiveResult','loading','Archivkopie wird erstellt (verlustloses FFV1) – Fortschritt im Job-Bereich.');
     openFlow('queue');
-  }catch(e){ out.textContent='Archivkopie nicht möglich: '+e.message; }
+  }catch(e){ renderFeedback('archiveResult','error','Archivkopie nicht möglich: '+e.message); }
 }
 function archiveShowResult(archive){
-  const out=document.getElementById('archiveResult');
-  if(!out) return;
   const m=archive.metadata||{};
-  out.innerHTML=`<b>Archivmaster erstellt.</b><br>`+
-    `Datei: ${escHtml(archive.path||'')} ${revealOutputButton(archive.path||'')}<br>`+
+  const detail=`Datei: ${escHtml(archive.path||'')} ${revealOutputButton(archive.path||'')}<br>`+
     `Manifest: ${escHtml(archive.manifest||'')}<br>`+
     `Video ${escHtml(m.video_codec||'ffv1')} · SHA256 geprüft: ${m.archive_sha256?'ja':'nein'}<br>`+
     `Original unverändert: ${m.source_sha256?'ja':'—'}`;
+  renderFeedback('archiveResult','success','Archivmaster erstellt.',{html:detail});
 }
 
 // ── Smart Edit / Short ───────────────────────────────────────────────
@@ -3015,23 +3777,23 @@ async function shortChoose(){
     if(r.error) throw new Error(r.error);
     const f=(r.files||[])[0];
     if(f&&f.path) shortSetSource(f.path,f.title||f.name||f.path);
-    else document.getElementById('shortResult').textContent='Keine Datei gewählt.';
-  }catch(e){document.getElementById('shortResult').textContent=e.message;}
+    else renderFeedback('shortResult','warning','Keine Datei gewählt.');
+  }catch(e){renderFeedback('shortResult','error',e.message);}
 }
 async function shortRecent(){
   try{
     const rows=JSON.parse(await api().get_recent_media());
     const v=rows.find(r=>r.type==='video');
     if(v) shortSetSource(v.path,v.filename);
-    else document.getElementById('shortResult').textContent='Kein zuletzt erzeugtes Video vorhanden.';
-  }catch(e){document.getElementById('shortResult').textContent=e.message;}
+    else renderFeedback('shortResult','info','Kein zuletzt erzeugtes Video vorhanden.');
+  }catch(e){renderFeedback('shortResult','error',e.message);}
 }
 async function shortRun(){
-  const out=document.getElementById('shortResult'), btn=document.getElementById('shortRunBtn');
-  if(!S.shortSource){ out.textContent='Bitte zuerst eine Quelldatei wählen.'; return; }
+  const btn=document.getElementById('shortRunBtn');
+  if(!S.shortSource){ renderFeedback('shortResult','warning','Bitte zuerst eine Quelldatei wählen.'); return; }
   const caption=S.shortCaptions?document.getElementById('shortCaptions').value:'off';
   try{
-    btn.disabled=true; out.textContent='Short wird eingereiht…';
+    btn.disabled=true; renderFeedback('shortResult','loading','Short wird eingereiht…');
     document.getElementById('shortHandoff').innerHTML='';
     const r=JSON.parse(await api().smart_edit_short(
       S.shortSource,
@@ -3045,16 +3807,15 @@ async function shortRun(){
     btn.disabled=false;
     if(r.error) throw new Error(r.error);
     S.shortJobId=r.job_id;
-    out.textContent='Short-Job in der Warteschlange ('+r.job_id+'). Fortschritt im Job-Bereich.';
+    renderFeedback('shortResult','loading','Short-Job in der Warteschlange ('+r.job_id+'). Fortschritt im Job-Bereich.');
     openFlow('queue');
-  }catch(e){ btn.disabled=false; out.textContent='Fehler: '+e.message; }
+  }catch(e){ btn.disabled=false; renderFeedback('shortResult','error',e.message); }
 }
 function shortShowResult(paths){
-  const out=document.getElementById('shortResult');
   const main=(paths||[]).find(p=>/\.mp4$/i.test(p))||(paths||[])[0];
-  if(!main){ out.textContent='Short fertig, aber kein Ausgabepfad gemeldet.'; return; }
+  if(!main){ renderFeedback('shortResult','warning','Short fertig, aber kein Ausgabepfad gemeldet.'); return; }
   S.shortSource=main;
-  out.innerHTML='Fertig: '+escHtml(main)+' '+revealOutputButton(main);
+  renderFeedback('shortResult','success','Fertig: '+main,{html:revealOutputButton(main)});
   document.getElementById('shortHandoff').innerHTML=
     `<button class="btn98" data-path="${escAttr(main)}" data-target="convert" onclick="useRecentMedia(this)">Konvertieren</button>`+
     `<button class="btn98" data-path="${escAttr(main)}" data-target="burn" onclick="useRecentMedia(this)">Brennen</button>`+
@@ -3066,18 +3827,18 @@ async function shortHandoffDirector(path){
     if(assets.error) throw new Error(assets.error);
     S.directorAssets=assets;
     document.getElementById('directorAssets').textContent=assets.map(a=>a.title).join(' · ');
+    directorUpdateSteps();
     openFlow('ai');
-  }catch(e){document.getElementById('shortResult').textContent=e.message;}
+  }catch(e){renderFeedback('shortResult','error',e.message);}
 }
 async function shortMakeSrt(){
-  const out=document.getElementById('shortResult');
-  if(!S.shortSource){ out.textContent='Bitte zuerst eine Quelldatei wählen.'; return; }
+  if(!S.shortSource){ renderFeedback('shortResult','warning','Bitte zuerst eine Quelldatei wählen.'); return; }
   try{
     const r=JSON.parse(await api().generate_subtitles(S.shortSource,''));
     if(r.error) throw new Error(r.error);
-    out.textContent='Untertitel-Job (SRT) eingereiht – Fortschritt im Job-Bereich.';
+    renderFeedback('shortResult','loading','Untertitel-Job (SRT) eingereiht – Fortschritt im Job-Bereich.');
     openFlow('queue');
-  }catch(e){ out.textContent='SRT-Erstellung nicht möglich: '+e.message; }
+  }catch(e){ renderFeedback('shortResult','error','SRT-Erstellung nicht möglich: '+e.message); }
 }
 
 // ── Batch-Restaurierung ──────────────────────────────────────────────
@@ -3085,9 +3846,13 @@ function batchRenderList(){
   const box=document.getElementById('batchList');
   const items=S.batchFiles||[];
   if(!items.length){ box.innerHTML='<div style="padding:8px;color:#666;">Keine Dateien/Ordner gewählt.</div>'; return; }
-  box.innerHTML=items.map((it,i)=>`<div style="display:flex;gap:8px;padding:3px 6px;border-bottom:1px solid #eee;">
+  box.innerHTML=items.map((it,i)=>{
+    const status=it.status||'Wartet';
+    const cls=status==='In Bearbeitung'?'st-running':status==='Abgeschlossen'?'st-done':'st-pending';
+    return `<div style="display:flex;gap:8px;padding:3px 6px;border-bottom:1px solid #eee;">
     <span style="flex:1;overflow-wrap:anywhere;">${escHtml(it.label)}</span>
-    <span id="batchStatus-${i}" style="width:120px;color:#446;">${escHtml(it.status||'Wartet')}</span></div>`).join('');
+    <span id="batchStatus-${i}" class="status-chip ${cls}">${escHtml(status)}</span></div>`;
+  }).join('');
 }
 async function batchAddFiles(){
   try{
@@ -3096,7 +3861,7 @@ async function batchAddFiles(){
     S.batchFiles=S.batchFiles||[];
     (r.files||[]).forEach(f=>{ if(f.path && !S.batchFiles.find(x=>x.path===f.path)) S.batchFiles.push({path:f.path,label:f.title||f.name||f.path,status:'Wartet'}); });
     batchRenderList();
-  }catch(e){document.getElementById('batchResult').textContent=e.message;}
+  }catch(e){renderFeedback('batchResult','error',e.message);}
 }
 async function batchAddFolder(){
   try{
@@ -3105,12 +3870,13 @@ async function batchAddFolder(){
     S.batchFiles=S.batchFiles||[];
     if(r.folder && !S.batchFiles.find(x=>x.path===r.folder)) S.batchFiles.push({path:r.folder,label:r.folder+' (Ordner)',status:'Wartet'});
     batchRenderList();
-  }catch(e){document.getElementById('batchResult').textContent=e.message;}
+  }catch(e){renderFeedback('batchResult','error',e.message);}
 }
-function batchClear(){ S.batchFiles=[]; batchRenderList(); document.getElementById('batchResult').textContent=''; }
+function batchClear(){ S.batchFiles=[]; batchRenderList(); renderFeedback('batchResult','info',''); }
 async function batchRun(){
-  const res=document.getElementById('batchResult');
-  if(!(S.batchFiles||[]).length){ res.textContent='Bitte zuerst Dateien oder einen Ordner hinzufügen.'; return; }
+  if(!(S.batchFiles||[]).length){ renderFeedback('batchResult','warning','Bitte zuerst Dateien oder einen Ordner hinzufügen.'); return; }
+  const btn=document.getElementById('batchRunBtn');
+  if(btn) btn.disabled=true;
   try{
     const r=JSON.parse(await api().restoration_batch(
       JSON.stringify(S.batchFiles.map(f=>f.path)),
@@ -3119,17 +3885,18 @@ async function batchRun(){
       document.getElementById('batchSize').value));
     if(r.error) throw new Error(r.error);
     S.batchJobId=r.job_id;
-    (S.batchFiles||[]).forEach((f,i)=>{ f.status='In Bearbeitung'; const el=document.getElementById('batchStatus-'+i); if(el) el.textContent='In Bearbeitung'; });
-    res.textContent='Batch-Job eingereiht ('+r.job_id+'). Fehler einzelner Dateien stoppen die Liste nicht.';
+    (S.batchFiles||[]).forEach((f,i)=>{ f.status='In Bearbeitung'; const el=document.getElementById('batchStatus-'+i); if(el){ el.textContent='In Bearbeitung'; el.className='status-chip st-running'; } });
+    renderFeedback('batchResult','loading','Batch-Job eingereiht ('+r.job_id+'). Fehler einzelner Dateien stoppen die Liste nicht.');
     openFlow('queue');
-  }catch(e){ res.textContent='Fehler: '+e.message; }
+  }catch(e){ renderFeedback('batchResult','error',e.message); }
+  finally{ if(btn) btn.disabled=false; }
 }
 function batchOnDone(data){
-  (S.batchFiles||[]).forEach((f,i)=>{ const el=document.getElementById('batchStatus-'+i); if(el) el.textContent='Abgeschlossen'; f.status='Abgeschlossen'; });
+  (S.batchFiles||[]).forEach((f,i)=>{ f.status='Abgeschlossen'; const el=document.getElementById('batchStatus-'+i); if(el){ el.textContent='Abgeschlossen'; el.className='status-chip st-done'; } });
   const s=data.batch_summary, outs=finalOutputPaths(data);
-  const res=document.getElementById('batchResult');
   const summary=s?`${s.done} erfolgreich, ${s.errors} fehlgeschlagen von ${s.total}`:`${outs.length} Ausgabe(n)`;
-  res.innerHTML='Batch abgeschlossen: '+escHtml(summary)+'. '+(outs[0]?revealOutputButton(outs[0]):'');
+  const kind=s&&s.errors>0?(s.done>0?'warning':'error'):'success';
+  renderFeedback('batchResult',kind,'Batch abgeschlossen: '+summary+'.',{html:outs[0]?revealOutputButton(outs[0]):''});
   S.batchJobId=null;
 }
 
@@ -3176,7 +3943,7 @@ async function loadDirectorUI() {
     const options=JSON.parse(await a.get_encoder_options());
     if(options.length) document.getElementById('directorEncoder').innerHTML=options.map(o=>`<option value="${escAttr(o.id)}">${escHtml(o.name)}</option>`).join('');
     await directorRefreshProjects();
-  }catch(e){document.getElementById('directorResult').textContent=e.message;}
+  }catch(e){renderFeedback('directorResult','error',e.message);}
 }
 async function directorRefreshProjects(){
   const rows=JSON.parse(await api().director_projects());
@@ -3189,31 +3956,34 @@ async function directorSelect(recent){
     if(result.error) throw new Error(result.error);
     S.directorAssets=result;
     document.getElementById('directorAssets').textContent=result.map(a=>`${a.title} · ${a.kind} · ${a.duration.toFixed(1)}s · ${a.origin}`).join(' | ');
-  }catch(e){document.getElementById('directorResult').textContent=e.message;}
+    directorUpdateSteps();
+  }catch(e){renderFeedback('directorResult','error',e.message);}
 }
 async function directorMakePlan(){
-  const status=document.getElementById('directorResult');
+  const btn=document.getElementById('directorMakePlanBtn');
   try{
     if(!S.directorAssets?.length) throw new Error('Bitte Assets übernehmen.');
-    status.textContent='Produktionsplan wird erstellt…';
+    if(btn) btn.disabled=true;
+    renderFeedback('directorResult','loading','Produktionsplan wird erstellt…');
     const result=JSON.parse(await api().director_plan(document.getElementById('directorPrompt').value,
       JSON.stringify(S.directorAssets.map(a=>a.path)),Number(document.getElementById('directorDuration').value),
       document.getElementById('directorModel').value,document.getElementById('directorTranscribe').checked));
     if(result.error) throw new Error(result.error);
     document.getElementById('directorPlan').value=JSON.stringify(result,null,2);
     directorSummarizePlan();
-    status.textContent='Plan gespeichert. Zeitbereiche und Sprechertexte vor dem Rendern prüfen. ' + result.notes.join(' ');
+    renderFeedback('directorResult','success','Plan gespeichert. Zeitbereiche und Sprechertexte vor dem Rendern prüfen. ' + result.notes.join(' '));
     await directorRefreshProjects();
-  }catch(e){status.textContent=e.message;}
+  }catch(e){renderFeedback('directorResult','error',e.message);}
+  finally{ if(btn) btn.disabled=false; }
 }
 async function directorSavePlan(){
   const r=JSON.parse(await api().director_save(document.getElementById('directorPlan').value));
-  document.getElementById('directorResult').textContent=r.error||'Projekt gespeichert.';
+  renderFeedback('directorResult', r.error?'error':'success', r.error||'Projekt gespeichert.');
   if(!r.error) await directorRefreshProjects();
 }
 async function directorLoadPlan(){
   const r=JSON.parse(await api().director_load(document.getElementById('directorProjects').value));
-  if(r.error){document.getElementById('directorResult').textContent=r.error;return;}
+  if(r.error){renderFeedback('directorResult','error',r.error);return;}
   document.getElementById('directorPlan').value=JSON.stringify(r,null,2);
   directorSummarizePlan();
   document.getElementById('directorPrompt').value=r.prompt;
@@ -3221,7 +3991,7 @@ async function directorLoadPlan(){
   S.directorAssets=r.assets;
   document.getElementById('directorAssets').textContent=r.assets.map(a=>a.title).join(' | ');
   document.getElementById('directorAudio').value=r.original_audio;
-  document.getElementById('directorResult').textContent=r.notes.join(' ');
+  renderFeedback('directorResult','info',r.notes.join(' '));
   directorShowOutputs([...r.outputs,...r.generated_audio,...(r.subtitle_paths||[])]);
 }
 const timelineHistory={undo:[],redo:[],id:null};
@@ -3237,13 +4007,37 @@ function timelineDraw(p){
     <button class="btn98" onclick="timelineAction('split',${i},{time:Number(document.getElementById('timelineSplit${i}').value)})">Teilen</button>
     <button class="btn98" ${i===0?'disabled':''} onclick="timelineAction('move',${i},{target:${i-1}})">↑</button>
     <button class="btn98" ${i===p.timeline.length-1?'disabled':''} onclick="timelineAction('move',${i},{target:${i+1}})">↓</button>
-    <button class="btn98" onclick="timelineAction('delete',${i},{})">Löschen</button>
-    <select aria-label="Übergang" onchange="timelineAction('transition',${i},{value:this.value})">${[['cut','Cut'],['fade','Einblenden'],['dip_black','Schwarzblende']].map(([v,n])=>`<option value="${v}" ${c.transition===v?'selected':''}>${n}</option>`).join('')}</select>
+    <button class="btn98 danger" onclick="timelineAction('delete',${i},{})">Löschen</button>
+    <label>Übergang <input id="transitionDuration${i}" type="number" min="0.25" max="3" step="0.25" value="${c.transition?.duration||.5}" style="width:60px"> s</label>
+    <select aria-label="Übergang" onchange="timelineTransition(${i},this.value)">${[['cut','Cut'],['fade_from_black','Fade from Black'],['fade_to_black','Fade to Black'],['dip_black','Dip to Black'],['dissolve','Cross Dissolve'],['fade_black','Fade through Black'],['wipe_left','Wipe Left'],['wipe_right','Wipe Right'],['slide_left','Slide Left'],['slide_right','Slide Right'],['zoom','Zoom'],['blur','Blur Dissolve']].map(([v,n])=>`<option value="${v}" ${(typeof c.transition==='object'?c.transition.type:c.transition==='fade'?'fade_from_black':c.transition)===v?'selected':''}>${n}</option>`).join('')}</select>
+    <details name="editor-properties"><summary>Clip-Eigenschaften</summary>
+      <label>Tempo <select onchange="timelineAction('speed',${i},{value:Number(this.value)})">${[.25,.5,.75,1,1.25,1.5,2,4].map(v=>`<option ${v===(c.speed||1)?'selected':''}>${v}</option>`).join('')}</select>×</label>
+      <label>Look <select onchange="timelineAction('effects',${i},{preset:this.value})"><option value="" selected disabled>Look wählen</option>${[['clean','Clean'],['warm','Warm'],['cinema','Cinema'],['vintage','Vintage'],['black_white','Black & White'],['soft','Soft'],['punchy','Punchy']].map(([v,n])=>`<option value="${v}">${n}</option>`).join('')}</select></label>
+      <label>Crop <select onchange="timelineAction('transform',${i},{crop:this.value})">${['original','16:9','9:16','1:1','4:3'].map(v=>`<option ${(c.crop||'original')===v?'selected':''}>${v}</option>`).join('')}</select></label>
+      <label>Drehen <select onchange="timelineAction('transform',${i},{rotate:Number(this.value)})">${[0,90,180,270].map(v=>`<option ${(c.rotate||0)===v?'selected':''}>${v}</option>`).join('')}</select></label>
+      <label><input type="checkbox" ${c.flip_horizontal?'checked':''} onchange="timelineAction('transform',${i},{flip_horizontal:this.checked})">Horizontal spiegeln</label>
+      <label><input type="checkbox" ${c.flip_vertical?'checked':''} onchange="timelineAction('transform',${i},{flip_vertical:this.checked})">Vertikal spiegeln</label>
+      <label>Audio Fade In <input type="number" min="0" max="10" step=".1" value="${c.audio_fade_in||0}" onchange="timelineAction('clip_audio',${i},{audio_fade_in:Number(this.value)})"></label>
+      <label>Audio Fade Out <input type="number" min="0" max="10" step=".1" value="${c.audio_fade_out||0}" onchange="timelineAction('clip_audio',${i},{audio_fade_out:Number(this.value)})"></label>
+      <label>Pegel <input type="number" min="0" max="2" step=".1" value="${c.volume??1}" onchange="timelineAction('clip_audio',${i},{volume:Number(this.value)})"></label>
+      <label><input type="checkbox" ${c.muted?'checked':''} onchange="timelineAction('clip_audio',${i},{muted:this.checked})">Stumm</label>
+      <label><input type="checkbox" ${c.locked?'checked':''} onchange="timelineAction('lock',${i},{value:this.checked})">Gesperrt</label>
+      <label><input type="checkbox" ${c.visible===false?'':'checked'} onchange="timelineAction('visibility',${i},{value:this.checked})">Sichtbar</label>
+      <button class="btn98" onclick="timelineAction('freeze',${i},{time:Number(document.getElementById('timelineSplit${i}').value),duration:2})">2 s Standbild am Teilpunkt</button>
+    </details>
     <select aria-label="Zoom" onchange="timelineAction('zoom',${i},{value:this.value})">${[['off','Zoom aus'],['subtle','Dezent'],['dynamic','Dynamisch']].map(([v,n])=>`<option value="${v}" ${(c.zoom||'off')===v?'selected':''}>${n}</option>`).join('')}</select>
     <div class="wf-holder" id="wf${i}" aria-label="Wellenform Originalton"><span class="wf-load">Wellenform…</span></div>
   </div>`).join('')+'<p><b>Audio Track</b> · Originalton <span class="wf-legend wf-orig-key">▮</span></p><p><b>Voiceover Track</b> <span class="wf-legend wf-voice-key">▮</span> · '+escHtml(p.voiceover.map(v=>`${v.position}s: ${v.text}`).join(' | ')||'leer')+'</p><p><b>Music / SFX Track</b> · '+escHtml([...(p.music||[]),...(p.sound_effects||[])].map(t=>`${t.position}s: ${asset(t.asset_id)?.title||t.asset_id}`).join(' | ')||'leer')+'</p><p><b>Caption Track</b> · Transkript-/Sprechersegmente → SRT</p>';
   document.getElementById('timelineVolume').value=p.original_volume??1;
   document.getElementById('timelineVoice').checked=p.voiceover_enabled!==false;
+  container.innerHTML+='<p><b>Text / Overlay Track</b></p>'+[...(p.text_clips||[]).map((t,i)=>({t,i,op:'text_control',name:t.text})),...(p.overlays||[]).map((t,i)=>({t,i,op:'overlay_control',name:asset(t.asset_id)?.title||t.asset_id}))].map(({t,i,op,name})=>`<div>${escHtml(name)} · ${t.start}s–${t.start+t.duration}s
+    <details name="editor-properties"><summary>Eigenschaften</summary>
+    <label>Start <input type="number" min="0" step=".1" value="${t.start}" onchange="timelineAction('${op}',${i},{start:Number(this.value)})"></label>
+    <label>Dauer <input type="number" min=".1" step=".1" value="${t.duration}" onchange="timelineAction('${op}',${i},{duration:Number(this.value)})"></label>
+    <label>Deckkraft <input type="number" min="0" max="1" step=".1" value="${t.opacity??1}" onchange="timelineAction('${op}',${i},{opacity:Number(this.value)})"></label>
+    ${op==='overlay_control'?['x','y','width','height','volume'].map(key=>`<label>${key}<input type="number" step=".1" value="${t[key]}" onchange="timelineAction('${op}',${i},{${key}:Number(this.value)})"></label>`).join(''):`<label>Stil <select onchange="timelineAction('${op}',${i},{preset:this.value})"><option value="" selected disabled>Stil wählen</option>${['title','subtitle','lower_third','caption','credits'].map(v=>`<option>${v}</option>`).join('')}</select></label><label>Text <input value="${escAttr(t.text)}" onchange="timelineAction('${op}',${i},{text:this.value})"></label><label>Größe <input type="number" value="${t.font_size||40}" onchange="timelineAction('${op}',${i},{font_size:Number(this.value)})"></label><label>Position <select onchange="timelineAction('${op}',${i},{position:this.value})">${['top','center','bottom','bottom_left','bottom_right'].map(v=>`<option ${t.position===v?'selected':''}>${v}</option>`).join('')}</select></label>`}
+    <button class="btn98" onclick="timelineAction('${op}',${i},{remove:true})">Entfernen</button>
+    </details> <label><input type="checkbox" ${t.visible===false?'':'checked'} onchange="timelineAction('${op}',${i},{visible:this.checked})">Sichtbar</label><label><input type="checkbox" ${t.locked?'checked':''} onchange="timelineAction('${op}',${i},{locked:this.checked})">Sperren</label></div>`).join('');
   timelineUpdateButtons();
   timelineRenderWaveforms(p);
 }
@@ -3274,6 +4068,7 @@ async function timelineRenderWaveforms(p){
   await Promise.all(p.timeline.map(async(c,i)=>{
     const holder=document.getElementById('wf'+i); if(!holder) return;
     const a=asset(c.asset_id); if(!a){holder.innerHTML='';return;}
+    if(c.freeze_duration||c.muted){holder.innerHTML='<span class="wf-none">Stille</span>';return;}
     const wf=await timelineWaveformFor(a.path,a.id);
     const holderNow=document.getElementById('wf'+i); if(!holderNow) return;   // Redraw kann zwischenzeitlich passiert sein
     if(!wf.has_audio){ holderNow.innerHTML='<span class="wf-none">kein Audio</span>'; return; }
@@ -3297,16 +4092,45 @@ function timelineApply(next){
   field.value=JSON.stringify(next,null,2);directorSummarizePlan();
   timelineUpdateButtons();
 }
-async function timelineAction(operation,index,values){
+let timelineEditQueue=Promise.resolve();
+function timelineAction(operation,index,values){
+  timelineEditQueue=timelineEditQueue.then(async()=>{
   try{
     const next=JSON.parse(await api().director_edit(document.getElementById('directorPlan').value,operation,index,JSON.stringify(values)));
     if(next.error)throw new Error(next.error);timelineApply(next);
-  }catch(e){document.getElementById('directorResult').textContent=e.message;directorSummarizePlan();}
+  }catch(e){renderFeedback('directorResult','error',e.message);directorSummarizePlan();}
+  });return timelineEditQueue;
 }
 function timelineUndo(redo){
+  timelineEditQueue=timelineEditQueue.then(()=>{
   const from=redo?timelineHistory.redo:timelineHistory.undo,to=redo?timelineHistory.undo:timelineHistory.redo;
   if(!from.length)return;const field=document.getElementById('directorPlan');to.push(field.value);field.value=from.pop();directorSummarizePlan();
   timelineUpdateButtons();
+  });return timelineEditQueue;
+}
+async function timelineSuggestions(){
+  const box=document.getElementById('timelineSuggestions');
+  try{
+    const rows=JSON.parse(await api().director_suggestions(document.getElementById('directorPlan').value));if(rows.error)throw new Error(rows.error);
+    box.innerHTML=rows.map(r=>`<p><b>${escHtml(r.title)}</b> · ${escHtml(r.detail)} <button class="btn98" data-profile="${escAttr(r.profile)}" onclick="timelineAction('suggestion',0,{profile:this.dataset.profile})">Anwenden</button></p>`).join('')+'<button class="btn98" onclick="this.parentElement.replaceChildren()">Ignorieren</button>';
+  }catch(e){box.textContent=e.message;}
+}
+function timelineTransition(index,type){
+  const legacy={cut:'cut'};
+  timelineAction('transition',index,{value:legacy[type]||{type,duration:Number(document.getElementById('transitionDuration'+index).value),easing:'linear'}});
+}
+async function timelineAddText(){
+  try{
+    const caps=JSON.parse(await api().smart_edit_capabilities());
+    if(!caps.filters?.includes('drawtext'))throw new Error('Text nicht verfügbar: FFmpeg ohne drawtext/Font-Unterstützung. SRT bleibt verfügbar.');
+    const text=prompt('Titeltext');if(!text)return;
+    await timelineAction('add_text',0,{text,start:0,duration:2,position:'center',font_size:48});
+  }catch(e){renderFeedback('directorResult','error',e.message);}
+}
+async function timelineAddOverlay(){
+  const asset=(S.directorAssets||[]).find(a=>a.kind==='image'||a.kind==='video');
+  if(!asset){renderFeedback('directorResult','warning','Zuerst gewünschtes Bild/Video als Asset übernehmen.');return;}
+  await timelineAction('add_overlay',0,{asset,overlay:{asset_id:asset.id,start:0,duration:Math.min(2,asset.kind==='video'?asset.duration:2),x:940,y:20,width:320,height:180,opacity:1,volume:0}});
 }
 function timelineAudio(){timelineAction('audio',0,{original_volume:Number(document.getElementById('timelineVolume').value),voiceover_enabled:document.getElementById('timelineVoice').checked});}
 async function timelineSlideshow(){
@@ -3315,17 +4139,18 @@ async function timelineSlideshow(){
     const duration=Number(prompt('Sekunden pro Bild','4'));if(!Number.isFinite(duration)||duration<=0||duration*images.length>600)throw new Error('Ungültige Dauer.');
     const next={prompt:'Slideshow',title:'Slideshow',target_duration:duration*images.length,assets:images,timeline:images.map((a,i)=>({asset_id:a.id,start:0,end:duration,position:i*duration,transition:'fade',zoom:'subtle'}))};
     const r=JSON.parse(await api().director_save(JSON.stringify(next)));if(r.error)throw new Error(r.error);
-    document.getElementById('directorPlan').value=JSON.stringify(r,null,2);directorSummarizePlan();
-  }catch(e){document.getElementById('directorResult').textContent=e.message;}
+    const loaded=JSON.parse(await api().director_load(r.id));
+    if(loaded.error)throw new Error(loaded.error);document.getElementById('directorPlan').value=JSON.stringify(loaded,null,2);directorSummarizePlan();
+  }catch(e){renderFeedback('directorResult','error',e.message);}
 }
 async function timelineMusic(){
   try{
     const audio=(S.directorAssets||[]).find(a=>a.kind==='audio');if(!audio)throw new Error('Audiodatei auswählen und als Asset übernehmen.');
-    const p=JSON.parse(document.getElementById('directorPlan').value),duration=p.timeline.reduce((t,s)=>t+s.end-s.start,0);
+    const p=JSON.parse(document.getElementById('directorPlan').value),duration=p.timeline.reduce((t,s)=>Math.max(t,s.position+(s.freeze_duration||(s.end-s.start)/(s.speed||1))),0);
     if(!p.assets.some(a=>a.id===audio.id))p.assets.push(audio);
     p.music=[{asset_id:audio.id,position:0,start:0,duration:Math.min(duration,audio.duration),volume:0.2,fade_in:.5,fade_out:.5,duck:true}];
-    const r=JSON.parse(await api().director_save(JSON.stringify(p)));if(r.error)throw new Error(r.error);timelineApply(r);
-  }catch(e){document.getElementById('directorResult').textContent=e.message;}
+    const r=JSON.parse(await api().director_save(JSON.stringify(p)));if(r.error)throw new Error(r.error);const loaded=JSON.parse(await api().director_load(r.id));if(loaded.error)throw new Error(loaded.error);timelineApply(loaded);
+  }catch(e){renderFeedback('directorResult','error',e.message);}
 }
 
 function directorSummarizePlan(){
@@ -3343,9 +4168,11 @@ function directorSummarizePlan(){
     p.voiceover.forEach(v=>lines.push(`Voiceover ${time(v.position)}: ${v.text}`));
     if(p.atmosphere) lines.push('Musik-/Atmosphärenwunsch (nicht erzeugt): '+p.atmosphere);
     if(p.dubbing) p.dubbing.cues.forEach(c=>lines.push(`Dubbing ${time(c.start)}: ${c.source_text} → ${c.translated_text||'noch nicht übersetzt'}`));
+    box.className='';
     box.textContent=lines.join('\n');
     if(typeof timelineDraw==='function') timelineDraw(p);
-  }catch(e){box.textContent='Plan-JSON noch nicht gültig: '+e.message;}
+    directorUpdateSteps();
+  }catch(e){renderFeedback(box.id,'error','Plan-JSON noch nicht gültig: '+e.message);directorUpdateSteps();}
 }
 async function directorTranslatePlan(){
   try{
@@ -3353,8 +4180,8 @@ async function directorTranslatePlan(){
     if(r.error) throw new Error(r.error);
     document.getElementById('directorPlan').value=JSON.stringify(r,null,2);
     directorSummarizePlan();
-    document.getElementById('directorResult').textContent='Übersetzung prüfen; erst danach rendern.';
-  }catch(e){document.getElementById('directorResult').textContent=e.message;}
+    renderFeedback('directorResult','success','Übersetzung prüfen; erst danach rendern.');
+  }catch(e){renderFeedback('directorResult','error',e.message);}
 }
 function directorEditAudio(changeVoice=false){
   const field=document.getElementById('directorPlan');
@@ -3366,7 +4193,37 @@ function directorEditAudio(changeVoice=false){
     if(changeVoice) plan.voiceover.forEach(cue=>{cue.voice=voice;});
     field.value=JSON.stringify(plan,null,2);
     directorSummarizePlan();
-  }catch(e){document.getElementById('directorResult').textContent='Plan-JSON zuerst korrigieren: '+e.message;}
+  }catch(e){renderFeedback('directorResult','error','Plan-JSON zuerst korrigieren: '+e.message);}
+}
+// Schrittstatus nur aus tatsaechlich vorhandenem UI-Zustand ableiten (Assets/
+// Plan-Gueltigkeit/Outputs) - kein neuer State, keine Vermutung ueber "Bearbeiten"
+// (kein zuverlaessiges Signal dafuer): sie gilt als erreicht, sobald gerendert wurde.
+function directorUpdateSteps(){
+  const bar=document.getElementById('directorStepStatus');
+  if(!bar) return;
+  const planField=document.getElementById('directorPlan');
+  const planRaw=planField?planField.value:'';
+  let planState='empty';
+  if(planRaw && planRaw.trim()){
+    try{ JSON.parse(planRaw); planState='valid'; }catch(e){ planState='invalid'; }
+  }
+  const outputsField=document.getElementById('directorOutputs');
+  const hasOutputs=!!(outputsField && outputsField.innerHTML && outputsField.innerHTML.trim());
+  const steps=[
+    {label:'Medien', done:!!(S.directorAssets&&S.directorAssets.length)},
+    {label:'Aufgabe', done:planState!=='empty'},
+    {label:'KI-Plan', done:planState==='valid', error:planState==='invalid'},
+    {label:'Bearbeiten', done:hasOutputs},
+    {label:'Rendern', done:hasOutputs}
+  ];
+  let currentAssigned=false;
+  bar.innerHTML=steps.map(s=>{
+    let icon='○', cls='is-upcoming';
+    if(s.error){ icon='✗'; cls='is-error'; currentAssigned=true; }
+    else if(s.done){ icon='✓'; cls='is-done'; }
+    else if(!currentAssigned){ icon='●'; cls='is-current'; currentAssigned=true; }
+    return `<span class="director-step-chip ${cls}">${icon} ${escHtml(s.label)}</span>`;
+  }).join('');
 }
 function directorShowOutputs(paths){
   document.getElementById('directorOutputs').innerHTML=paths.map(path=>`
@@ -3374,11 +4231,16 @@ function directorShowOutputs(paths){
       ${!/\.srt$/i.test(path)?`<button class="btn98" data-path="${escAttr(path)}" data-target="convert" onclick="useRecentMedia(this)">Konvertieren</button>`:''}
       ${/\.mp4$/i.test(path)?`<button class="btn98" data-path="${escAttr(path)}" data-target="burn" onclick="useRecentMedia(this)">Brennen</button>`:''}
     </div>`).join('');
+  directorUpdateSteps();
 }
 async function directorRenderPlan(){
-  const r=JSON.parse(await api().director_render(document.getElementById('directorPlan').value,document.getElementById('directorEncoder').value));
-  document.getElementById('directorResult').textContent=r.error||'Rendering in der Warteschlange.';
-  if(!r.error) showTab('queue',document.getElementById('tbtn-queue'));
+  const btn=document.getElementById('directorRenderPlanBtn');
+  if(btn) btn.disabled=true;
+  try{
+    const r=JSON.parse(await api().director_render(document.getElementById('directorPlan').value,document.getElementById('directorEncoder').value));
+    renderFeedback('directorResult', r.error?'error':'loading', r.error||'Rendering in der Warteschlange.');
+    if(!r.error) showTab('queue',document.getElementById('tbtn-queue'));
+  } finally { if(btn) btn.disabled=false; }
 }
 
 async function refreshRecentMedia() {
@@ -3570,7 +4432,7 @@ function renderJobs() {
   }
   const icons = { pending:'⏳', running:'🔄', done:'✅', failed:'❌', cancelled:'⛔' };
   l.innerHTML = S.jobs.map(j => `
-    <div class="jobrow" style="${j.state==='running'?'background:#e8f4ff;':''}${j.awaitingCopyMedium||j.outputPaths?'flex-wrap:wrap;':''}">
+    <div class="jobrow st-${j.state||'pending'}" style="${j.awaitingCopyMedium||j.outputPaths?'flex-wrap:wrap;':''}">
       <span class="jstate">${icons[j.state]||'⏳'}</span>
       <span class="jname" title="${escAttr(j.name||'')}">${escHtml(j.name||j.id)}</span>
       ${j.state === 'done' && j.outputPaths?.length ? `<div style="flex-basis:100%;overflow-wrap:anywhere;user-select:text;">${j.outputPaths.map(p => `<div><b>${/\.(mp3|m4a|wav|flac|ogg|opus|aac)$/i.test(p) ? "Audio" : "Video"}:</b> ${escHtml(p)} ${revealOutputButton(p)}</div>`).join("")}</div>` : ""}
@@ -3760,6 +4622,7 @@ const FLOW_TITLES = {
   edit:['Bearbeiten','Schneiden und Menue gestalten'],
   ai:['AI Tools','KI-gestuetzte Funktionen'],
   library:['Bibliothek','Deine konvertierten Dateien'],
+  player:['Vorschau','Titel, Kapitel, Audio und Untertitel wiedergeben'],
   queue:['Job Queue','Laufende und fertige Aufgaben'],
   settings:['Einstellungen','Tools und Optionen']
 };
@@ -3773,9 +4636,13 @@ function openFlow(name){
   // Die drei Disc-Bereiche brauchen Laufwerke - und nur sie loesen die
   // Erkennung aus. Kein Timer, keine Hintergrundsuche.
   if(name==='burn' || name==='rip' || name==='disccopy'){
-    setTimeout(() => loadBurners(false), 50);
+    setTimeout(async () => {
+      await loadBurners(false);
+      if(name==='burn'){ await loadTargetMediaList(); await refreshBurnerCapabilities(); }
+    }, 50);
   }
   if(name==='download'){ setTimeout(()=>document.getElementById('urlinp')?.focus(), 50); }
+  if(name==='player'){ startPlayerPolling(); } else { stopPlayerPolling(); }
   const t = FLOW_TITLES[name] || [name,''];
   document.getElementById('flowTitle').textContent = t[0];
   document.getElementById('flowSub').textContent = t[1];
@@ -3783,6 +4650,7 @@ function openFlow(name){
 function goHome(){
   document.body.classList.remove('flow-mode');
   document.body.classList.add('home-mode');
+  stopPlayerPolling();
 }
 
 // ── Maus-Zurueck/-Vorwaerts ───────────────────────────────────────────────

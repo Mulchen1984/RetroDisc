@@ -70,7 +70,12 @@ def test_disc_ui_uses_real_backend_contracts():
     html = UI_FILE.read_text(encoding="utf-8")
     assert "a.create_dvd(paths,t,standard,aspect,true,device,speed,verify,eject)" in html
     assert "a.rip_disc(device, fmt)" in html
-    assert "a.get_disc_info(device)" in html
+    # Seit der sichtbaren DVD-/Blu-ray-Erkennung im Rippen-Tab nutzt die UI
+    # das reichere DiscContent-Modell (disc_type/label/capacity_bytes) statt
+    # des älteren, flachen get_disc_info.
+    assert "a.get_disc_content(device)" in html
+    assert "a.list_target_media()" in html
+    assert "a.inspect_drive(device)" in html
     assert "a.convert_file('D:" not in html
     assert 'id="burnerSelect"' in html
     assert 'id="ripDriveSelect"' in html

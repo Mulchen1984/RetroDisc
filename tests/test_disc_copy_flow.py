@@ -36,14 +36,45 @@ def home_cards() -> list[tuple[str, str]]:
     )
 
 
-def test_the_start_screen_offers_five_distinct_actions():
+def test_the_start_screen_offers_four_distinct_disc_actions():
+    """Reihenfolge folgt dem tatsächlichen Disc-Workflow: Rippen ist der
+    Einstiegspunkt (Disc -> Abbild), Disc kopieren ein eigener Schnellweg
+    direkt daneben, danach die Aktionen auf dem Ergebnis (Konvertieren,
+    Brennen). "Medien / ISO" wurde bewusst wieder entfernt: die Kachel
+    öffnete lediglich den bestehenden Bibliothek-Flow und suggerierte damit
+    einen eigenen ISO-/Medien-Workflow, den es nicht gibt. Bibliothek und
+    Download sind Zusatzfunktionen und stehen bewusst NICHT mehr
+    gleichwertig neben den vier Disc-Kernaktionen - siehe
+    test_the_start_screen_moves_download_to_secondary_tools und
+    test_the_start_screen_keeps_library_only_as_a_secondary_tool."""
     assert home_cards() == [
+        ("rip", "Rippen"),
         ("disccopy", "Disc kopieren"),
         ("convert", "Konvertieren"),
         ("burn", "Brennen"),
-        ("rip", "Rippen"),
-        ("download", "Download"),
     ]
+
+
+def test_the_start_screen_keeps_library_only_as_a_secondary_tool():
+    """Bibliothek bleibt erreichbar, aber nur sekundär unter den Werkzeugen -
+    nicht mehr als eigene Hauptkachel (vormals "Medien / ISO")."""
+    assert "openFlow('library')" not in re.search(
+        r'<div class="cc-row">.*?</div>\s*</div>\s*<div class="cc-sub">', UI, re.DOTALL
+    ).group(0), "Bibliothek taucht noch als Hauptkachel auf"
+    assert re.search(r'class="sec-btn" onclick="openFlow\(\'library\'\)"', UI), (
+        "Bibliothek ist über die Werkzeuge nicht erreichbar"
+    )
+
+
+def test_the_start_screen_moves_download_to_secondary_tools():
+    """Download ist eine Zusatzfunktion, keine gleichwertige Hauptaktion -
+    bleibt erreichbar, aber unter den Werkzeugen, nicht als Hauptkachel."""
+    assert "openFlow('download')" not in re.search(
+        r'<div class="cc-row">.*?</div>\s*</div>\s*<div class="cc-sub">', UI, re.DOTALL
+    ).group(0), "Download taucht noch als Hauptkachel auf"
+    assert re.search(r'class="sec-btn" onclick="openFlow\(\'download\'\)"', UI), (
+        "Download ist über die Werkzeuge nicht erreichbar"
+    )
 
 
 def test_the_start_screen_text_matches_the_number_of_actions():
@@ -274,9 +305,11 @@ def copy_runtime(disc_bridge, monkeypatch):
         output.write_bytes(b"copied filesystem")
         return output
 
-    async def burn(image, device, job=None):
+    async def burn(image, device, job=None, **kwargs):
         assert image.read_bytes() == b"copied filesystem"
-        calls.append(("burn", device, image))
+        calls.append(("burn", device, image, kwargs.get("book_type")))
+        from src.services.burn_outcome import BurnOutcome
+        return BurnOutcome(burn_success=True)
 
     async def probe(device):
         calls.append(("probe", device))

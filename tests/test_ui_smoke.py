@@ -89,7 +89,7 @@ def test_short_panel_initialises_and_gates_captions_by_capability():
 
 
 def test_short_result_and_batch_and_archive_render_without_errors():
-    code = HARNESS + function("shortShowResult") + function("batchRenderList") + \
+    code = HARNESS + UI[UI.index("const FEEDBACK_META ="):UI.index("function animBurnDone")] + function("shortShowResult") + function("batchRenderList") + \
         function("batchOnDone") + function("archiveShowResult") + """
 (async()=>{
   shortShowResult(['/out/Short_ab.mp4']);
@@ -123,16 +123,16 @@ store['directorPlan']={id:'directorPlan',value:'{"a":1}'};
 store['timelineUndoBtn']={id:'timelineUndoBtn',disabled:true};
 store['timelineRedoBtn']={id:'timelineRedoBtn',disabled:true};
 function directorSummarizePlan(){}
-""" + function("timelineUpdateButtons") + function("timelineApply") + function("timelineUndo") + """
+""" + re.search(r"^let timelineEditQueue=.*$", UI, re.M).group(0) + function("timelineUpdateButtons") + function("timelineApply") + function("timelineUndo") + """
 (async()=>{
   const snap=()=>({undo:node('timelineUndoBtn').disabled, redo:node('timelineRedoBtn').disabled});
   timelineUpdateButtons();
   const initial=snap();                 // beide leer -> beide disabled
   timelineApply({b:2});
   const afterEdit=snap();               // undo verfügbar, redo nicht
-  timelineUndo(false);
+  await timelineUndo(false);
   const afterUndo=snap();               // undo leer -> disabled, redo verfügbar
-  timelineUndo(true);
+  await timelineUndo(true);
   const afterRedo=snap();               // wieder undo verfügbar
   console.log(JSON.stringify({initial,afterEdit,afterUndo,afterRedo}));
 })().catch(e=>{console.error('JSERR:', e && e.stack); process.exit(1);});
@@ -165,3 +165,29 @@ console.log(JSON.stringify({
     assert r["splitLens"] == [50, 50]              # Split teilt die Wellenform korrekt
     assert r["noneLen"] == 0 and r["svgEmptyForNone"]   # kein Audio -> leer
     assert r["svgHasRects"]                         # echte Balken gerendert
+
+
+def test_feedback_states_escape_text_and_preserve_long_details():
+    helper = UI[UI.index("const FEEDBACK_META ="):UI.index("function animBurnDone")]
+    escape = re.search(r"^function escHtml\(s\).*?$", UI, re.M).group(0)
+    result = run_js(HARNESS + escape + helper + r"""
+const states = ['info','success','warning','error','loading'];
+const rows = states.map(kind => {
+  renderFeedback('result',kind,'<img src=x onerror=alert(1)> Grüße 日本');
+  return {kind, classes:node('result').className, html:node('result').innerHTML};
+});
+const text = 'Sehr lange Fehlermeldung: ' + 'ä'.repeat(200) + '\nWeitere Details <script>';
+renderFeedback('result','error',text);
+const details = node('result').innerHTML;
+renderFeedback('result','info','');
+console.log(JSON.stringify({rows,details,cleared:node('result').innerHTML}));
+""")
+    for row in result['rows']:
+        assert row['classes'] == 'feedback feedback-' + row['kind']
+        assert '<img' not in row['html']
+        assert '&lt;img' in row['html']
+        assert 'Grüße 日本' in row['html']
+    assert '<details' in result['details']
+    assert 'ä' * 200 in result['details']
+    assert '&lt;script&gt;' in result['details']
+    assert result['cleared'] == ''

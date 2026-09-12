@@ -48,6 +48,7 @@ class DVDProject:
     verify_after_burn: bool = True
     eject_after_burn: bool = True
     only_iso: bool = False          # Kein Brennen, nur ISO erstellen
+    book_type: str = "automatic"     # "automatic" (AUTO) / "native" / "dvd_rom", siehe BookType
 
 
 class DVDWorkflow:
@@ -180,15 +181,23 @@ class DVDWorkflow:
 
             # ── Schritt 5: Brennen (optional) ──────────────────────
             if project.burn_to_disc and not project.only_iso:
+                from src.services.booktype import _as_book_type
+                from src.services.verify import FAIL as VERIFY_FAIL
+
                 self._step(job, 5, 85, f"Wird auf Disc geschrieben ({project.disc_device})...")
-                await self.disc.burn_iso(
+                outcome = await self.disc.burn_iso(
                     iso_path=iso_path,
                     device=project.disc_device,
                     speed=project.burn_speed,
                     verify=project.verify_after_burn,
                     disc_type=DiscType.DVD,
                     job=job,
+                    book_type=_as_book_type(project.book_type),
                 )
+                if job is not None:
+                    job.params["burn_outcome"] = outcome.to_dict()
+                if outcome.verify.status == VERIFY_FAIL:
+                    raise DiscError(f"Verifikation fehlgeschlagen: {outcome.verify.message}")
                 if project.eject_after_burn:
                     await self._eject(project.disc_device)
             else:

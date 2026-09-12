@@ -121,10 +121,45 @@ Zertifikatspeicher. Die Richtlinie wird nie umgangen oder verändert.
 Diese Vorgaben stammen aus der laufenden Produktabnahme und gelten bis zu einer
 expliziten Änderung durch den Nutzer:
 
-- Die Startseite hat fünf Primäraktionen: **Disc kopieren, Konvertieren,
-  Brennen, Rippen, Download**. Alle fünf müssen in der vorgesehenen
-  Fenstergröße vollständig sichtbar sein; kein Abschneiden oder horizontaler
-  Scroll-Zwang.
+- Die Startseite hat vier Primäraktionen in dieser Reihenfolge (Stand
+  2026-09-11, korrigiert vom Nutzer): **Rippen, Disc kopieren, Konvertieren,
+  Brennen**. Rippen ist bewusst der erste, visuelle Einstiegspunkt; Brennen
+  steht bewusst zuletzt, da es bereits vorhandenen Inhalt voraussetzt. Die
+  Bibliothek ist **kein** eigener Medien-/ISO-Workflow und darf nicht als
+  Hauptaktion dargestellt werden - sie bleibt ausschließlich sekundär unter
+  "Weitere Werkzeuge". Download ist ebenfalls keine gleichwertige Hauptaktion
+  und liegt unter den Werkzeugen (sekundäre Aktionen). Alle vier
+  Hauptaktionen müssen in der vorgesehenen Fenstergröße vollständig sichtbar
+  sein; kein Abschneiden oder horizontaler Scroll-Zwang.
+- Blu-ray ist in der UI sichtbar, nicht nur im Backend: Rippen zeigt nach
+  Laufwerksauswahl/-analyse erkannten Medientyp (DVD/Blu-ray), Label und
+  Größe. Brennen zeigt eine echte Zielmedienauswahl (DVD-5, DVD-9, BD-25,
+  BD-50, BDXL-100, BDXL-128, Custom) und Laufwerks-Fähigkeitsbadges
+  (DVD/Blu-ray/BDXL lesen/schreiben), abgeleitet aus dem bestehenden
+  `inspect_drive`/`DriveCapabilities`-Backend.
+- BDMV-Authoring ist seit 2026-09-11 real implementiert (`src/services/
+  bluray_authoring.py` + `bluray_workflow.py`, Bridge-Methoden `create_bluray`
+  und `burn_existing_iso`), nicht nur simuliert: FFmpeg erzeugt BD-konforme
+  M2TS-Clips (BDAV-192-Byte-Pakete via `-mpegts_m2ts_mode`, feste PIDs
+  0x1011/0x1100), `bluray_authoring.py` schreibt PLAYLIST/CLIPINF/index.bdmv/
+  MovieObject.bdmv drumherum. MPLS ist byte-exakt zum bereits produktiven
+  Leser (`bluray_mpls.py`) und wird per echtem Round-Trip getestet; CLPI/
+  index.bdmv/MovieObject.bdmv sind strukturell konsistent, aber ohne
+  unabhängigen Referenz-Decoder nicht bit-für-bit spec-verifiziert (das
+  MovieObject trägt bewusst keine HDMV-Navigationsbefehle - siehe Moduldoku
+  in `bluray_authoring.py` für die genaue Abgrenzung). `DiscTools.create_iso`
+  ist für Blu-ray gehärtet: Flag-Fallback (`-allow-limited-size` ->
+  `-udf -iso-level 3`, real gegen einen dvdrtools-mkisofs-Fork getestet, der
+  das erste Flag nicht kennt) plus eine Größenprüfung nach der Erstellung,
+  die einen stillschweigend verworfenen >4-GiB-Clip als Fehler statt als
+  falschen Erfolg meldet. Zielmedien-Verfügbarkeit (`list_target_media`s
+  `authoring_available`, `check_target_medium`, `target_medium_capability_issue`
+  in `src/config/target_media.py`) prüft echte Backend- UND Laufwerks-
+  fähigkeit, bevor die UI ein Ziel aktiviert oder `create_bluray`/
+  `burn_existing_iso` überhaupt einreiht (Verteidigung in der Tiefe, nicht
+  nur UI-Anzeige); fehlende Fähigkeiten (kein Blu-ray-Lesen/-Schreiben, kein
+  BDXL) deaktivieren die entsprechenden Optionen weiterhin - keine
+  Unterstützung vortäuschen.
 - Die visuelle Sprache darf klar an klassische CloneCD-artige Disc-Utilities
   erinnern, aber es werden **keine originalen CloneCD-Assets oder GIFs 1:1
   übernommen**. Eigene SVGs/Animationen zeichnen.
@@ -157,3 +192,27 @@ expliziten Änderung durch den Nutzer:
   werden.
 - Physische Disc-Brenn-/Kopierpfade gelten ohne echte Laufwerke und Medien nicht
   als hardwareverifiziert. Das in Status/Journals klar kennzeichnen.
+- Seit 2026-09-12 gibt es einen echten Vorschau-/Preview-Player ("Vorschau",
+  eigener Tab + "Vorschau"-Button je Titel im Rippen-Bereich): `src/services/
+  player.py` steuert eine echte `mpv`-Instanz per JSON-IPC (`--input-ipc-
+  server`, derselbe Subprozess-Pfad wie FFmpeg/dvdauthor/growisofs) - kein
+  HTML5-`<video>`-Tag, keine eigene Decoder-Implementierung. Engine-Wahl
+  (mpv vs. VLC/libVLC vs. HTML5) inklusive der Begründung steht im
+  Moduldocstring von `player.py`; `python-mpv`s ctypes-Bindings stürzen in
+  dieser Entwicklungsumgebung real reproduzierbar ab und wurden deshalb
+  verworfen. `src/services/player_source.py` löst einen DiscContent-Titel-
+  Index zu einer abspielbaren Datei-/Segmentliste auf (wiederverwendet
+  `dvd_ifo.parse_tt_srpt`/`bluray_mpls.parse_mpls`, keine parallele Disc-
+  Analyse) - mehrsegmentige Titel (mehrere VOB-Dateien, mehrere MPLS-Clips)
+  laufen über mpvs `edl://`-Protokoll als EINE zusammenhängende Zeitleiste.
+  `src/services/iso_mount.py` mountet DVD-/Blu-ray-ISOs temporär (macOS
+  `hdiutil`, Windows `Mount-DiskImage` - Windows-Zweig in dieser Umgebung
+  nicht laufzeitgeprüft) und hängt sie garantiert wieder aus. DVD-/Blu-ray-
+  Menüs (HDMV/BD-J) sind ausdrücklich NICHT Teil dieses Blocks - der Player
+  spielt logische Titel/Kapitel/Streams, keine Menü-Navigation. CSS/AACS/
+  BD+ werden nicht unterstützt und nicht vorgetäuscht (siehe
+  `src/services/drm_capabilities.py`); kopiergeschützte Medien benötigen
+  weiterhin ein externes Werkzeug (z. B. MakeMKV, dieselbe Haltung wie
+  `ripper.py`). Für Windows-Produktionsbuilds muss `mpv` noch wie FFmpeg/
+  dvdauthor über `prepare_vendor.py` vendort werden - bisher nur über
+  Homebrew auf dem macOS-Entwicklungsrechner installiert und getestet.

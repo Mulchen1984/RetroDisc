@@ -72,6 +72,10 @@ def _media(tmp_path: Path, name: str) -> Path:
     return path
 
 
+def _existing_iso(tmp_path: Path) -> Path:
+    return _media(tmp_path, "existing.iso")
+
+
 def submissions(bridge, tmp_path) -> list[tuple[str, JobType, object]]:
     """(label, expected job type, call) for every queueing bridge method."""
     first = _media(tmp_path, "clip.mp4")
@@ -84,6 +88,10 @@ def submissions(bridge, tmp_path) -> list[tuple[str, JobType, object]]:
          lambda: bridge.download_url("https://www.youtube.com/watch?v=9bZkp7q19f0")),
         ("create_dvd", JobType.BURN_DVD,
          lambda: bridge.create_dvd(pair, "Testtitel")),
+        ("create_bluray", JobType.BURN_BLURAY,
+         lambda: bridge.create_bluray(pair, "Testtitel", "bd25")),
+        ("burn_existing_iso", JobType.BURN_BLURAY,
+         lambda: bridge.burn_existing_iso(str(_existing_iso(tmp_path)), "E:")),
         ("copy_disc", JobType.RIP_DVD,
          lambda: bridge.copy_disc("E:", "F:")),
         ("rip_disc", JobType.RIP_DVD,

@@ -184,8 +184,12 @@ assert.equal(JSON.parse(nodes.directorPlan.value).original_audio,'keep');
 def test_director_plan_summary_shows_sources_and_fallback_as_text(tmp_path):
     html=_html()
     source=html[html.index('function directorSummarizePlan('):html.index('async function directorTranslatePlan(')]
+    steps_source=html[html.index('function directorUpdateSteps('):html.index('function directorShowOutputs(')]
     script=tmp_path/'plan-summary.js'
-    script.write_text(source+r'''
+    script.write_text(r'''
+function escHtml(s){return String(s);}
+const S={directorAssets:[]};
+'''+steps_source+source+r'''
 const assert=require('node:assert/strict');
 const summary={};const plan={title:'<img src=x>',target_duration:8,planner:'metadata',story:['Storyline'],notes:['LLM Fallback'],assets:[{id:'a',title:'Quelle',path:'/Video/日本.mp4'}],timeline:[{asset_id:'a',start:12.4,end:18.8,position:0}],voiceover:[{position:0,text:'Hallo'}]};
 const document={getElementById:id=>id==='directorPlanSummary'?summary:{value:JSON.stringify(plan)}};

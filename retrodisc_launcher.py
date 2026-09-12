@@ -274,6 +274,9 @@ class RetroDiscBridge:
         from src.core.disc import DiscTools
         from src.services.dvd_workflow import DVDWorkflow
         from src.services.library import MediaLibrary
+        from src.services.disc_analyzer import DiscAnalyzer
+        from src.services.capacity_planner import CapacityPlanner
+        from src.services.transcode.probe import MediaProbeService
 
         self.ffmpeg = FFmpeg(
             self.settings.tools.ffmpeg,
@@ -309,11 +312,44 @@ class RetroDiscBridge:
             disc_tools=self.disc,
             temp_dir=self.settings.directories.temp_dir,
         )
+        from src.services.bluray_workflow import BlurayWorkflow
+        self.bluray_workflow = BlurayWorkflow(
+            ffmpeg=self.ffmpeg,
+            disc_tools=self.disc,
+            temp_dir=self.settings.directories.temp_dir,
+        )
+        self.disc_analyzer = DiscAnalyzer(
+            disc_tools=self.disc,
+            probe=MediaProbeService(self.settings.tools.ffprobe),
+        )
+        self.capacity_planner = CapacityPlanner()
+        from src.services.player import PlayerService
+        self.player = PlayerService()
+        self._player_mount = None   # aktiver ISO-Mount (falls die Quelle ein ISO war)
         self.library = MediaLibrary(ffmpeg=self.ffmpeg)
         self.library.open()
         self._watch = None
+        # Nicht mehr hier blockierend erzeugen: die Konstruktion (inkl. SQLite-Connect)
+        # muss auf self._loop laufen, damit spätere Zugriffe (submit/rows/...), die
+        # über self._async() ebenfalls auf self._loop laufen, dieselbe Connection aus
+        # demselben Thread benutzen. Bis zum ersten echten Bedarf lazy verzögert, statt
+        # __init__ synchron auf den Hintergrund-Thread warten zu lassen (der in manchen
+        # Testfixtures bewusst nie gestartet wird).
+        self.conversion_queue = None
 
         log.info("Bridge initialisiert")
+
+    async def _ensure_conversion_queue(self):
+        if self.conversion_queue is None:
+            from src.services.pipeline.conversion_queue import ConversionQueue
+            self.conversion_queue = ConversionQueue(self.library.db_path.parent / 'pipeline.db', self.converter,
+                                   self._emit, self._on_complete,
+                                   self.settings.conversion.max_concurrent_jobs)
+        return self.conversion_queue
+
+    async def _submit_conversion_job(self, job):
+        queue = await self._ensure_conversion_queue()
+        return await queue.submit(job)
 
     def _async(self, coro):
         return asyncio.run_coroutine_threadsafe(coro, self._loop)
@@ -476,7 +512,7 @@ class RetroDiscBridge:
             output_path=Path(output_path) if output_path else None,
             preset=preset,
             params={"display_name": f"{source.name} -> {preset.display_name}",
-                    "overwrite": bool(overwrite), "encoder": encoder},
+                    "overwrite": bool(overwrite), "encoder": encoder, "preset_name": preset_name},
         )
         async def _handler(j):
             result = await self.converter.convert_file(
@@ -597,6 +633,8 @@ class RetroDiscBridge:
                          "progress": j.progress,
                          "output": str(j.output_path) if j.output_path else None,
                          **({"output_paths": j.params["output_paths"]} if "output_paths" in j.params else {})})
+        if getattr(self, 'conversion_queue', None):
+            jobs.extend(self._async(self.conversion_queue.rows()).result(timeout=5))
         return json.dumps(jobs)
 
     # ── Settings ──────────────────────────────────────────────────────
@@ -855,6 +893,41 @@ class RetroDiscBridge:
         except Exception as exc:
             return json.dumps({"error": str(exc), "device": device})
 
+    def list_target_media(self) -> str:
+        """Zentrale Zielmedien-Registry für die UI (Brennen: Zielmedium-Auswahl).
+
+        Fast eine reine Lesefunktion - gibt die bereits vorhandene
+        ``TARGET_MEDIA``-Registry (``src/config/target_media.py``,
+        P0-Kapazitätsplanung) als JSON weiter. "Custom" ist bewusst nicht
+        enthalten (keine feste Kapazität) und wird von der UI separat
+        angeboten.
+
+        ``authoring_available`` meldet, ob RetroDisc die *Struktur* eines
+        Ziels heute tatsächlich bauen kann - unabhängig von Laufwerk/Medium
+        (das prüft ``check_target_medium`` separat). Für DVD_VIDEO war das
+        schon immer der Fall (dvdauthor); für BDMV ist es das erst seit dem
+        neuen ``src/services/bluray_authoring.py``-Pfad, und hängt nur an
+        FFmpeg (kein zusätzliches externes Werkzeug nötig) - deshalb bleibt
+        diese Methode ohne ``self`` aufrufbar (siehe
+        ``test_list_target_media_bridge_method_matches_the_registry``).
+        """
+        import shutil
+        from src.config.target_media import AuthoringFormat, TARGET_MEDIA
+        ffmpeg_available = shutil.which("ffmpeg") is not None
+        return json.dumps([
+            {
+                "id": m.id,
+                "display_name": m.display_name,
+                "authoring_format": m.authoring_format.value,
+                "nominal_capacity_bytes": m.nominal_capacity_bytes,
+                "usable_capacity_bytes": m.usable_capacity_bytes,
+                "is_physical_bluray": m.is_physical_bluray,
+                "requires_bdxl": m.requires_bdxl,
+                "authoring_available": True if m.authoring_format is AuthoringFormat.DVD_VIDEO else ffmpeg_available,
+            }
+            for m in TARGET_MEDIA.values()
+        ])
+
     def inspect_drive(self, device: str) -> str:
         """Report optical-drive capabilities (detection only)."""
         if not device:
@@ -865,9 +938,75 @@ class RetroDiscBridge:
         except Exception as exc:
             return json.dumps({"error": str(exc), "device": device})
 
+    def get_disc_content(self, device: str) -> str:
+        """Vollständiges DiscContent-Modell (Titel/Kapitel/Spuren/Main-Movie).
+
+        Reine Analyse, keine Auswahl-UI: liefert die Grundlage, auf der eine
+        spätere Titel-/Kapitel-/Audio-/Untertitelauswahl aufbauen kann.
+        """
+        from src.models.disc_content import DiscContentError
+        if not device:
+            return json.dumps({"error": "Kein optisches Laufwerk ausgewählt."})
+        try:
+            content = self._async(self.disc_analyzer.analyze(device)).result(timeout=60)
+            return json.dumps(content.to_dict())
+        except DiscContentError as exc:
+            return json.dumps({"error": str(exc), "device": device})
+        except Exception as exc:
+            return json.dumps({"error": str(exc), "device": device})
+
+    def plan_capacity(self, device: str, target_medium_id: str,
+                      selected_title_indices_json: str = "[]",
+                      selected_audio_indices_json: str = "[]",
+                      selected_subtitle_indices_json: str = "[]",
+                      custom_target_bytes: Optional[int] = None,
+                      custom_authoring_format: str = "") -> str:
+        """Analysiert die eingelegte Disc und plant VOR jeder Kodierung, ob und
+        wie der ausgewählte Inhalt auf das Zielmedium passt.
+
+        Leere Auswahllisten bedeuten "alle Titel/Spuren der Disc" - solange es
+        noch keine eigene Auswahl-UI gibt (siehe P0_CAPACITY_PLANNING.md).
+        """
+        from src.config.target_media import AuthoringFormat
+        from src.models.disc_content import DiscContentError
+        if not device:
+            return json.dumps({"error": "Kein optisches Laufwerk ausgewählt."})
+        try:
+            content = self._async(self.disc_analyzer.analyze(device)).result(timeout=60)
+            title_indices = json.loads(selected_title_indices_json) or None
+            audio_indices = json.loads(selected_audio_indices_json) or None
+            subtitle_indices = json.loads(selected_subtitle_indices_json) or None
+
+            titles = [t for t in content.titles if title_indices is None or t.index in title_indices]
+            selected_audio = None
+            if audio_indices is not None:
+                selected_audio = [a for t in titles for a in t.audio_tracks if a.index in audio_indices]
+            selected_subtitles = None
+            if subtitle_indices is not None:
+                selected_subtitles = [s for t in titles for s in t.subtitle_tracks if s.index in subtitle_indices]
+
+            fmt = AuthoringFormat(custom_authoring_format) if custom_authoring_format else None
+            plan = self.capacity_planner.plan(
+                titles=titles, target_medium_id=target_medium_id,
+                selected_audio_tracks=selected_audio, selected_subtitle_tracks=selected_subtitles,
+                custom_target_bytes=custom_target_bytes, custom_authoring_format=fmt,
+            )
+            return json.dumps(plan.to_dict())
+        except DiscContentError as exc:
+            return json.dumps({"error": str(exc), "device": device})
+        except Exception as exc:
+            return json.dumps({"error": str(exc), "device": device})
+
     # ── Gemeinsame Queue-Hilfe ─────────────────────────────────────────
     def _submit_job(self, job, handler) -> str:
         """Stellt Job und dessen unverwechselbaren Handler sicher in die Queue."""
+        if 'preset_name' in job.params:
+            try:
+                self._async(self._submit_conversion_job(job)).result(timeout=5)
+                self._emit('job_queued', {'id': job.id, 'name': job.params.get('display_name', job.id), 'type': job.job_type.value})
+                return json.dumps({'job_id': job.id, 'status': 'queued'})
+            except Exception as exc:
+                return json.dumps({'error': str(exc)})
         self._wire_job_progress(job)
         try:
             self._async(self.pipeline.submit(job, handler=handler)).result(timeout=5)
@@ -887,7 +1026,7 @@ class RetroDiscBridge:
                    standard: str = "PAL", aspect: str = "16:9",
                    burn: bool = False, device: str = "",
                    speed: Optional[int] = None, verify: Optional[bool] = None,
-                   eject: Optional[bool] = None) -> str:
+                   eject: Optional[bool] = None, book_type: str = "automatic") -> str:
         from src.models.media import Job, JobType
         try:
             raw = json.loads(paths_json) if isinstance(paths_json, str) else paths_json
@@ -913,6 +1052,7 @@ class RetroDiscBridge:
                 "burn_speed": int(speed) if speed not in (None, "") else self.settings.burn.default_speed,
                 "verify_after_burn": self.settings.burn.verify_after_burn if verify is None else bool(verify),
                 "eject_after_burn": self.settings.burn.eject_after_burn if eject is None else bool(eject),
+                "book_type": book_type or "automatic",
                 "display_name": f"{title or 'RetroDisc DVD'} -> {'Disc' if burn else 'ISO'}",
             },
         )
@@ -931,12 +1071,182 @@ class RetroDiscBridge:
                 burn_speed=j.params["burn_speed"],
                 verify_after_burn=j.params["verify_after_burn"],
                 eject_after_burn=j.params["eject_after_burn"],
+                book_type=j.params["book_type"],
             )
             j.output_path = await self.dvd_workflow.run(project, job=j)
 
         return self._submit_job(job, _handler)
 
-    def copy_disc(self, source: str, target: str, mode: str = "image") -> str:
+    def create_bluray(self, paths_json: str, title: str = "RetroDisc Blu-ray",
+                      target_medium_id: str = "bd25",
+                      burn: bool = False, device: str = "",
+                      speed: Optional[int] = None, verify: Optional[bool] = None,
+                      eject: Optional[bool] = None) -> str:
+        """Erstellt eine echte BDMV-Struktur (siehe ``src.services.bluray_authoring``)
+        und optional ein Blu-ray-ISO/eine gebrannte Disc daraus.
+
+        Gilt für jedes ``AuthoringFormat.BDMV``-Zielmedium (physisches BD-25/
+        50/BDXL-100/128 UND BDMV-auf-DVD-5/9) - nur das physische Zielmedium
+        beim Brennen unterscheidet sich, siehe ``BlurayWorkflow``-Moduldoku.
+
+        Prüft VOR dem Einreihen (Verteidigung in der Tiefe, nicht nur die
+        UI-Anzeige) über ``inspect_drive`` + ``target_medium_capability_issue``,
+        ob Laufwerk/Backend das gewählte Zielmedium tatsächlich unterstützen,
+        falls gebrannt werden soll - keine Unterstützung vortäuschen.
+        """
+        from src.config.target_media import get_target_medium, target_medium_capability_issue
+        from src.models.media import Job, JobType
+        try:
+            raw = json.loads(paths_json) if isinstance(paths_json, str) else paths_json
+            paths = [Path(p) for p in raw]
+        except Exception:
+            return json.dumps({"error": "Ungültige Pfad-Liste"})
+        missing = [str(p) for p in paths if not p.is_file()]
+        if not paths:
+            return json.dumps({"error": "Keine Quelldateien ausgewählt."})
+        if missing:
+            return json.dumps({"error": f"Datei nicht gefunden: {missing[0]}"})
+        try:
+            medium = get_target_medium(target_medium_id)
+        except ValueError as exc:
+            return json.dumps({"error": str(exc)})
+
+        burn = bool(burn)
+        resolved_device = device or self.settings.burn.default_device
+        if burn:
+            try:
+                caps = self._async(self.disc.inspect_drive(resolved_device)).result(timeout=25)
+            except Exception as exc:
+                return json.dumps({"error": f"Laufwerksfähigkeiten konnten nicht geprüft werden: {exc}"})
+            issue = target_medium_capability_issue(medium, caps)
+            if issue:
+                return json.dumps({"error": issue})
+
+        job = Job(
+            job_type=JobType.BURN_BLURAY,
+            input_files=paths,
+            params={
+                "title": (title or "RetroDisc Blu-ray").strip(),
+                "target_medium_id": medium.id,
+                "burn_to_disc": burn,
+                "only_iso": not burn,
+                "device": resolved_device,
+                "burn_speed": int(speed) if speed not in (None, "") else self.settings.burn.default_speed,
+                "verify_after_burn": self.settings.burn.verify_after_burn if verify is None else bool(verify),
+                "eject_after_burn": self.settings.burn.eject_after_burn if eject is None else bool(eject),
+                "display_name": f"{title or 'RetroDisc Blu-ray'} -> {'Disc' if burn else 'ISO'}",
+            },
+        )
+
+        async def _handler(j):
+            from src.services.bluray_workflow import BlurayProject
+            project = BlurayProject(
+                title=j.params["title"],
+                input_files=j.input_files,
+                output_dir=self.settings.directories.output_dir,
+                target_medium_id=j.params["target_medium_id"],
+                burn_to_disc=j.params["burn_to_disc"],
+                only_iso=j.params["only_iso"],
+                disc_device=j.params["device"] or self.settings.burn.default_device,
+                burn_speed=j.params["burn_speed"],
+                verify_after_burn=j.params["verify_after_burn"],
+                eject_after_burn=j.params["eject_after_burn"],
+            )
+            j.output_path = await self.bluray_workflow.run(project, job=j)
+
+        return self._submit_job(job, _handler)
+
+    def check_target_medium(self, device: str, target_medium_id: str) -> str:
+        """Prüft ein Zielmedium gegen die tatsächlichen Laufwerksfähigkeiten.
+
+        Reine Lesefunktion für die UI (Aktivieren/Deaktivieren einer
+        Zielmedium-Option mit Begründung) - dieselbe Prüfung, die
+        ``create_bluray`` vor dem Brennen ohnehin serverseitig durchsetzt.
+        """
+        from src.config.target_media import get_target_medium, target_medium_capability_issue
+        try:
+            medium = get_target_medium(target_medium_id)
+        except ValueError as exc:
+            return json.dumps({"available": False, "reason": str(exc)})
+        caps = None
+        if device:
+            try:
+                caps = self._async(self.disc.inspect_drive(device)).result(timeout=25)
+            except Exception as exc:
+                return json.dumps({"available": False, "reason": f"Laufwerksfähigkeiten konnten nicht geprüft werden: {exc}"})
+        issue = target_medium_capability_issue(medium, caps)
+        return json.dumps({"available": issue is None, "reason": issue})
+
+    def burn_existing_iso(self, iso_path: str, device: str = "", disc_type: str = "bluray",
+                          target_medium_id: str = "", speed: Optional[int] = None,
+                          verify: Optional[bool] = None, eject: Optional[bool] = None) -> str:
+        """Brennt eine bereits vorhandene, gültige ISO-Datei direkt - ohne
+        erneutes Video-Encoding oder BDMV-/DVD-Authoring.
+
+        Wichtiger, eigenständiger Anwendungsfall: der Nutzer hat schon ein
+        fertiges Blu-ray-ISO (aus einem früheren RetroDisc-Lauf oder einem
+        anderen Werkzeug) und will es nur noch brennen. Läuft über denselben
+        kanonischen ``DiscTools.burn_iso`` wie jeder andere Brennweg in
+        diesem Projekt - keine zweite Brennlogik.
+        """
+        from src.models.media import DiscType, Job, JobType
+        from src.config.target_media import get_target_medium, target_medium_capability_issue
+        path = Path(iso_path)
+        if not path.is_file():
+            return json.dumps({"error": f"ISO-Datei nicht gefunden: {iso_path}"})
+        try:
+            resolved_disc_type = DiscType(disc_type.strip().lower())
+        except ValueError:
+            return json.dumps({"error": f"Unbekannter Disc-Typ: {disc_type!r}"})
+        resolved_device = device or self.settings.burn.default_device
+        if not resolved_device:
+            return json.dumps({"error": "Kein Ziellaufwerk ausgewählt."})
+
+        if target_medium_id:
+            try:
+                medium = get_target_medium(target_medium_id)
+            except ValueError as exc:
+                return json.dumps({"error": str(exc)})
+            try:
+                caps = self._async(self.disc.inspect_drive(resolved_device)).result(timeout=25)
+            except Exception as exc:
+                return json.dumps({"error": f"Laufwerksfähigkeiten konnten nicht geprüft werden: {exc}"})
+            issue = target_medium_capability_issue(medium, caps)
+            if issue:
+                return json.dumps({"error": issue})
+
+        job = Job(
+            job_type=JobType.BURN_BLURAY if resolved_disc_type == DiscType.BLURAY else JobType.BURN_DVD,
+            output_path=path,
+            params={
+                "iso_path": str(path), "device": resolved_device, "disc_type": resolved_disc_type.value,
+                "burn_speed": int(speed) if speed not in (None, "") else self.settings.burn.default_speed,
+                "verify_after_burn": self.settings.burn.verify_after_burn if verify is None else bool(verify),
+                "eject_after_burn": self.settings.burn.eject_after_burn if eject is None else bool(eject),
+                "display_name": f"{path.name} -> Disc",
+            },
+        )
+
+        async def _handler(j):
+            from src.core.disc import DiscError
+            from src.services.booktype import BookType
+            from src.services.dvd_workflow import DVDWorkflow
+            from src.services.verify import FAIL as VERIFY_FAIL
+            outcome = await self.disc.burn_iso(
+                Path(j.params["iso_path"]), device=j.params["device"], speed=j.params["burn_speed"],
+                verify=j.params["verify_after_burn"], disc_type=resolved_disc_type, job=j,
+                book_type=BookType.NATIVE,
+            )
+            j.params["burn_outcome"] = outcome.to_dict()
+            if outcome.verify.status == VERIFY_FAIL:
+                raise DiscError(f"Verifikation fehlgeschlagen: {outcome.verify.message}")
+            if j.params["eject_after_burn"]:
+                await DVDWorkflow()._eject(j.params["device"])
+
+        return self._submit_job(job, _handler)
+
+    def copy_disc(self, source: str, target: str, mode: str = "image",
+                 book_type: str = "automatic") -> str:
         """Kopiert eine Disc ueber ein Abbild: einlesen, dann brennen.
 
         Setzt bewusst nur vorhandene Bausteine zusammen - ``DiscRipper`` fuer
@@ -987,6 +1297,7 @@ class RetroDiscBridge:
         job = Job(
             job_type=JobType.RIP_DVD,
             params={"source": source, "target": target, "mode": mode,
+                    "book_type": book_type or "automatic",
                     "display_name": f"Disc kopieren: {source} -> {target}"},
         )
 
@@ -1027,8 +1338,28 @@ class RetroDiscBridge:
                 finally:
                     j.params["awaiting_copy_medium"] = False
                     del j._copy_media_ready
-            await self.disc.burn_iso(
-                image_path, device=j.params["target"], job=j)
+            from src.core.disc import DiscError
+            from src.models.media import DiscType
+            from src.services.booktype import _as_book_type
+            from src.services.ripper import RipError
+            from src.services.verify import FAIL as VERIFY_FAIL
+            # Blu-ray-Quelle erkennen, damit burn_iso Book Type korrekt als
+            # NOT_APPLICABLE behandelt (siehe DiscTools._apply_book_type) -
+            # ohne dies bliebe eine kopierte Blu-ray fälschlich als DVD
+            # klassifiziert (burn_iso()-Default), obwohl growisofs den
+            # eigentlichen Brennvorgang für beide Medienfamilien ohnehin
+            # identisch ausführt.
+            try:
+                source_root = DiscRipper._root(j.params["source"])
+                disc_type = DiscType.BLURAY if (source_root / "BDMV").is_dir() else DiscType.DVD
+            except RipError:
+                disc_type = DiscType.DVD
+            outcome = await self.disc.burn_iso(
+                image_path, device=j.params["target"], job=j, disc_type=disc_type,
+                book_type=_as_book_type(j.params.get("book_type", "automatic")))
+            j.params["burn_outcome"] = outcome.to_dict()
+            if outcome.verify.status == VERIFY_FAIL:
+                raise DiscError(f"Verifikation fehlgeschlagen: {outcome.verify.message}")
 
         return self._submit_job(job, _handler)
 
@@ -1103,6 +1434,152 @@ class RetroDiscBridge:
                 j.params["device"], j.output_path, j.params["format"], job=j)
 
         return self._submit_job(job, _handler)
+
+    # ── Vorschau-/Preview-Player ─────────────────────────────────────────
+    # Nutzt player_source.py (DVD-IFO/Blu-ray-MPLS-Auflösung, keine
+    # parallele Disc-Analyse) und player.py (mpv per JSON-IPC). Ein
+    # DiscContent-Titel wird per (device, disc_type, title_index) referenziert
+    # - genau die Auswahl, die die UI aus dem bereits geladenen
+    # get_disc_content()-Ergebnis kennt; keine erneute Titelerkennung hier.
+
+    async def _player_open(self, source: dict) -> dict:
+        from src.models.media import DiscType
+        from src.services import player_source
+        from src.services.iso_mount import IsoMountError, mount
+        from src.services.player import PlayerBackendError, PlayerError
+
+        kind = source.get("kind")
+        label = source.get("label") or ""
+        mounted_this_call = False
+        try:
+            if kind == "file":
+                path = Path(source["path"])
+                if not path.is_file():
+                    return {"error": f"Datei nicht gefunden: {path}"}
+                segments = [path]
+                label = label or path.name
+                on_unload = None
+            elif kind in ("dvd_title", "bluray_title"):
+                device = source.get("device") or ""
+                if not device:
+                    return {"error": "Kein optisches Laufwerk ausgewählt."}
+                root = Path(device.rstrip("\\/") + "/") if len(device) == 2 and device[1] == ":" else Path(device)
+                disc_type = DiscType.BLURAY if kind == "bluray_title" else DiscType.DVD
+                playback = player_source.resolve_title(root, disc_type, int(source["title_index"]))
+                segments = playback.segments
+                label = label or f"{device} - Titel {source['title_index']}"
+                on_unload = None
+            elif kind in ("dvd_iso", "bluray_iso"):
+                iso_path = Path(source["path"])
+                if not iso_path.is_file():
+                    return {"error": f"ISO-Datei nicht gefunden: {iso_path}"}
+                if self._player_mount is not None:
+                    await self._player_mount.unmount()
+                    self._player_mount = None
+                mounted = await mount(iso_path)
+                self._player_mount = mounted
+                mounted_this_call = True
+                disc_type = DiscType.BLURAY if kind == "bluray_iso" else DiscType.DVD
+                playback = player_source.resolve_title(mounted.root, disc_type, int(source["title_index"]))
+                segments = playback.segments
+                label = label or f"{iso_path.name} - Titel {source['title_index']}"
+
+                async def on_unload():
+                    if self._player_mount is not None:
+                        await self._player_mount.unmount()
+                        self._player_mount = None
+            else:
+                return {"error": f"Unbekannte Quellenart: {kind!r}"}
+        except player_source.PlaybackSourceError as exc:
+            # Titelauflösung kann NACH einem bereits erfolgreichen ISO-Mount
+            # scheitern (z. B. unbekannter Titel-Index) - ohne dieses Aushängen
+            # bliebe das Abbild dauerhaft gemountet, obwohl nie wiedergegeben
+            # wurde ("keine dauerhaften Mounts nach Beenden der Wiedergabe").
+            if mounted_this_call and self._player_mount is not None:
+                await self._player_mount.unmount()
+                self._player_mount = None
+            return {"error": str(exc)}
+        except IsoMountError as exc:
+            return {"error": str(exc)}
+
+        try:
+            state = await self.player.open(segments, label=label, on_unload=on_unload)
+        except (PlayerBackendError, PlayerError) as exc:
+            if mounted_this_call and self._player_mount is not None:
+                await self._player_mount.unmount()
+                self._player_mount = None
+            return {"error": str(exc)}
+        return state.to_dict()
+
+    def player_open(self, source_json: str) -> str:
+        try:
+            source = json.loads(source_json)
+        except (json.JSONDecodeError, TypeError):
+            return json.dumps({"error": "Ungültige Player-Quelle."})
+        result = self._async(self._player_open(source))
+        try:
+            return json.dumps(result.result(timeout=30))
+        except Exception as exc:
+            result.cancel()
+            return json.dumps({"error": f"Wiedergabe konnte nicht gestartet werden: {exc}"})
+
+    def _player_action(self, coro_factory, *, timeout: float = 10.0) -> str:
+        """Gemeinsame Hülle für alle einfachen Transport-/Track-Aktionen:
+        räumt bei einem Fehler nie die laufende Wiedergabe stillschweigend
+        weg, meldet ihn nur strukturiert zurück."""
+        from src.services.player import PlayerError
+        pending = self._async(coro_factory())
+        try:
+            pending.result(timeout=timeout)
+            return json.dumps({"ok": True})
+        except PlayerError as exc:
+            return json.dumps({"error": str(exc)})
+        except Exception as exc:
+            pending.cancel()
+            return json.dumps({"error": str(exc)})
+
+    def player_play(self) -> str: return self._player_action(self.player.play)
+    def player_pause(self) -> str: return self._player_action(self.player.pause)
+    def player_toggle_pause(self) -> str: return self._player_action(self.player.toggle_pause)
+    def player_stop(self) -> str: return self._player_action(self.player.stop)
+    def player_seek(self, seconds: float, relative: bool = False) -> str:
+        return self._player_action(lambda: self.player.seek(seconds, relative=relative))
+    def player_set_volume(self, percent: float) -> str:
+        return self._player_action(lambda: self.player.set_volume(percent))
+    def player_set_fullscreen(self, enabled: bool) -> str:
+        return self._player_action(lambda: self.player.set_fullscreen(enabled))
+    def player_set_audio_track(self, track_id: int) -> str:
+        return self._player_action(lambda: self.player.set_audio_track(track_id))
+    def player_set_subtitle_track(self, track_id: int) -> str:
+        return self._player_action(lambda: self.player.set_subtitle_track(track_id))
+    def player_disable_subtitles(self) -> str:
+        return self._player_action(self.player.disable_subtitles)
+    def player_set_chapter(self, index: int) -> str:
+        return self._player_action(lambda: self.player.set_chapter(index))
+
+    def player_get_state(self) -> str:
+        try:
+            state = self._async(self.player.get_state()).result(timeout=10)
+            return json.dumps(state.to_dict())
+        except Exception as exc:
+            return json.dumps({"error": str(exc)})
+
+    def player_close(self) -> str:
+        return self._player_action(self.player.close, timeout=15)
+
+    def player_check_engine(self) -> str:
+        """Meldet, ob das Wiedergabe-Backend (mpv) überhaupt verfügbar ist,
+        plus die ehrliche DRM-Fähigkeitsübersicht (siehe drm_capabilities.py) -
+        für die UI, bevor sie die Player-Steuerung überhaupt anbietet."""
+        import shutil
+        from src.services.drm_capabilities import describe_drm_support
+        mpv_path = shutil.which("mpv")
+        return json.dumps({
+            "engine": "mpv",
+            "available": mpv_path is not None,
+            "path": mpv_path,
+            "drm": describe_drm_support(),
+        })
 
     # ── KI/Medienwerkzeuge ─────────────────────────────────────────────
     def create_highlights(self, input_path: str, duration_seconds: int = 300) -> str:
@@ -1399,6 +1876,12 @@ class RetroDiscBridge:
         except Exception as exc:
             return json.dumps({"error":str(exc)})
 
+    def director_suggestions(self, project_json):
+        from src.models.director import ProductionProject
+        from src.services.timeline import suggestions
+        try:return json.dumps(suggestions(ProductionProject.model_validate_json(project_json)))
+        except Exception as exc:return json.dumps({'error':str(exc)})
+
     def director_edit(self, project_json, operation, index=0, values_json="{}"):
         from src.models.director import ProductionProject
         from src.services.timeline import edit
@@ -1615,8 +2098,21 @@ class RetroDiscBridge:
                 errors.append({"path": path, "error": result["error"]})
         return json.dumps({"job_ids": ids, "count": len(ids), "errors": errors})
 
+    def retry_job(self, job_id: str) -> str:
+        try:
+            if not getattr(self, 'conversion_queue', None):
+                return json.dumps({'ok': False, 'error': 'Job nicht gefunden.'})
+            ok = self._async(self.conversion_queue.retry(job_id)).result(timeout=5)
+            return json.dumps({'ok': ok})
+        except Exception as exc:
+            return json.dumps({'error': str(exc)})
+
     def cancel_job(self, job_id: str) -> str:
         try:
+            if getattr(self, 'conversion_queue', None):
+                ok = self._async(self.conversion_queue.cancel(job_id)).result(timeout=5)
+                if ok is not None:
+                    return json.dumps({'ok': bool(ok)})
             ok = self._async(self.pipeline.cancel_job(job_id)).result(timeout=5)
             return json.dumps({"ok": bool(ok)})
         except Exception as e:
@@ -1716,6 +2212,19 @@ class RetroDiscBridge:
         except Exception as e:
             log.warning("Backend-Cleanup unvollständig: %s", e)
         try:
+            if getattr(self, 'conversion_queue', None):
+                self._async(self.conversion_queue.shutdown()).result(timeout=15)
+        except Exception as exc:
+            log.warning('Persistente Queue konnte nicht vollständig beendet werden: %s', exc)
+        try:
+            # Beendet eine evtl. laufende mpv-Instanz und haengt einen evtl.
+            # gemounteten Vorschau-ISO wieder aus - kein verwaister Prozess,
+            # kein dauerhafter Mount nach dem Beenden (siehe player.py/iso_mount.py).
+            if getattr(self, 'player', None):
+                self._async(self.player.close()).result(timeout=10)
+        except Exception as exc:
+            log.warning('Player-Cleanup unvollständig: %s', exc)
+        try:
             self.library.close()
         finally:
             self._loop.call_soon_threadsafe(self._loop.stop)
@@ -1786,11 +2295,32 @@ class RetroDiscApi:
     def play_sound(self): return self._bridge.play_sound()
     def detect_burners(self): return self._bridge.detect_burners()
     def get_disc_info(self, *args): return self._bridge.get_disc_info(*args)
+    def list_target_media(self): return self._bridge.list_target_media()
     def inspect_drive(self, device): return self._bridge.inspect_drive(device)
+    def get_disc_content(self, device): return self._bridge.get_disc_content(device)
+    def plan_capacity(self, *args): return self._bridge.plan_capacity(*args)
     def create_dvd(self, *args): return self._bridge.create_dvd(*args)
+    def create_bluray(self, *args): return self._bridge.create_bluray(*args)
+    def check_target_medium(self, device, target_medium_id): return self._bridge.check_target_medium(device, target_medium_id)
+    def burn_existing_iso(self, *args): return self._bridge.burn_existing_iso(*args)
     def copy_disc(self, *args): return self._bridge.copy_disc(*args)
     def confirm_copy_medium(self, job_id): return self._bridge.confirm_copy_medium(job_id)
     def rip_disc(self, *args): return self._bridge.rip_disc(*args)
+    def player_open(self, source_json): return self._bridge.player_open(source_json)
+    def player_play(self): return self._bridge.player_play()
+    def player_pause(self): return self._bridge.player_pause()
+    def player_toggle_pause(self): return self._bridge.player_toggle_pause()
+    def player_stop(self): return self._bridge.player_stop()
+    def player_seek(self, seconds, relative=False): return self._bridge.player_seek(seconds, relative)
+    def player_set_volume(self, percent): return self._bridge.player_set_volume(percent)
+    def player_set_fullscreen(self, enabled): return self._bridge.player_set_fullscreen(enabled)
+    def player_set_audio_track(self, track_id): return self._bridge.player_set_audio_track(track_id)
+    def player_set_subtitle_track(self, track_id): return self._bridge.player_set_subtitle_track(track_id)
+    def player_disable_subtitles(self): return self._bridge.player_disable_subtitles()
+    def player_set_chapter(self, index): return self._bridge.player_set_chapter(index)
+    def player_get_state(self): return self._bridge.player_get_state()
+    def player_close(self): return self._bridge.player_close()
+    def player_check_engine(self): return self._bridge.player_check_engine()
     def create_highlights(self, *args): return self._bridge.create_highlights(*args)
     def generate_subtitles(self, *args): return self._bridge.generate_subtitles(*args)
     def upscale_video(self, *args): return self._bridge.upscale_video(*args)
@@ -1809,6 +2339,7 @@ class RetroDiscApi:
     def director_plan(self, prompt, paths_json, duration=0, model="", transcribe=False): return self._bridge.director_plan(prompt, paths_json, duration, model, transcribe)
     def director_projects(self): return self._bridge.director_projects()
     def director_load(self, project_id): return self._bridge.director_load(project_id)
+    def director_suggestions(self, project_json): return self._bridge.director_suggestions(project_json)
     def director_edit(self, project_json, operation, index=0, values_json="{}"):
         return self._bridge.director_edit(project_json,operation,index,values_json)
     def timeline_waveform(self, asset_path): return self._bridge.timeline_waveform(asset_path)
@@ -1826,6 +2357,7 @@ class RetroDiscApi:
     def set_watch_folder(self, *args): return self._bridge.set_watch_folder(*args)
     def get_watch_folders(self, *args): return self._bridge.get_watch_folders(*args)
 
+    def retry_job(self, job_id): return self._bridge.retry_job(job_id)
     def cancel_job(self, *args): return self._bridge.cancel_job(*args)
     def splash_complete(self): return self._bridge.splash_complete()
 

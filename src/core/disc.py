@@ -175,46 +175,73 @@ class DiscTools:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Früher Abbruch statt die Platte mitten im Lauf zu füllen.
-        from src.services.disk_space import ensure_space, iso_estimate
+        from src.services.disk_space import directory_size, ensure_space, iso_estimate
         ensure_space(output_path.parent, iso_estimate(source_dir))
 
         if job:
             job.update_progress(5, "ISO-Image wird erstellt...")
 
-        cmd = [
-            self.mkisofs,
-            "-V", volume_label[:32],  # Max 32 Zeichen
-            "-o", str(output_path),
-        ]
+        base_cmd = [self.mkisofs, "-V", volume_label[:32], "-o", str(output_path)]  # Max 32 Zeichen
 
         if disc_type == DiscType.DVD:
-            cmd.extend([
-                "-dvd-video",  # DVD-Video Kompatibilität
-                "-udf",        # UDF Dateisystem
-            ])
+            flag_sets = [["-dvd-video", "-udf"]]   # DVD-Video-konformes UDF-Dateisystem
         elif disc_type == DiscType.BLURAY:
-            cmd.extend(["-udf", "-allow-limited-size"])
+            # "-allow-limited-size" ist die für große Blu-ray-Clips (oft weit
+            # über 4 GiB je Datei) korrekte genisoimage/xorriso-Option. Real
+            # gegen die hier verfügbare mkisofs-Variante getestet: ein
+            # dvdrtools-basierter Build kennt das Flag nicht und bricht mit
+            # "unrecognized option" ab - deshalb der Fallback. "-udf
+            # -iso-level 3" ALLEIN reicht nicht als Ersatz: dieselbe
+            # dvdrtools-Variante verwirft dabei Dateien >4 GiB
+            # stillschweigend (Exit-Code 0, aber ein kaputt-kleines Image) -
+            # das fängt die Größenprüfung unten ab, egal welcher mkisofs-
+            # Fork tatsächlich im produktiven Windows-Vendor-Paket steckt.
+            flag_sets = [["-udf", "-allow-limited-size"], ["-udf", "-iso-level", "3"]]
+        else:
+            flag_sets = [[]]
 
-        cmd.append(str(source_dir))
+        stderr_text = ""
+        for attempt, flags in enumerate(flag_sets):
+            cmd = base_cmd + flags + [str(source_dir)]
+            proc = await create_hidden_subprocess(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            if job:
+                job._process = proc
+            _, stderr = await proc.communicate()
+            if job:
+                job._process = None
+            stderr_text = stderr.decode("utf-8", errors="replace")
 
-        proc = await create_hidden_subprocess(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        if job:
-            job._process = proc
-        _, stderr = await proc.communicate()
-        if job:
-            job._process = None
-
-        if proc.returncode != 0:
-            raise DiscError(f"ISO-Erstellung fehlgeschlagen: {stderr.decode('utf-8', errors='replace')[-1000:]}")
+            if proc.returncode == 0:
+                break
+            is_last_attempt = attempt == len(flag_sets) - 1
+            if is_last_attempt or "unrecognized option" not in stderr_text.lower():
+                raise DiscError(f"ISO-Erstellung fehlgeschlagen: {stderr_text[-1000:]}")
+            log.warning("mkisofs-Flag nicht unterstützt, versuche Fallback",
+                       flags=flags, stderr=stderr_text[-300:])
 
         if not output_path.exists():
             raise DiscError(f"ISO-Datei wurde nicht erstellt: {output_path}")
 
-        size_mb = output_path.stat().st_size / (1024 * 1024)
+        written_bytes = output_path.stat().st_size
+        payload_bytes = directory_size(source_dir)
+        # Ein ISO ist grundsätzlich mindestens so groß wie sein Nutzinhalt
+        # (Dateisystem-Overhead kommt oben drauf, nie ab). Deutlich kleiner
+        # heißt: der ISO-Backend hat mindestens eine Datei stillschweigend
+        # verworfen oder abgeschnitten (siehe Flag-Fallback-Kommentar oben) -
+        # ein solches Image nie unbemerkt als Erfolg zurückgeben.
+        if payload_bytes > 0 and written_bytes < payload_bytes * 0.9:
+            raise DiscError(
+                f"ISO-Erstellung ergab ein verdächtig kleines Abbild ({written_bytes} Bytes "
+                f"gegenüber {payload_bytes} Bytes Quellinhalt) - vermutlich wurde mindestens "
+                f"eine große Datei vom ISO-Backend stillschweigend verworfen. "
+                f"mkisofs-Ausgabe: {stderr_text[-500:]}"
+            )
+
+        size_mb = written_bytes / (1024 * 1024)
         log.info("ISO erstellt", path=str(output_path), size_mb=f"{size_mb:.1f}")
 
         if job:
@@ -230,24 +257,59 @@ class DiscTools:
         verify: bool = True,
         disc_type: DiscType = DiscType.DVD,
         job: Optional[Job] = None,
-    ) -> bool:
+        book_type: "BookType" = None,
+        media_type: Optional[str] = None,
+    ):
         """
-        Brennt ein ISO-Image auf eine Disc.
+        Der eine kanonische Brennpfad (siehe P0_BURN_PIPELINE_BOOKTYPE.md).
+
+        Brennt ein ISO-Image auf eine Disc, wendet optional Book Type an und
+        verifiziert optional - alles über denselben Weg, egal ob über
+        ``create_dvd``/``DVDWorkflow`` oder ``copy_disc`` aufgerufen.
 
         Args:
             iso_path: Pfad zur ISO-Datei
             device: Brenner-Device
             speed: Brenngeschwindigkeit (None = Auto)
-            verify: Nach dem Brennen verifizieren
+            verify: Nach dem Brennen verifizieren (strukturiert, siehe unten)
             disc_type: DVD, Blu-ray oder CD
             job: Job für Progress-Updates
+            book_type: AUTO/NATIVE/DVD_ROM (Standard NATIVE = keine Änderung,
+                Rückwärtskompatibilität für Aufrufer, die Book Type nicht kennen)
+            media_type: Medienfamilie (z. B. "DVD+R"); wird bei ``None``
+                automatisch über ``get_disc_info`` ermittelt
+
+        Raises:
+            DiscError: wenn der eigentliche Brennvorgang fehlschlägt (nicht
+                bei einer fehlgeschlagenen Book-Type-Änderung oder einer
+                fehlgeschlagenen Verifikation - beides wird stattdessen im
+                zurückgegebenen ``BurnOutcome`` gemeldet).
 
         Returns:
-            True wenn erfolgreich
+            BurnOutcome mit getrennten Erfolgsachsen für Brennen, Book Type
+            und Verifikation. Ist bei Erfolg immer truthy (kein leeres
+            Datenobjekt), sodass ``if await burn_iso(...):`` für bestehende
+            Aufrufer weiterhin wie erwartet funktioniert.
         """
+        from src.services.booktype import BookType, _as_book_type
+        from src.services.burn_outcome import BookTypeStatus, BurnOutcome
+        from src.services.verify import NOT_AVAILABLE
+
+        book_type = BookType.NATIVE if book_type is None else _as_book_type(book_type)
+
         iso_path = Path(iso_path)
         if not iso_path.exists():
             raise DiscError(f"ISO-Datei nicht gefunden: {iso_path}")
+
+        if media_type is None:
+            media_type = await self._resolve_media_type(device)
+
+        outcome = BurnOutcome(device=device, disc_type=disc_type.value, media_type=media_type,
+                              book_type_requested=book_type.value)
+
+        # Book Type VOR dem Brennen setzen: dvd+rw-booktype wirkt auf den
+        # eingelegten Rohling, nicht auf den ISO-Inhalt.
+        await self._apply_book_type(outcome, book_type, media_type, disc_type, device)
 
         if job:
             job.update_progress(5, "Brennvorgang wird gestartet...")
@@ -300,13 +362,69 @@ class DiscTools:
             job.update_progress(95, "Brennvorgang abgeschlossen")
 
         log.info("Disc gebrannt", iso=str(iso_path), device=device)
+        outcome.burn_success = True
+        outcome.burn_speed = f"{speed}x" if speed else "auto"
+        try:
+            outcome.written_size = iso_path.stat().st_size
+        except OSError:
+            pass
+
+        if outcome.book_type_status == BookTypeStatus.APPLIED:
+            outcome.book_type_actual = await self._read_book_type(device)
+
         if verify:
             if job:
                 job.update_progress(96, "Gebrannte Daten werden verifiziert...")
-            await self.verify_iso(iso_path, device)
+            outcome.verify = await self.verify_iso_result(iso_path, device)
             if job:
-                job.update_progress(99, "Verifikation erfolgreich")
-        return True
+                job.update_progress(99, "Verifikation abgeschlossen")
+        else:
+            outcome.verify.status = NOT_AVAILABLE
+            outcome.verify.message = "Verifikation deaktiviert."
+
+        return outcome
+
+    async def _resolve_media_type(self, device: str) -> str:
+        from src.services.booktype import classify_media
+        try:
+            info = await self.get_disc_info(device)
+            return classify_media(info.get("profile") or info.get("type") or "")
+        except Exception:
+            return "unknown"
+
+    async def _apply_book_type(self, outcome, book_type: "BookType", media_type: str,
+                               disc_type: DiscType, device: str) -> None:
+        """Setzt ``outcome.book_type_status`` (und ggf. ``book_type_warning``).
+
+        Wirft nie - eine fehlgeschlagene oder nicht mögliche Book-Type-
+        Änderung darf den Brennvorgang selbst nie verhindern.
+        """
+        from src.services.booktype import BookType, booktype_command, supports_bitsetting
+        from src.services.burn_outcome import BookTypeStatus
+
+        if book_type == BookType.NATIVE:
+            outcome.book_type_status = BookTypeStatus.NOT_REQUESTED
+            return
+
+        # Blu-ray bekommt nie eine DVD-spezifische Book-Type-Operation,
+        # unabhängig davon, wie media_type klassifiziert wurde.
+        if disc_type == DiscType.BLURAY or not supports_bitsetting(media_type):
+            outcome.book_type_status = BookTypeStatus.NOT_APPLICABLE
+            return
+
+        if not self.book_type_available(media_type):
+            outcome.book_type_status = BookTypeStatus.NOT_SUPPORTED
+            outcome.book_type_warning = "Laufwerk/Backend unterstützt kein Bitsetting; Book Type unverändert."
+            return
+
+        cmd = booktype_command(self.booktype, device, BookType.DVD_ROM, media_type)
+        try:
+            if cmd:
+                await self._run_tool(cmd)
+            outcome.book_type_status = BookTypeStatus.APPLIED
+        except Exception as exc:
+            outcome.book_type_status = BookTypeStatus.FAILED
+            outcome.book_type_warning = f"Book Type konnte nicht gesetzt werden: {exc}"
 
     async def verify_iso(self, iso_path: Path, device: str) -> bool:
         """Compares the ISO bytes with the beginning of the burned medium."""

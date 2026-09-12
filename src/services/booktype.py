@@ -9,9 +9,29 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from enum import Enum
+from typing import Literal, Optional, Union
 
 BookTypeSetting = Literal["automatic", "native", "dvd_rom"]
+
+
+class BookType(Enum):
+    """Zentrale Book-Type-Definition - keine frei verteilten String-Vergleiche.
+
+    Werte identisch zu ``BookTypeSetting`` gehalten, damit bestehende
+    Aufrufer/Tests, die rohe Strings ("automatic"/"native"/"dvd_rom")
+    übergeben, unverändert weiterfunktionieren (siehe ``_as_book_type``).
+    """
+    AUTO = "automatic"
+    NATIVE = "native"
+    DVD_ROM = "dvd_rom"
+
+
+def _as_book_type(value: Union["BookType", str, None]) -> "BookType":
+    if isinstance(value, BookType):
+        return value
+    return BookType(value or "automatic")
+
 
 # Media families that support bitsetting. The DVD- (dash) family does not.
 BITSETTABLE = {"DVD+R", "DVD+RW", "DVD+R DL"}
@@ -54,13 +74,16 @@ def booktype_options(media_type: str, tool_available: bool) -> list[BookTypeSett
     return ["automatic", "native", "dvd_rom"]
 
 
-def booktype_command(tool: str, device: str, setting: BookTypeSetting, media_type: str) -> Optional[list[str]]:
+def booktype_command(tool: str, device: str, setting: Union[BookType, BookTypeSetting],
+                     media_type: str) -> Optional[list[str]]:
     """Args to set the book type before/around burning, or None if nothing to do.
 
-    ``automatic``/``native`` leave the media descriptor untouched. Only
-    ``dvd_rom`` on a bitsettable + medium yields a real command.
+    ``NATIVE``/``AUTO`` ohne Bitsetting-Fähigkeit lassen den Medien-Deskriptor
+    unverändert. Nur ``DVD_ROM`` (bzw. ``AUTO`` auf einem bitsettbaren Medium,
+    siehe ``src/core/disc.py::DiscTools._apply_book_type``) auf einem
+    bitsettbaren Medium ergibt einen echten Befehl.
     """
-    if setting == "dvd_rom" and supports_bitsetting(media_type):
+    if _as_book_type(setting) == BookType.DVD_ROM and supports_bitsetting(media_type):
         return [tool, "-dvd-rom-spec", "-media", device]
     return None
 
